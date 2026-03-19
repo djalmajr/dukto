@@ -12,8 +12,8 @@
 dist
 node_modules
 bun.lock
-proto/node_modules
-proto/dist
+src-proto/node_modules
+src-proto/dist
 
 # Rust
 src-tauri/target

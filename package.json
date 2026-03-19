@@ -11,7 +11,7 @@
 		"test": "bun test",
 		"vite:dev": "vite",
 		"vite:build": "vite build",
-		"proto:dev": "cd proto && bun run dev"
+		"proto:dev": "cd src-proto && bun run dev"
 	},
 	"dependencies": {
 		"@tauri-apps/api": "^2",
