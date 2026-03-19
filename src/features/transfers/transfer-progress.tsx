@@ -1,6 +1,6 @@
 import { For, Show } from "solid-js";
-import { formatBytes } from "../../lib/format";
-import { type ActiveTransfer, clearTransfer, transfers } from "../../stores/transfers";
+import { formatBytes } from "~/lib/format";
+import { type ActiveTransfer, clearTransfer, transfers } from "~/stores/transfers";
 
 function TransferList() {
 	const activeTransfers = () => Object.values(transfers);

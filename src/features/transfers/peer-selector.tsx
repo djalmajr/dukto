@@ -1,5 +1,5 @@
 import { For, Show } from "solid-js";
-import { type PeerInfo, peers } from "../../stores/peers";
+import { type PeerInfo, peers } from "~/stores/peers";
 
 interface PeerSelectorProps {
 	onSelect: (peer: PeerInfo) => void;

@@ -1,20 +1,20 @@
 import { Show, createSignal } from "solid-js";
-import ErrorDisplay from "./components/ErrorDisplay";
-import PeerList from "./features/peers/PeerList";
-import DropZone from "./features/transfers/DropZone";
-import IncomingRequestDialog from "./features/transfers/IncomingRequest";
-import SendPreview from "./features/transfers/SendPreview";
-import type { FileItem } from "./features/transfers/SendPreview";
-import TransferList from "./features/transfers/TransferProgress";
-import { type FileMetadataInfo, sendToPeer } from "./lib/tauri";
-import { device } from "./stores/device";
-import type { PeerInfo } from "./stores/peers";
+import ErrorDisplay from "~/components/error-display";
+import PeerList from "~/features/peers/peer-list";
+import DropZone from "~/features/transfers/drop-zone";
+import IncomingRequestDialog from "~/features/transfers/incoming-request";
+import SendPreview from "~/features/transfers/send-preview";
+import type { FileItem } from "~/features/transfers/send-preview";
+import TransferList from "~/features/transfers/transfer-progress";
+import { type FileMetadataInfo, sendToPeer } from "~/lib/tauri";
+import { device } from "~/stores/device";
+import type { PeerInfo } from "~/stores/peers";
 import {
 	acceptIncoming,
 	incomingRequest,
 	rejectIncoming,
 	startSendTransfer,
-} from "./stores/transfers";
+} from "~/stores/transfers";
 
 type SendFlowState = { step: "idle" } | { step: "preview"; peer: PeerInfo; files: FileItem[] };
 

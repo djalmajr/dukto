@@ -1,6 +1,6 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { Show } from "solid-js";
-import { setDestinationDir, settings } from "../../stores/settings";
+import { setDestinationDir, settings } from "~/stores/settings";
 
 function DestinationFolder() {
 	async function handlePick() {

@@ -1,5 +1,5 @@
 import { Show } from "solid-js";
-import { formatBytes } from "../lib/format";
+import { formatBytes } from "~/lib/format";
 
 interface TransferBarProps {
 	direction: "send" | "receive";
@@ -30,39 +30,39 @@ function TransferBar(props: TransferBarProps) {
 	const isDone = () => props.status !== "active";
 
 	return (
-		<div class="rounded-lg border border-zinc-200 p-3 transition-colors dark:border-zinc-800">
+		<div class="rounded-lg border border-border bg-card p-3 shadow-sm">
 			<div class="flex items-center justify-between text-xs">
 				<span class="font-medium">
 					{arrow()} {label()}
 				</span>
-				<span class="text-zinc-400">
+				<span class="tabular-nums text-muted-foreground">
 					{formatBytes(props.bytesSent)} / {formatBytes(props.bytesTotal)}
 				</span>
 			</div>
-			<div class="mt-2 h-1.5 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-700">
+			<div class="mt-2 h-1.5 overflow-hidden rounded-full bg-secondary">
 				<div
 					class="h-full rounded-full transition-all duration-300"
 					classList={{
-						"bg-blue-500": props.status === "active",
-						"bg-green-500": props.status === "complete",
-						"bg-red-500": props.status === "error" || props.status === "rejected",
+						"bg-primary": props.status === "active",
+						"bg-success-foreground": props.status === "complete",
+						"bg-destructive": props.status === "error" || props.status === "rejected",
 					}}
 					style={{ width: `${Math.min(props.percent, 100)}%` }}
 				/>
 			</div>
 			<Show when={props.peerName || props.speed}>
-				<p class="mt-1 text-[11px] text-zinc-500">
+				<p class="mt-1.5 text-[11px] text-muted-foreground">
 					{props.direction === "send" ? "To" : "From"}: {props.peerName}
 					{props.speed && ` \u00b7 ${props.speed}`}
 				</p>
 			</Show>
 			<Show when={props.errorMsg}>
-				<p class="mt-1 text-[11px] text-red-500">{props.errorMsg}</p>
+				<p class="mt-1 text-[11px] text-destructive">{props.errorMsg}</p>
 			</Show>
 			<Show when={isDone() && props.onDismiss}>
 				<button
 					type="button"
-					class="mt-2 text-[11px] text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+					class="mt-2 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
 					onClick={props.onDismiss}
 				>
 					Dismiss

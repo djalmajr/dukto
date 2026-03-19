@@ -1,7 +1,7 @@
 import { For, Show } from "solid-js";
-import EmptyState from "../../components/EmptyState";
-import { type PeerInfo, peers } from "../../stores/peers";
-import PeerCard from "./PeerCard";
+import EmptyState from "~/components/empty-state";
+import PeerCard from "~/features/peers/peer-card";
+import { type PeerInfo, peers } from "~/stores/peers";
 
 interface PeerListProps {
 	onPeerSelect?: (peer: PeerInfo) => void;

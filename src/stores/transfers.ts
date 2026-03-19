@@ -1,6 +1,6 @@
 import { listen } from "@tauri-apps/api/event";
 import { createStore } from "solid-js/store";
-import { respondTransfer } from "../lib/tauri";
+import { respondTransfer } from "~/lib/tauri";
 
 export interface TransferProgress {
 	transfer_id: string;
