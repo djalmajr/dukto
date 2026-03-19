@@ -1,6 +1,5 @@
 import { Show } from "solid-js";
 import { formatBytes } from "../lib/format";
-import { resolvedTheme } from "../stores/app";
 
 interface TransferBarProps {
 	direction: "send" | "receive";
@@ -15,8 +14,7 @@ interface TransferBarProps {
 }
 
 function TransferBar(props: TransferBarProps) {
-	const dark = () => resolvedTheme() === "dark";
-	const arrow = () => (props.direction === "send" ? "↑" : "↓");
+	const arrow = () => (props.direction === "send" ? "\u2191" : "\u2193");
 	const label = () => {
 		switch (props.status) {
 			case "active":
@@ -29,12 +27,10 @@ function TransferBar(props: TransferBarProps) {
 				return "Rejected";
 		}
 	};
+	const isDone = () => props.status !== "active";
 
 	return (
-		<div
-			class="rounded-lg border p-3 transition-colors"
-			classList={{ "border-zinc-200": !dark(), "border-zinc-800": dark() }}
-		>
+		<div class="rounded-lg border border-zinc-200 p-3 transition-colors dark:border-zinc-800">
 			<div class="flex items-center justify-between text-xs">
 				<span class="font-medium">
 					{arrow()} {label()}
@@ -43,10 +39,7 @@ function TransferBar(props: TransferBarProps) {
 					{formatBytes(props.bytesSent)} / {formatBytes(props.bytesTotal)}
 				</span>
 			</div>
-			<div
-				class="mt-2 h-1.5 overflow-hidden rounded-full transition-colors"
-				classList={{ "bg-zinc-200": !dark(), "bg-zinc-700": dark() }}
-			>
+			<div class="mt-2 h-1.5 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-700">
 				<div
 					class="h-full rounded-full transition-all duration-300"
 					classList={{
@@ -60,16 +53,16 @@ function TransferBar(props: TransferBarProps) {
 			<Show when={props.peerName || props.speed}>
 				<p class="mt-1 text-[11px] text-zinc-500">
 					{props.direction === "send" ? "To" : "From"}: {props.peerName}
-					{props.speed && ` · ${props.speed}`}
+					{props.speed && ` \u00b7 ${props.speed}`}
 				</p>
 			</Show>
 			<Show when={props.errorMsg}>
 				<p class="mt-1 text-[11px] text-red-500">{props.errorMsg}</p>
 			</Show>
-			<Show when={props.status !== "active" && props.onDismiss}>
+			<Show when={isDone() && props.onDismiss}>
 				<button
 					type="button"
-					class="mt-2 text-[11px] text-zinc-400 hover:text-zinc-300"
+					class="mt-2 text-[11px] text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
 					onClick={props.onDismiss}
 				>
 					Dismiss

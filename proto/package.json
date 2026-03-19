@@ -13,6 +13,7 @@
 	},
 	"devDependencies": {
 		"@tailwindcss/vite": "^4",
+		"@types/node": "^25.5.0",
 		"tailwindcss": "^4",
 		"typescript": "^5.7",
 		"vite": "^6",

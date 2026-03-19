@@ -17,7 +17,6 @@ function Icon(props: IconProps) {
 
 export default Icon;
 
-// Extend JSX for iconify-icon custom element
 declare module "solid-js" {
 	namespace JSX {
 		interface IntrinsicElements {

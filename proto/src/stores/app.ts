@@ -57,13 +57,8 @@ export interface FileItem {
 	is_dir: boolean;
 }
 
-/** Sort files: directories first (A-Z), then files (A-Z). */
-export function sortFiles(files: FileItem[]): FileItem[] {
-	return [...files].sort((a, b) => {
-		if (a.is_dir !== b.is_dir) return a.is_dir ? -1 : 1;
-		return a.name.localeCompare(b.name);
-	});
-}
+// Re-export sortFileItems as sortFiles for convenience
+export { sortFileItems as sortFiles } from "@app/lib/format";
 
 const MOCK_FILES: FileItem[] = [
 	{ name: "project-files", path: "/Users/djalmajr/project-files", size: 8200000, is_dir: true },

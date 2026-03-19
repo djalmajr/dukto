@@ -22,7 +22,7 @@ function PeerList(props: PeerListProps) {
 				}
 			>
 				<For each={peerEntries()}>
-					{(peer) => <PeerCard peer={peer} onSelect={props.onPeerSelect} />}
+					{(peer) => <PeerCard peer={peer} onClick={() => props.onPeerSelect?.(peer)} />}
 				</For>
 			</Show>
 		</div>

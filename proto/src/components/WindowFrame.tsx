@@ -3,33 +3,31 @@ import { type ThemeMode, resolvedTheme, setTheme, theme } from "../stores/app";
 
 interface WindowFrameProps {
 	children: JSX.Element;
-	overlay?: JSX.Element;
 	deviceName?: string;
 	hostname?: string;
 	onSettingsClick?: () => void;
 }
 
 function WindowFrame(props: WindowFrameProps) {
-	const dark = () => resolvedTheme() === "dark";
+	const isDark = () => resolvedTheme() === "dark";
 
 	return (
 		<div
-			class="flex min-h-screen items-center justify-center p-8 transition-colors"
-			classList={{ "bg-zinc-200": !dark(), "bg-zinc-900": dark() }}
+			class="flex min-h-screen items-center justify-center p-8"
+			classList={{ "bg-zinc-200": !isDark(), "bg-zinc-900": isDark() }}
 		>
+			{/* The dark class here enables all dark: variants inside */}
 			<div
-				class="flex flex-col overflow-hidden rounded-xl border shadow-2xl transition-colors"
-				classList={{ "border-zinc-300": !dark(), "border-zinc-700": dark() }}
+				class="flex flex-col overflow-hidden rounded-xl border shadow-2xl"
+				classList={{
+					dark: isDark(),
+					"border-zinc-300": !isDark(),
+					"border-zinc-700": isDark(),
+				}}
 				style={{ width: "480px", height: "640px" }}
 			>
 				{/* Title bar */}
-				<div
-					class="flex items-center gap-2 border-b px-4 py-2.5 transition-colors"
-					classList={{
-						"bg-zinc-100 border-zinc-200": !dark(),
-						"bg-zinc-800 border-zinc-700": dark(),
-					}}
-				>
+				<div class="flex items-center gap-2 border-b border-zinc-200 bg-zinc-100 px-4 py-2.5 dark:border-zinc-700 dark:bg-zinc-800">
 					<div class="flex gap-1.5">
 						<div class="h-3 w-3 rounded-full bg-red-400" />
 						<div class="h-3 w-3 rounded-full bg-yellow-400" />
@@ -37,23 +35,16 @@ function WindowFrame(props: WindowFrameProps) {
 					</div>
 					<div class="flex-1 text-center">
 						{(props.deviceName || props.hostname) && (
-							<p
-								class="text-xs font-medium transition-colors"
-								classList={{ "text-zinc-600": !dark(), "text-zinc-300": dark() }}
-							>
+							<p class="text-xs font-medium text-zinc-600 dark:text-zinc-300">
 								{props.deviceName}
-								{props.deviceName && props.hostname && " · "}
+								{props.deviceName && props.hostname && " \u00b7 "}
 								{props.hostname}
 							</p>
 						)}
 					</div>
 					<div class="flex items-center gap-1">
 						<select
-							class="rounded border bg-transparent px-1 py-0.5 text-[10px] transition-colors"
-							classList={{
-								"border-zinc-300 text-zinc-500": !dark(),
-								"border-zinc-600 text-zinc-400": dark(),
-							}}
+							class="rounded border border-zinc-300 bg-transparent px-1 py-0.5 text-[10px] text-zinc-500 dark:border-zinc-600 dark:text-zinc-400"
 							value={theme()}
 							onChange={(e) => setTheme(e.currentTarget.value as ThemeMode)}
 						>
@@ -64,11 +55,7 @@ function WindowFrame(props: WindowFrameProps) {
 						{props.onSettingsClick && (
 							<button
 								type="button"
-								class="flex h-5 w-5 items-center justify-center rounded transition-colors"
-								classList={{
-									"text-zinc-400 hover:text-zinc-600": !dark(),
-									"text-zinc-500 hover:text-zinc-300": dark(),
-								}}
+								class="flex h-5 w-5 items-center justify-center rounded text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300"
 								onClick={props.onSettingsClick}
 								title="Settings"
 							>
@@ -95,17 +82,8 @@ function WindowFrame(props: WindowFrameProps) {
 					</div>
 				</div>
 				{/* Content */}
-				<div class="relative flex-1 overflow-y-auto">
-					<div
-						class="flex min-h-full flex-col items-center px-4 py-6 transition-colors"
-						classList={{
-							"bg-zinc-50 text-zinc-900": !dark(),
-							"bg-zinc-950 text-zinc-100": dark(),
-						}}
-					>
-						{props.children}
-					</div>
-					{props.overlay}
+				<div class="relative flex-1 overflow-y-auto bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
+					<div class="flex min-h-full flex-col items-center px-4 py-6">{props.children}</div>
 				</div>
 			</div>
 		</div>

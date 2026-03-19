@@ -9,7 +9,10 @@
 		"isolatedModules": true,
 		"jsx": "preserve",
 		"jsxImportSource": "solid-js",
-		"skipLibCheck": true
+		"skipLibCheck": true,
+		"paths": {
+			"@app/*": ["../src/*"]
+		}
 	},
-	"include": ["src"]
+	"include": ["src", "../src"]
 }

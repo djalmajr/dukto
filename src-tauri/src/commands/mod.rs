@@ -8,7 +8,7 @@ use tauri::{Emitter, State};
 use crate::crypto::noise::handshake_initiator;
 use crate::state::app_state::AppState;
 use crate::state::device::DeviceIdentity;
-use crate::state::settings::{Settings, ThemeMode};
+use crate::state::settings::Settings;
 use crate::transfer::quic::create_endpoint;
 use crate::transfer::sender::send_transfer;
 use crate::transfer::server::TransferServer;
