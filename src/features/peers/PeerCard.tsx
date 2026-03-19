@@ -1,10 +1,5 @@
 import Icon from "../../components/Icon";
-
-const platformIcons: Record<string, string> = {
-	macos: "ic:baseline-apple",
-	windows: "mdi:microsoft-windows",
-	linux: "cib:linux",
-};
+import { platformIcon } from "../../lib/platform";
 
 export interface PeerCardProps {
 	peer: {
@@ -18,7 +13,7 @@ export interface PeerCardProps {
 }
 
 function PeerCard(props: PeerCardProps) {
-	const iconName = () => platformIcons[props.peer.platform] ?? "mdi:monitor";
+	const iconName = () => platformIcon(props.peer.platform);
 
 	return (
 		<button
