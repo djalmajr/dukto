@@ -7,6 +7,7 @@ function ErrorDisplay(props: ErrorDisplayProps) {
 	return (
 		<div class="flex items-start gap-2.5 rounded-lg border border-error bg-error/50 p-3">
 			<svg
+				aria-hidden="true"
 				class="mt-0.5 h-4 w-4 shrink-0 text-error-foreground"
 				fill="none"
 				stroke="currentColor"
@@ -29,6 +30,7 @@ function ErrorDisplay(props: ErrorDisplayProps) {
 					onClick={props.onDismiss}
 				>
 					<svg
+						aria-hidden="true"
 						class="h-3.5 w-3.5"
 						fill="none"
 						stroke="currentColor"

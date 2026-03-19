@@ -1,5 +1,6 @@
 import { For, createSignal } from "solid-js";
 import { render } from "solid-js/web";
+import Icon from "~/components/icon";
 import SettingsModal from "~/features/settings/settings-modal";
 import WindowFrame from "./components/window-frame";
 import AppContent from "./screens/app-content";
@@ -96,37 +97,37 @@ function ProtoToolbar() {
 	}
 
 	return (
-		<div class="flex items-center gap-1.5">
+		<div class="flex items-center gap-1">
 			<button
 				type="button"
-				class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-40"
+				class="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground/60 transition-colors hover:text-foreground disabled:opacity-30"
 				disabled={selectedScenario() === 0}
 				onClick={() => applyScenario(selectedScenario() - 1)}
 				title="Previous scenario"
 			>
-				<svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
-					<path stroke-linecap="round" stroke-linejoin="round" d="m15 18-6-6 6-6" />
-				</svg>
+				<Icon name="lucide:chevron-left" size={14} />
 			</button>
 			<select
-				class="h-8 min-w-48 rounded-md border border-border bg-background px-2 text-sm outline-none focus:border-primary"
+				class="h-6 rounded border border-border bg-background px-1.5 text-xs outline-none focus:border-primary"
 				value={String(selectedScenario())}
 				onChange={(event) => applyScenario(Number(event.currentTarget.value))}
 			>
 				<For each={scenarios}>
-					{(scenario, index) => <option value={String(index())} aria-label={scenario.label}>{scenario.label}</option>}
+					{(scenario, index) => (
+						<option value={String(index())} aria-label={scenario.label}>
+							{scenario.label}
+						</option>
+					)}
 				</For>
 			</select>
 			<button
 				type="button"
-				class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-40"
+				class="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground/60 transition-colors hover:text-foreground disabled:opacity-30"
 				disabled={selectedScenario() === scenarios.length - 1}
 				onClick={() => applyScenario(selectedScenario() + 1)}
 				title="Next scenario"
 			>
-				<svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
-					<path stroke-linecap="round" stroke-linejoin="round" d="m9 18 6-6-6-6" />
-				</svg>
+				<Icon name="lucide:chevron-right" size={14} />
 			</button>
 		</div>
 	);
@@ -134,7 +135,6 @@ function ProtoToolbar() {
 
 function App() {
 	const [showSettings, setShowSettings] = createSignal(false);
-
 	return (
 		<WindowFrame
 			deviceName="djalmajr"

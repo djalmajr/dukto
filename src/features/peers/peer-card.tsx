@@ -4,6 +4,8 @@ import { formatBytes } from "~/lib/format";
 import { platformIcon } from "~/lib/platform";
 
 export interface TransferSlot {
+	id: string;
+	direction: "send" | "receive";
 	status: "active" | "complete" | "error";
 	percent: number;
 	bytesSent: number;
@@ -13,11 +15,6 @@ export interface TransferSlot {
 	completedAt?: number;
 }
 
-export interface PeerTransfers {
-	send?: TransferSlot;
-	receive?: TransferSlot;
-}
-
 export interface PeerCardProps {
 	peer: {
 		device_id: string;
@@ -25,25 +22,27 @@ export interface PeerCardProps {
 		hostname: string;
 		platform: string;
 	};
-	transfers?: PeerTransfers;
+	transfers?: TransferSlot[];
 	expandedContent?: JSX.Element;
 	onClick?: () => void;
-	onDismissTransfer?: (direction: "send" | "receive") => void;
+	onAbortTransfer?: (transferId: string) => void;
+	onDismissTransfer?: (transferId: string) => void;
 }
 
-const AUTO_DISMISS_SECS = 10;
+const AUTO_DISMISS_SECS = 3;
 
 function TransferRow(props: {
-	direction: "send" | "receive";
 	slot: TransferSlot;
+	onAbort?: () => void;
 	onDismiss?: () => void;
 }) {
 	const label = () => {
+		const dir = props.slot.direction;
 		if (props.slot.status === "active")
-			return props.direction === "send" ? "\u2191 Sending..." : "\u2193 Receiving...";
+			return dir === "send" ? "\u2191 Sending..." : "\u2193 Receiving...";
 		if (props.slot.status === "complete")
-			return props.direction === "send" ? "\u2191 Sent" : "\u2193 Received";
-		return props.direction === "send" ? "\u2191 Failed" : "\u2193 Failed";
+			return dir === "send" ? "\u2191 Sent" : "\u2193 Received";
+		return dir === "send" ? "\u2191 Failed" : "\u2193 Failed";
 	};
 
 	const isError = () => props.slot.status === "error";
@@ -74,46 +73,46 @@ function TransferRow(props: {
 
 	return (
 		<div class="space-y-1">
-			<div
-				class="flex items-center gap-2 text-xs"
-				classList={{
-					"text-muted-foreground": !isError(),
-					"text-destructive": isError(),
-				}}
-			>
-				<span class="min-w-0 truncate">
+			<div class="flex items-center gap-2 text-xs">
+				<span
+					class="min-w-0 truncate"
+					classList={{
+						"text-muted-foreground": !isError(),
+						"text-destructive": isError(),
+					}}
+				>
 					{label()}
 					<Show when={props.slot.status === "active" && props.slot.speed}>
 						{" "}
 						&middot; {props.slot.speed}
 					</Show>
 				</span>
-				<span class="ml-auto flex shrink-0 items-center gap-2 tabular-nums">
-					<Show
-						when={props.slot.status === "active"}
-						fallback={
-							<button
-								type="button"
-								class="pointer-events-auto flex h-5 w-5 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-								onClick={(e) => {
-									e.stopPropagation();
-									props.onDismiss?.();
-								}}
-							>
-								<svg
-									class="h-3 w-3"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									viewBox="0 0 24 24"
-									aria-hidden="true"
-								>
-									<path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
-								</svg>
-							</button>
-						}
-					>
+				<span class="ml-auto flex shrink-0 items-center gap-1.5 tabular-nums text-muted-foreground">
+					<Show when={props.slot.status === "active"}>
 						{formatBytes(props.slot.bytesSent)} / {formatBytes(props.slot.bytesTotal)}
+						<button
+							type="button"
+							class="pointer-events-auto flex h-5 w-5 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+							title="Abort transfer"
+							onClick={(e) => {
+								e.stopPropagation();
+								props.onAbort?.();
+							}}
+						>
+							<Icon name="lucide:ban" size={12} />
+						</button>
+					</Show>
+					<Show when={props.slot.status !== "active"}>
+						<button
+							type="button"
+							class="pointer-events-auto flex h-5 w-5 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+							onClick={(e) => {
+								e.stopPropagation();
+								props.onDismiss?.();
+							}}
+						>
+							<Icon name="lucide:x" size={12} />
+						</button>
 					</Show>
 				</span>
 			</div>
@@ -121,12 +120,12 @@ function TransferRow(props: {
 				<p class="text-xs text-destructive/80">{props.slot.errorMsg}</p>
 			</Show>
 			<Show when={props.slot.status === "active"}>
-				<div class="h-1 overflow-hidden rounded-full bg-secondary">
+				<div class="h-1 overflow-hidden rounded-full bg-muted">
 					<div
 						class="h-full rounded-full transition-all duration-300"
 						classList={{
-							"bg-blue-500": props.direction === "send",
-							"bg-green-500": props.direction === "receive",
+							"bg-[#2b7fff]": props.slot.direction === "send",
+							"bg-[#00c950]": props.slot.direction === "receive",
 						}}
 						style={{ width: `${Math.min(props.slot.percent, 100)}%` }}
 					/>
@@ -138,24 +137,15 @@ function TransferRow(props: {
 
 function PeerCard(props: PeerCardProps) {
 	const iconName = () => platformIcon(props.peer.platform);
-	const hasActive = () =>
-		props.transfers?.send?.status === "active" || props.transfers?.receive?.status === "active";
-	const hasError = () =>
-		props.transfers?.send?.status === "error" || props.transfers?.receive?.status === "error";
-	const hasAny = () => !!(props.transfers?.send || props.transfers?.receive);
+	const slots = () => props.transfers ?? [];
+	const hasActive = () => slots().some((s) => s.status === "active");
+	const hasError = () => slots().some((s) => s.status === "error");
+	const hasAny = () => slots().length > 0;
 	const hasExpanded = () => !!props.expandedContent;
-
-	const slots = () => {
-		const result: { direction: "send" | "receive"; slot: TransferSlot }[] = [];
-		if (props.transfers?.send) result.push({ direction: "send", slot: props.transfers.send });
-		if (props.transfers?.receive)
-			result.push({ direction: "receive", slot: props.transfers.receive });
-		return result;
-	};
 
 	return (
 		<div
-			class="overflow-hidden rounded-lg border border-border bg-card shadow-sm transition-colors"
+			class="overflow-hidden rounded-xl border border-border bg-card shadow-[0_1px_6px_0_rgba(0,0,0,0.05)] transition-colors"
 			classList={{
 				"border-primary/30": hasActive() && !hasError(),
 				"border-destructive/30": hasError(),
@@ -166,8 +156,8 @@ function PeerCard(props: PeerCardProps) {
 				type="button"
 				class="flex w-full items-center gap-3 p-3.5 text-left transition-colors"
 				classList={{
-					"hover:bg-accent/50": !hasAny() && !hasExpanded(),
-					"pointer-events-none": hasAny() || hasExpanded(),
+					"hover:bg-accent/50": !hasExpanded(),
+					"pointer-events-none": hasExpanded(),
 				}}
 				onClick={props.onClick}
 			>
@@ -177,21 +167,22 @@ function PeerCard(props: PeerCardProps) {
 				<div class="min-w-0 flex-1">
 					<p class="truncate text-sm font-semibold">{props.peer.display_name}</p>
 					<p class="truncate text-xs text-muted-foreground">{props.peer.hostname}</p>
-					<Show when={hasAny()}>
-						<div class="mt-1.5 space-y-1.5">
-							<For each={slots()}>
-								{(item) => (
-									<TransferRow
-										direction={item.direction}
-										slot={item.slot}
-										onDismiss={() => props.onDismissTransfer?.(item.direction)}
-									/>
-								)}
-							</For>
-						</div>
-					</Show>
 				</div>
 			</button>
+			<Show when={hasAny()}>
+				<div class="border-t border-border" />
+				<div class="space-y-3 p-3.5">
+					<For each={slots()}>
+						{(slot) => (
+							<TransferRow
+								slot={slot}
+								onAbort={() => props.onAbortTransfer?.(slot.id)}
+								onDismiss={() => props.onDismissTransfer?.(slot.id)}
+							/>
+						)}
+					</For>
+				</div>
+			</Show>
 			<Show when={props.expandedContent}>
 				<div class="border-t border-border bg-background/80 p-3">{props.expandedContent}</div>
 			</Show>

@@ -5,12 +5,14 @@ import { createStore, produce } from "solid-js/store";
 export type ThemeMode = "light" | "dark" | "system";
 
 const [theme, setThemeSignal] = createSignal<ThemeMode>(
-	(localStorage.getItem("dukto-proto-theme") as ThemeMode) || "light",
+	(typeof localStorage !== "undefined"
+		? (localStorage.getItem("dukto-proto-theme") as ThemeMode)
+		: null) || "light",
 );
 
 export function setTheme(next: ThemeMode) {
 	setThemeSignal(next);
-	localStorage.setItem("dukto-proto-theme", next);
+	if (typeof localStorage !== "undefined") localStorage.setItem("dukto-proto-theme", next);
 }
 
 export function resolvedTheme(): "light" | "dark" {
@@ -101,23 +103,12 @@ const MOCK_FILES: FileItem[] = [
 	},
 ];
 
-// --- Per-peer transfers (supports simultaneous send + receive per peer) ---
-export interface TransferSlot {
-	status: "active" | "complete" | "error";
-	percent: number;
-	bytesSent: number;
-	bytesTotal: number;
-	speed?: string;
-	errorMsg?: string;
-	completedAt?: number;
-}
+// --- Per-peer transfers (supports multiple simultaneous transfers) ---
+import type { TransferSlot } from "~/features/peers/peer-card";
 
-export interface PeerTransfers {
-	send?: TransferSlot;
-	receive?: TransferSlot;
-}
+let nextTransferId = 1;
 
-const [transfers, setTransfers] = createStore<Record<string, PeerTransfers>>({});
+const [transfers, setTransfers] = createStore<Record<string, TransferSlot>>({});
 
 export function startTransfer(
 	peerId: string,
@@ -125,56 +116,59 @@ export function startTransfer(
 	bytesTotal: number,
 	speed?: string,
 ) {
-	if (!transfers[peerId]) {
-		setTransfers(peerId, {});
-	}
-	setTransfers(peerId, direction, {
+	const id = `${peerId}-${direction}-${nextTransferId++}`;
+	setTransfers(id, {
+		id,
+		direction,
 		status: "active",
 		percent: 0,
 		bytesSent: 0,
 		bytesTotal,
 		speed,
 	});
+	return id;
 }
 
 export function tickAllTransfers() {
 	setTransfers(
 		produce((all) => {
-			for (const peerId of Object.keys(all)) {
-				const peer = all[peerId];
-				for (const dir of ["send", "receive"] as const) {
-					const slot = peer[dir];
-					if (!slot || slot.status !== "active") continue;
-					const inc = dir === "send" ? 8 : 6;
-					const next = Math.min(slot.percent + inc, 100);
-					slot.percent = next;
-					slot.bytesSent = Math.floor((slot.bytesTotal * next) / 100);
-					if (next >= 100) {
-						slot.status = "complete";
-						slot.completedAt = Date.now();
-					}
+			for (const id of Object.keys(all)) {
+				const slot = all[id];
+				if (!slot || slot.status !== "active") continue;
+				const inc = slot.direction === "send" ? 8 : 6;
+				const next = Math.min(slot.percent + inc, 100);
+				slot.percent = next;
+				slot.bytesSent = Math.floor((slot.bytesTotal * next) / 100);
+				if (next >= 100) {
+					slot.status = "complete";
+					slot.completedAt = Date.now();
 				}
 			}
 		}),
 	);
 }
 
-export function dismissTransfer(peerId: string, direction: "send" | "receive") {
+export function dismissTransfer(transferId: string) {
 	setTransfers(
 		produce((all) => {
-			const peer = all[peerId];
-			if (!peer) return;
-			delete peer[direction];
-			if (!peer.send && !peer.receive) delete all[peerId];
+			delete all[transferId];
+		}),
+	);
+}
+
+export function abortTransfer(transferId: string) {
+	setTransfers(
+		produce((all) => {
+			delete all[transferId];
 		}),
 	);
 }
 
 export function failTransfer(peerId: string, direction: "send" | "receive", errorMsg: string) {
-	if (!transfers[peerId]) {
-		setTransfers(peerId, {});
-	}
-	setTransfers(peerId, direction, {
+	const id = `${peerId}-${direction}-${nextTransferId++}`;
+	setTransfers(id, {
+		id,
+		direction,
 		status: "error",
 		percent: 0,
 		bytesSent: 0,
@@ -184,11 +178,18 @@ export function failTransfer(peerId: string, direction: "send" | "receive", erro
 }
 
 export function clearAllTransfers() {
-	setTransfers({});
+	setTransfers(
+		produce((all) => {
+			for (const key of Object.keys(all)) {
+				delete all[key];
+			}
+		}),
+	);
 }
 
-export function getPeerTransfers(peerId: string): PeerTransfers | undefined {
-	return transfers[peerId];
+export function getPeerTransfers(peerId: string): TransferSlot[] | undefined {
+	const slots = Object.values(transfers).filter((s) => s.id.startsWith(`${peerId}-`));
+	return slots.length > 0 ? slots : undefined;
 }
 
 export { transfers };

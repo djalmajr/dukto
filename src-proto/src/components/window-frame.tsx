@@ -1,5 +1,9 @@
 import { For, type JSX, createEffect, createMemo, createSignal } from "solid-js";
+import Icon from "~/components/icon";
 import { resolvedTheme } from "../stores/app";
+
+const FIGMA_FILE_KEY = "U4hNHfRc8UGfcQk0GEEh8s";
+const FIGMA_CAPTURE_URL = `#figmacapture=${FIGMA_FILE_KEY}&figmaendpoint=https://mcp.figma.com&figmaselector=*`;
 
 interface Preset {
 	id: string;
@@ -48,7 +52,8 @@ const PRESETS: Preset[] = [
 ];
 
 const ZOOMS = [0.5, 0.75, 0.92, 1, 1.25];
-const DEFAULT_PRESET = PRESETS[2];
+const DEFAULT_WIDTH = 600;
+const DEFAULT_HEIGHT = 640;
 const MIN_WIDTH = 320;
 const MIN_HEIGHT = 400;
 
@@ -58,6 +63,7 @@ interface WindowFrameProps {
 	toolbar?: JSX.Element;
 	deviceName?: string;
 	hostname?: string;
+	ref?: (el: HTMLDivElement) => void;
 	onSettingsClick?: () => void;
 }
 
@@ -66,11 +72,11 @@ export { type Preset, PRESETS };
 function WindowFrame(props: WindowFrameProps) {
 	const isDark = () => resolvedTheme() === "dark";
 	const [viewport, setViewport] = createSignal<ViewportState>({
-		width: DEFAULT_PRESET.width,
-		height: DEFAULT_PRESET.height,
+		width: DEFAULT_WIDTH,
+		height: DEFAULT_HEIGHT,
 		zoom: 1,
-		activePresetId: DEFAULT_PRESET.id,
-		mode: "preset",
+		activePresetId: null,
+		mode: "manual",
 	});
 	const [dragSession, setDragSession] = createSignal<DragSession | null>(null);
 
@@ -221,37 +227,36 @@ function WindowFrame(props: WindowFrameProps) {
 
 	return (
 		<div
-			class="flex min-h-screen flex-col items-center bg-muted p-8"
+			class="flex min-h-screen flex-col items-center bg-muted"
 			classList={{ dark: isDark() }}
 		>
-			<div class="mb-3 flex flex-wrap items-center justify-center gap-2 rounded-md border border-border bg-background px-3 py-1.5 text-xs text-muted-foreground shadow-sm">
+			<div class="sticky top-0 z-30 flex w-full flex-wrap items-center justify-center gap-1.5 border-b border-border bg-background px-2 py-1.5 text-xs text-muted-foreground">
 				{props.toolbar}
-				<span class="text-muted-foreground/40">|</span>
 				<select
-					class="h-8 rounded-md border border-border bg-background px-2 text-xs outline-none focus:border-primary"
+					class="h-6 rounded border border-border bg-background px-1.5 text-xs outline-none focus:border-primary"
 					value={viewport().activePresetId ?? "responsive"}
 					onChange={(event) => handlePresetSelect(event.currentTarget.value)}
 				>
 					<option value="responsive">Responsive</option>
 					<For each={PRESETS}>{(preset) => <option value={preset.id}>{preset.label}</option>}</For>
 				</select>
-				<div class="flex items-center gap-1">
+				<div class="flex items-center gap-0.5">
 					<input
 						type="number"
-						class="h-8 w-18 appearance-none rounded-md border border-border bg-background px-2 text-center text-xs tabular-nums outline-none focus:border-primary [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+						class="h-6 w-14 appearance-none rounded border border-border bg-background px-1 text-center text-xs tabular-nums outline-none focus:border-primary [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
 						value={viewport().width}
-						onInput={(event) => handleWidthInput(event.currentTarget.value)}
+						onChange={(event) => handleWidthInput(event.currentTarget.value)}
 					/>
-					<span class="text-muted-foreground/60">&times;</span>
+					<span class="text-muted-foreground/40">&times;</span>
 					<input
 						type="number"
-						class="h-8 w-18 appearance-none rounded-md border border-border bg-background px-2 text-center text-xs tabular-nums outline-none focus:border-primary [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+						class="h-6 w-14 appearance-none rounded border border-border bg-background px-1 text-center text-xs tabular-nums outline-none focus:border-primary [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
 						value={viewport().height}
-						onInput={(event) => handleHeightInput(event.currentTarget.value)}
+						onChange={(event) => handleHeightInput(event.currentTarget.value)}
 					/>
 				</div>
 				<select
-					class="h-8 rounded-md border border-border bg-background px-2 text-xs outline-none focus:border-primary"
+					class="h-6 rounded border border-border bg-background px-1.5 text-xs outline-none focus:border-primary"
 					value={String(viewport().zoom)}
 					onChange={(event) => setZoom(Number(event.currentTarget.value))}
 				>
@@ -259,8 +264,16 @@ function WindowFrame(props: WindowFrameProps) {
 						{(zoom) => <option value={String(zoom)}>{Math.round(zoom * 100)}%</option>}
 					</For>
 				</select>
+				<a
+					href={FIGMA_CAPTURE_URL}
+					class="ml-1 flex h-6 items-center gap-1 rounded border border-border px-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+					title="Send to Figma"
+				>
+					<Icon name="lucide:figma" size={12} />
+					Figma
+				</a>
 			</div>
-			<div class="flex items-center justify-center">
+			<div class="flex flex-1 items-center justify-center p-8">
 				<div class="flex flex-col items-center">
 					<div
 						class="relative"
@@ -274,6 +287,7 @@ function WindowFrame(props: WindowFrameProps) {
 							}}
 						>
 							<div
+								ref={props.ref}
 								class="relative flex h-full flex-col overflow-hidden rounded-xl border border-border bg-background shadow-2xl"
 								classList={{ dark: isDark() }}
 								style={{
@@ -305,35 +319,19 @@ function WindowFrame(props: WindowFrameProps) {
 												onClick={props.onSettingsClick}
 												title="Settings"
 											>
-												<svg
-													class="h-4 w-4"
-													fill="none"
-													stroke="currentColor"
-													stroke-width="2"
-													viewBox="0 0 24 24"
-													aria-hidden="true"
-												>
-													<path
-														stroke-linecap="round"
-														stroke-linejoin="round"
-														d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.212-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z"
-													/>
-													<path
-														stroke-linecap="round"
-														stroke-linejoin="round"
-														d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"
-													/>
-												</svg>
+												<Icon name="lucide:settings" size={16} />
 											</button>
 										)}
 									</div>
 								</div>
-								<div class="flex-1 overflow-y-auto bg-background text-foreground">
-									<div class="flex min-h-full flex-col items-center px-4 py-6">
-										{props.children}
+								<div class="relative flex-1 overflow-hidden bg-background text-foreground">
+									<div class="absolute inset-0 overflow-y-auto">
+										<div class="flex min-h-full flex-col items-center px-4 py-6">
+											{props.children}
+										</div>
 									</div>
+									{props.overlay}
 								</div>
-								{props.overlay}
 							</div>
 
 							<div

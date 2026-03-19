@@ -1,3 +1,5 @@
+import type { JSX } from "solid-js";
+
 interface IconProps {
 	name: string;
 	size?: number | string;
@@ -25,7 +27,7 @@ declare module "solid-js" {
 				width?: number | string;
 				height?: number | string;
 				class?: string;
-				style?: any;
+				style?: JSX.CSSProperties;
 				inline?: boolean;
 			};
 		}

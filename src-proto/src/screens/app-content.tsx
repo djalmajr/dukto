@@ -8,6 +8,7 @@ import {
 	type FileItem,
 	MOCK_FILES,
 	type PeerInfo,
+	abortTransfer,
 	clearAllTransfers,
 	dismissTransfer,
 	failTransfer,
@@ -28,16 +29,11 @@ function AppContent() {
 	// Tick all active transfers
 	let timer: number | undefined;
 	createEffect(() => {
-		// Access percent so effect re-runs on every tick
 		let hasActive = false;
 		for (const id of Object.keys(transfers)) {
-			const p = transfers[id];
-			if (p?.send?.status === "active") {
-				void p.send.percent;
-				hasActive = true;
-			}
-			if (p?.receive?.status === "active") {
-				void p.receive.percent;
+			const slot = transfers[id];
+			if (slot?.status === "active") {
+				void slot.percent;
 				hasActive = true;
 			}
 		}
@@ -103,7 +99,8 @@ function AppContent() {
 										) : undefined
 									}
 									onClick={() => handlePeerClick(peer)}
-									onDismissTransfer={(dir) => dismissTransfer(peer.device_id, dir)}
+									onAbortTransfer={(id) => abortTransfer(id)}
+									onDismissTransfer={(id) => dismissTransfer(id)}
 								/>
 							)}
 						</For>

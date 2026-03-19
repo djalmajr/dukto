@@ -36,6 +36,13 @@ Do not implement socket logic, filesystem writes, cryptographic handshakes, or p
 - Use system-native affordances where that improves clarity: file picker, notifications, tray feedback
 - Trust and acceptance states must be obvious: who is sending, what is being sent, and what action the user can take
 
+## Component Library (solid-ui)
+
+- **Always use solid-ui components** (`src/components/ui/`) for buttons, inputs, dialogs, tabs, toggles, and any other UI primitive. Never use raw HTML elements when a solid-ui component exists.
+- If a needed component does not exist in `src/components/ui/`, create it following the solid-ui pattern: Kobalte primitive + `cn()` + semantic design tokens. Then use the new component.
+- Never inline ad-hoc styled elements that duplicate what a solid-ui component already provides (e.g. a styled `<button>` when `<Button>` exists, a styled `<input>` when `<TextFieldInput>` exists).
+- Reference Skedly's `@zomme/ui` for component API conventions when creating new solid-ui components.
+
 ## Styling Rules
 
 - Centralize colors, radius, spacing, and motion as CSS variables early

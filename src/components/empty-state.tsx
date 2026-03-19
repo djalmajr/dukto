@@ -8,6 +8,7 @@ function EmptyState(props: EmptyStateProps) {
 		<div class="flex flex-col items-center justify-center py-12 text-center">
 			<div class="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
 				<svg
+					aria-hidden="true"
 					class="h-6 w-6 text-muted-foreground"
 					fill="none"
 					stroke="currentColor"

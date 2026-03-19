@@ -1,10 +1,15 @@
-import { For, Show } from "solid-js";
+import { For, type JSX, Show } from "solid-js";
 import EmptyState from "~/components/empty-state";
+import type { TransferSlot } from "~/features/peers/peer-card";
 import PeerCard from "~/features/peers/peer-card";
 import { type PeerInfo, peers } from "~/stores/peers";
 
 interface PeerListProps {
 	onPeerSelect?: (peer: PeerInfo) => void;
+	getExpandedContent?: (peer: PeerInfo) => JSX.Element | undefined;
+	getTransfers?: (peer: PeerInfo) => TransferSlot[] | undefined;
+	onAbortTransfer?: (transferId: string) => void;
+	onDismissTransfer?: (transferId: string) => void;
 }
 
 function PeerList(props: PeerListProps) {
@@ -22,7 +27,16 @@ function PeerList(props: PeerListProps) {
 				}
 			>
 				<For each={peerEntries()}>
-					{(peer) => <PeerCard peer={peer} onClick={() => props.onPeerSelect?.(peer)} />}
+					{(peer) => (
+						<PeerCard
+							peer={peer}
+							transfers={props.getTransfers?.(peer)}
+							expandedContent={props.getExpandedContent?.(peer)}
+							onClick={() => props.onPeerSelect?.(peer)}
+							onAbortTransfer={(id) => props.onAbortTransfer?.(id)}
+							onDismissTransfer={(id) => props.onDismissTransfer?.(id)}
+						/>
+					)}
 				</For>
 			</Show>
 		</div>
