@@ -1,0 +1,49 @@
+# Environment files
+.env*
+!.env.example
+
+# Temporary files
+.cache
+.dirinfo
+.tanstack
+.DS_Store
+
+# Build and dependencies
+dist
+node_modules
+bun.lock
+protos/node_modules
+protos/dist
+
+# Rust
+src-tauri/target
+src-tauri/gen
+
+# Database
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Generated files
+**/routeTree.gen.ts
+app-icon.png
+
+# Logs
+*.log
+
+# Agents
+.agents/plans/
+.claude/*
+.claude/hooks/**/.bypass
+.claude/hooks/**/store.db
+!.claude/commands/
+!.claude/hooks/
+!.claude/rules/
+!.claude/settings.json
+.opencode/*
+!.opencode/commands/
+
+# CLAUDE.md files (except root)
+**/CLAUDE.md
+!/CLAUDE.md

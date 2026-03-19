@@ -1,0 +1,13 @@
+{
+	"$schema": "https://raw.githubusercontent.com/nicokosi/tauri-v2-schemas/main/capabilities.schema.json",
+	"identifier": "default",
+	"description": "Default capabilities for Dukto",
+	"windows": ["main"],
+	"permissions": [
+		"core:default",
+		"dialog:default",
+		"notification:default",
+		"os:default",
+		"shell:default"
+	]
+}

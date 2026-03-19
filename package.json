@@ -1,0 +1,33 @@
+{
+	"name": "dukto",
+	"private": true,
+	"version": "0.1.0",
+	"type": "module",
+	"scripts": {
+		"dev": "bunx @tauri-apps/cli dev",
+		"build": "bunx @tauri-apps/cli build",
+		"lint": "biome check . && tsc --noEmit",
+		"lint:fix": "biome check --write .",
+		"test": "bun test",
+		"vite:dev": "vite",
+		"vite:build": "vite build",
+		"proto:dev": "cd protos && bun run dev"
+	},
+	"dependencies": {
+		"@tauri-apps/api": "^2",
+		"@tauri-apps/plugin-dialog": "^2",
+		"@tauri-apps/plugin-notification": "^2",
+		"@tauri-apps/plugin-os": "^2",
+		"@tauri-apps/plugin-shell": "^2",
+		"solid-js": "^1.9"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^1.9",
+		"@tailwindcss/vite": "^4",
+		"@tauri-apps/cli": "^2",
+		"tailwindcss": "^4",
+		"typescript": "^5.7",
+		"vite": "^6",
+		"vite-plugin-solid": "^2"
+	}
+}

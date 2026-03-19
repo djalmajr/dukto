@@ -1,0 +1,15 @@
+{
+	"compilerOptions": {
+		"strict": true,
+		"target": "ES2021",
+		"module": "ESNext",
+		"moduleResolution": "bundler",
+		"allowImportingTsExtensions": true,
+		"noEmit": true,
+		"isolatedModules": true,
+		"jsx": "preserve",
+		"jsxImportSource": "solid-js",
+		"skipLibCheck": true
+	},
+	"include": ["src"]
+}

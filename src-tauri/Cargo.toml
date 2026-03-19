@@ -1,0 +1,42 @@
+[package]
+name = "dukto"
+version = "0.1.0"
+edition = "2021"
+description = "Cross-platform file transfer"
+
+[lib]
+name = "dukto_lib"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[[bin]]
+name = "dukto"
+path = "src/main.rs"
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-os = "2"
+tauri-plugin-shell = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+uuid = { version = "1", features = ["v4"] }
+whoami = "1"
+dashmap = "6"
+mdns-sd = "0.12"
+quinn = "0.11"
+snow = "0.9"
+rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
+rcgen = "0.13"
+dirs = "6"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
