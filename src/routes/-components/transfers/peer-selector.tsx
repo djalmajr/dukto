@@ -1,6 +1,6 @@
 import { For, Show } from "solid-js";
-import { t } from "~/lib/i18n";
 import { Button } from "~/components/ui/button";
+import { t } from "~/helpers/i18n";
 import { type PeerInfo, peers } from "~/stores/peers";
 
 interface PeerSelectorProps {

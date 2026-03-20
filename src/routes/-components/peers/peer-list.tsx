@@ -1,8 +1,8 @@
 import { For, type JSX, Show } from "solid-js";
 import EmptyState from "~/components/empty-state";
-import { t } from "~/lib/i18n";
-import type { TransferSlot } from "~/features/peers/peer-card";
-import PeerCard from "~/features/peers/peer-card";
+import { t } from "~/helpers/i18n";
+import type { TransferSlot } from "~/routes/-components/peers/peer-card";
+import PeerCard from "~/routes/-components/peers/peer-card";
 import { type PeerInfo, peers } from "~/stores/peers";
 
 interface PeerListProps {
@@ -20,12 +20,7 @@ function PeerList(props: PeerListProps) {
 		<div class="w-full space-y-2">
 			<Show
 				when={peerEntries().length > 0}
-				fallback={
-					<EmptyState
-						title={t("noDevices")}
-						description={t("noDevicesHint")}
-					/>
-				}
+				fallback={<EmptyState title={t("noDevices")} description={t("noDevicesHint")} />}
 			>
 				<For each={peerEntries()}>
 					{(peer) => (

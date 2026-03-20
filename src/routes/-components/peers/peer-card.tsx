@@ -1,8 +1,8 @@
 import { For, type JSX, Show, createEffect, createSignal, onCleanup } from "solid-js";
 import Icon from "~/components/icon";
-import { formatBytes } from "~/lib/format";
-import { t } from "~/lib/i18n";
-import { platformIcon } from "~/lib/platform";
+import { t } from "~/helpers/i18n";
+import { formatBytes } from "~/utils/format";
+import { platformIcon } from "~/utils/platform";
 
 export interface TransferSlot {
 	id: string;

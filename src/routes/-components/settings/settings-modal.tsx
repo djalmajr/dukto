@@ -1,9 +1,9 @@
 import { Show } from "solid-js";
-import { t } from "~/lib/i18n";
 import Icon from "~/components/icon";
 import { Button } from "~/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { TextField, TextFieldInput } from "~/components/ui/text-field";
+import { t } from "~/helpers/i18n";
 
 export type ThemeMode = "light" | "dark" | "system";
 
@@ -50,9 +50,15 @@ function SettingsModal(props: SettingsModalProps) {
 								onChange={(value) => props.onChangeTheme(value as ThemeMode)}
 							>
 								<TabsList class="h-8">
-									<TabsTrigger value="light" class="capitalize">{t("light")}</TabsTrigger>
-									<TabsTrigger value="dark" class="capitalize">{t("dark")}</TabsTrigger>
-									<TabsTrigger value="system" class="capitalize">{t("system")}</TabsTrigger>
+									<TabsTrigger value="light" class="capitalize">
+										{t("light")}
+									</TabsTrigger>
+									<TabsTrigger value="dark" class="capitalize">
+										{t("dark")}
+									</TabsTrigger>
+									<TabsTrigger value="system" class="capitalize">
+										{t("system")}
+									</TabsTrigger>
 								</TabsList>
 							</Tabs>
 						</div>

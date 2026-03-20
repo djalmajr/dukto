@@ -1,8 +1,8 @@
 import { listen } from "@tauri-apps/api/event";
 import { createStore } from "solid-js/store";
-import type { TransferSlot } from "~/features/peers/peer-card";
-import { formatBytes } from "~/lib/format";
-import { respondTransfer } from "~/lib/tauri";
+import { respondTransfer } from "~/helpers/tauri";
+import type { TransferSlot } from "~/routes/-components/peers/peer-card";
+import { formatBytes } from "~/utils/format";
 
 export interface TransferProgress {
 	transfer_id: string;

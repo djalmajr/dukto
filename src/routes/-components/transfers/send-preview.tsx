@@ -1,9 +1,9 @@
 import { For } from "solid-js";
-import { t } from "~/lib/i18n";
 import Icon from "~/components/icon";
 import { Button } from "~/components/ui/button";
-import { formatBytes, sortFileItems } from "~/lib/format";
-import { platformIcon } from "~/lib/platform";
+import { t } from "~/helpers/i18n";
+import { formatBytes, sortFileItems } from "~/utils/format";
+import { platformIcon } from "~/utils/platform";
 
 export interface FileItem {
 	name: string;

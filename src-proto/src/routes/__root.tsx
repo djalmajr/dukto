@@ -1,12 +1,12 @@
-import { For, Show, createEffect, createSignal } from "solid-js";
 import { Outlet, createRootRoute, useNavigate, useSearch } from "@tanstack/solid-router";
+import { For, Show, createEffect, createSignal } from "solid-js";
 import Icon from "~/components/icon";
-import IncomingRequestDialog from "~/features/transfers/incoming-request";
-import SettingsModal from "~/features/settings/settings-modal";
-import { changeLanguage, language } from "~/lib/i18n";
+import { changeLanguage, language } from "~/helpers/i18n";
+import SettingsModal from "~/routes/-components/settings/settings-modal";
+import IncomingRequestDialog from "~/routes/-components/transfers/incoming-request";
 import {
-	type PeerInfo,
 	MOCK_FILES,
+	type PeerInfo,
 	clearAllTransfers,
 	destinationDir,
 	failTransfer,
@@ -160,9 +160,7 @@ function RootLayout() {
 				<button
 					type="button"
 					class="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-					onClick={() =>
-						navigate({ to: "/", search: showSettings() ? {} : { settings: true } })
-					}
+					onClick={() => navigate({ to: "/", search: showSettings() ? {} : { settings: true } })}
 					title="Settings"
 				>
 					<Icon name="lucide:settings" size={16} />

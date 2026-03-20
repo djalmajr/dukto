@@ -1,21 +1,17 @@
+import { createFileRoute, useNavigate, useSearch } from "@tanstack/solid-router";
 import { open } from "@tauri-apps/plugin-dialog";
 import { Show, createMemo, createSignal } from "solid-js";
-import { createFileRoute, useNavigate, useSearch } from "@tanstack/solid-router";
-import { changeLanguage, language, t } from "~/lib/i18n";
 import ErrorDisplay from "~/components/error-display";
 import Icon from "~/components/icon";
 import { Button } from "~/components/ui/button";
-import PeerList from "~/features/peers/peer-list";
-import SettingsModal from "~/features/settings/settings-modal";
-import DropZone from "~/features/transfers/drop-zone";
-import IncomingRequestDialog from "~/features/transfers/incoming-request";
-import SendPreview from "~/features/transfers/send-preview";
-import type { FileItem } from "~/features/transfers/send-preview";
-import { type FileMetadataInfo, resolveFileMetadata, sendToPeer } from "~/lib/tauri";
-import { device } from "~/stores/device";
-import type { PeerInfo } from "~/stores/peers";
-import { peers } from "~/stores/peers";
-import { setDestinationDir, setTheme, settings, theme } from "~/stores/settings";
+import { changeLanguage, language, t } from "~/helpers/i18n";
+import { type FileMetadataInfo, resolveFileMetadata, sendToPeer } from "~/helpers/tauri";
+import PeerList from "~/routes/-components/peers/peer-list";
+import SettingsModal from "~/routes/-components/settings/settings-modal";
+import DropZone from "~/routes/-components/transfers/drop-zone";
+import IncomingRequestDialog from "~/routes/-components/transfers/incoming-request";
+import SendPreview from "~/routes/-components/transfers/send-preview";
+import type { FileItem } from "~/routes/-components/transfers/send-preview";
 import {
 	abortTransfer,
 	acceptIncoming,
@@ -24,7 +20,11 @@ import {
 	incomingRequest,
 	rejectIncoming,
 	startSendTransfer,
-} from "~/stores/transfers";
+} from "~/routes/-stores/transfers";
+import { device } from "~/stores/device";
+import type { PeerInfo } from "~/stores/peers";
+import { peers } from "~/stores/peers";
+import { setDestinationDir, setTheme, settings, theme } from "~/stores/settings";
 
 type SendFlowState =
 	| { step: "idle" }
@@ -142,11 +142,9 @@ function HomePage() {
 							<Icon name="mdi:cog-outline" size={16} />
 						</Button>
 					</div>
-
 					<Show when={error()}>
 						{(message) => <ErrorDisplay message={message()} onDismiss={() => setError(null)} />}
 					</Show>
-
 					<Show when={pendingFilesLabel()}>
 						{(label) => (
 							<div class="flex items-center justify-between rounded-lg border border-border bg-card px-3 py-2 text-xs text-muted-foreground shadow-sm">
@@ -157,7 +155,6 @@ function HomePage() {
 							</div>
 						)}
 					</Show>
-
 					<PeerList
 						onPeerSelect={handlePeerClick}
 						getTransfers={(peer) => getPeerTransfers(peer.device_id)}
@@ -190,7 +187,6 @@ function HomePage() {
 					/>
 				</div>
 			</main>
-
 			<IncomingRequestDialog
 				request={incomingData()}
 				onAccept={acceptIncoming}

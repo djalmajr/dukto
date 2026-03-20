@@ -57,22 +57,48 @@ Do not implement socket logic, filesystem writes, cryptographic handshakes, or p
 - Use a clear visual direction, but keep the base neutral and utility-driven for a file transfer tool
 - Focus states and keyboard accessibility are required for interactive controls
 
+## Module Classification
+
+Use dedicated directories for each module type:
+
+| Directory | Purpose | State | Example |
+|-----------|---------|-------|---------|
+| `helpers/` | App-specific functions and config wrappers | Stateless | i18n setup, Tauri bridge, form validation |
+| `libs/` | Reusable across projects, no business logic | Stateless | Crypto wrapper, SDK client, data structures |
+| `utils/` | Generic reusable functions | Stateless | formatDate(), cn(), generateUUID() |
+
+Domain-specific helpers can also be colocated in `routes/-helpers/` when tied to a specific route group.
+
+## Colocation Convention
+
+Use TanStack Router directory conventions:
+- `-prefix/` directories are ignored by the router — use for colocated code (`-components/`, `-stores/`, `-helpers/`)
+- `_prefix/` directories create pathless layout routes — use for domain grouping when routes appear
+
+**Generic** code lives at `src/` level (`components/`, `helpers/`, `utils/`, `stores/`).
+**Domain-specific** code is colocated inside `routes/` (`routes/-components/`, `routes/-stores/`).
+
+When a route group gets its own routes (e.g. `_transfers/send.tsx`), move its components from `routes/-components/` to `routes/_transfers/-components/`.
+
 ## Suggested App Structure
 
 ```text
 src/
-├── components/
-├── features/
-│   ├── peers/
-│   ├── transfers/
-│   ├── pairing/
-│   ├── trust/
-│   └── settings/
-├── stores/
-├── lib/
-├── routes/
+├── components/          # generic: ui primitives, shared components
+│   └── ui/
+├── helpers/             # app-specific wrappers (i18n, Tauri bridge)
+├── utils/               # generic stateless functions (cn, format, platform)
+├── stores/              # global stores (device, peers, settings)
 ├── styles/
-└── index.tsx
+└── routes/
+    ├── -components/     # domain components colocated with routes
+    │   ├── peers/
+    │   ├── settings/
+    │   └── transfers/
+    ├── -stores/         # domain stores colocated with routes
+    ├── __root.tsx
+    ├── index.tsx
+    └── locales/
 ```
 
 ## State Management

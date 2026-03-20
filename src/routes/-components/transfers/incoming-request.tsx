@@ -1,5 +1,4 @@
 import { Show } from "solid-js";
-import { t } from "~/lib/i18n";
 import { Button } from "~/components/ui/button";
 import {
 	Dialog,
@@ -9,7 +8,8 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "~/components/ui/dialog";
-import { formatBytes } from "~/lib/format";
+import { t } from "~/helpers/i18n";
+import { formatBytes } from "~/utils/format";
 
 export interface IncomingRequestData {
 	sender_name: string;

@@ -1,7 +1,7 @@
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { type JSX, createSignal, onCleanup, onMount } from "solid-js";
-import { type FileMetadataInfo, resolveFileMetadata } from "~/lib/tauri";
+import { type FileMetadataInfo, resolveFileMetadata } from "~/helpers/tauri";
 
 interface DropZoneProps {
 	children: JSX.Element;

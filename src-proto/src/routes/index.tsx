@@ -1,9 +1,9 @@
-import { For, Show, createEffect, onCleanup } from "solid-js";
 import { createFileRoute } from "@tanstack/solid-router";
+import { For, Show, createEffect, onCleanup } from "solid-js";
 import EmptyState from "~/components/empty-state";
-import { t } from "~/lib/i18n";
-import PeerCard from "~/features/peers/peer-card";
-import SendPreview from "~/features/transfers/send-preview";
+import { t } from "~/helpers/i18n";
+import PeerCard from "~/routes/-components/peers/peer-card";
+import SendPreview from "~/routes/-components/transfers/send-preview";
 import {
 	type FileItem,
 	MOCK_FILES,
@@ -56,10 +56,7 @@ function HomePage() {
 						when={peers.length > 0}
 						fallback={
 							<div class="flex flex-1 items-center justify-center">
-								<EmptyState
-									title={t("noDevices")}
-									description={t("noDevicesHint")}
-								/>
+								<EmptyState title={t("noDevices")} description={t("noDevicesHint")} />
 							</div>
 						}
 					>

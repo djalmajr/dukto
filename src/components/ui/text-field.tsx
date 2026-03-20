@@ -1,10 +1,8 @@
+import type { PolymorphicProps } from "@kobalte/core/polymorphic";
+import * as TextFieldPrimitive from "@kobalte/core/text-field";
 import type { ValidComponent } from "solid-js";
 import { splitProps } from "solid-js";
-
-import * as TextFieldPrimitive from "@kobalte/core/text-field";
-import type { PolymorphicProps } from "@kobalte/core/polymorphic";
-
-import { cn } from "~/lib/cn";
+import { cn } from "~/utils/cn";
 
 const TextField = TextFieldPrimitive.Root;
 

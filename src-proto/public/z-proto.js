@@ -63,7 +63,8 @@ function el(tag, attrs, children) {
 			node.textContent = children;
 		} else if (Array.isArray(children)) {
 			for (const child of children) {
-				if (child) node.appendChild(typeof child === "string" ? document.createTextNode(child) : child);
+				if (child)
+					node.appendChild(typeof child === "string" ? document.createTextNode(child) : child);
 			}
 		} else {
 			node.appendChild(children);
@@ -91,7 +92,13 @@ function createFigmaSvg() {
 // --- ZProto ---
 
 class ZProto extends HTMLElement {
-	static observedAttributes = ["figma-key", "window-title", "window-width", "window-height", "zoom"];
+	static observedAttributes = [
+		"figma-key",
+		"window-title",
+		"window-width",
+		"window-height",
+		"zoom",
+	];
 
 	/** @type {Record<string, HTMLElement>} */
 	#refs = {};
@@ -202,17 +209,29 @@ class ZProto extends HTMLElement {
 			el("option", { value: String(z) }, `${Math.round(z * 100)}%`),
 		);
 
-		const presetSelect = el("select", { className: "zp-select", "data-ref": "preset" }, presetOptions);
+		const presetSelect = el(
+			"select",
+			{ className: "zp-select", "data-ref": "preset" },
+			presetOptions,
+		);
 		const widthInput = el("input", { className: "zp-input", "data-ref": "width", type: "number" });
-		const heightInput = el("input", { className: "zp-input", "data-ref": "height", type: "number" });
+		const heightInput = el("input", {
+			className: "zp-input",
+			"data-ref": "height",
+			type: "number",
+		});
 		const zoomSelect = el("select", { className: "zp-select", "data-ref": "zoom" }, zoomOptions);
 
-		const figmaLink = el("a", {
-			className: "zp-figma-link",
-			"data-ref": "figma",
-			hidden: true,
-			title: "Send to Figma",
-		}, [createFigmaSvg(), "Figma"]);
+		const figmaLink = el(
+			"a",
+			{
+				className: "zp-figma-link",
+				"data-ref": "figma",
+				hidden: true,
+				title: "Send to Figma",
+			},
+			[createFigmaSvg(), "Figma"],
+		);
 
 		const dimGroup = el("div", { className: "zp-dim-group" }, [
 			widthInput,
@@ -254,7 +273,11 @@ class ZProto extends HTMLElement {
 			contentArea,
 		]);
 
-		const scaleWrapper = el("div", { className: "zp-scale-wrapper", "data-ref": "scale" }, windowEl);
+		const scaleWrapper = el(
+			"div",
+			{ className: "zp-scale-wrapper", "data-ref": "scale" },
+			windowEl,
+		);
 
 		// Resize handles
 		const handles = EDGES.map((edge) =>

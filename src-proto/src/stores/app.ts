@@ -63,7 +63,7 @@ export interface FileItem {
 	is_dir: boolean;
 }
 
-export { sortFileItems as sortFiles } from "~/lib/format";
+export { sortFileItems as sortFiles } from "~/utils/format";
 
 const MOCK_FILES: FileItem[] = [
 	{ name: "project-files", path: "/Users/djalmajr/project-files", size: 8200000, is_dir: true },
@@ -104,7 +104,7 @@ const MOCK_FILES: FileItem[] = [
 ];
 
 // --- Per-peer transfers (supports multiple simultaneous transfers) ---
-import type { TransferSlot } from "~/features/peers/peer-card";
+import type { TransferSlot } from "~/routes/-components/peers/peer-card";
 
 let nextTransferId = 1;
 

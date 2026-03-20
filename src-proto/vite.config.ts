@@ -22,8 +22,6 @@ export default defineConfig({
 	],
 	server: { port: 3333 },
 	resolve: {
-		alias: [
-			{ find: "~", replacement: resolve(__dirname, "../src") },
-		],
+		alias: [{ find: "~", replacement: resolve(__dirname, "../src") }],
 	},
 });

@@ -1,5 +1,5 @@
-import { createEffect } from "solid-js";
 import { Outlet, createRootRoute } from "@tanstack/solid-router";
+import { createEffect } from "solid-js";
 import { resolvedTheme } from "~/stores/settings";
 
 function RootLayout() {
