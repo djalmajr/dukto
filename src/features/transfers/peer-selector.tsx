@@ -1,4 +1,5 @@
 import { For, Show } from "solid-js";
+import { t } from "~/lib/i18n";
 import { Button } from "~/components/ui/button";
 import { type PeerInfo, peers } from "~/stores/peers";
 
@@ -16,7 +17,7 @@ function PeerSelector(props: PeerSelectorProps) {
 				<h3 class="text-sm font-semibold">Select recipient</h3>
 				<Show
 					when={peerList().length > 0}
-					fallback={<p class="py-4 text-center text-xs text-muted-foreground">No devices available</p>}
+					fallback={<p class="py-4 text-center text-xs text-muted-foreground">{t("noDevices")}</p>}
 				>
 					<ul class="mt-3 space-y-1">
 						<For each={peerList()}>
@@ -36,7 +37,7 @@ function PeerSelector(props: PeerSelectorProps) {
 					</ul>
 				</Show>
 				<Button variant="outline" class="mt-3 w-full" onClick={props.onCancel}>
-					Cancel
+					{t("cancel")}
 				</Button>
 			</div>
 		</div>

@@ -1,5 +1,6 @@
 import { For, type JSX, Show } from "solid-js";
 import EmptyState from "~/components/empty-state";
+import { t } from "~/lib/i18n";
 import type { TransferSlot } from "~/features/peers/peer-card";
 import PeerCard from "~/features/peers/peer-card";
 import { type PeerInfo, peers } from "~/stores/peers";
@@ -21,8 +22,8 @@ function PeerList(props: PeerListProps) {
 				when={peerEntries().length > 0}
 				fallback={
 					<EmptyState
-						title="No devices found"
-						description="Make sure other devices are running Dukto on the same network"
+						title={t("noDevices")}
+						description={t("noDevicesHint")}
 					/>
 				}
 			>

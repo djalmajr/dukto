@@ -1,4 +1,5 @@
 import { Show } from "solid-js";
+import { t } from "~/lib/i18n";
 import { Button } from "~/components/ui/button";
 import {
 	Dialog,
@@ -29,7 +30,7 @@ function IncomingRequestDialog(props: IncomingRequestProps) {
 				<Dialog open onOpenChange={(open) => !open && props.onReject()}>
 					<DialogContent class="max-w-xs">
 						<DialogHeader>
-							<DialogTitle>Incoming transfer</DialogTitle>
+							<DialogTitle>{t("incoming")}</DialogTitle>
 							<DialogDescription>
 								{req().item_count} {req().item_count === 1 ? "item" : "items"} &middot;{" "}
 								{formatBytes(req().total_size)}
@@ -39,10 +40,10 @@ function IncomingRequestDialog(props: IncomingRequestProps) {
 						</DialogHeader>
 						<DialogFooter class="flex-row gap-2">
 							<Button class="flex-1" onClick={props.onAccept}>
-								Accept
+								{t("accept")}
 							</Button>
 							<Button variant="outline" class="flex-1" onClick={props.onReject}>
-								Reject
+								{t("reject")}
 							</Button>
 						</DialogFooter>
 					</DialogContent>

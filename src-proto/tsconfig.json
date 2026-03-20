@@ -15,5 +15,6 @@
 			"@app/*": ["../src/*"]
 		}
 	},
+	"exclude": ["../**/*.test.ts", "../**/*.test.tsx", "src/**/*.test.ts", "../src/routeTree.gen.ts", "../src/routes/**", "../src/index.tsx"],
 	"include": ["src", "../src"]
 }

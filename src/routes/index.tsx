@@ -1,5 +1,7 @@
 import { open } from "@tauri-apps/plugin-dialog";
-import { Show, createEffect, createMemo, createSignal } from "solid-js";
+import { Show, createMemo, createSignal } from "solid-js";
+import { createFileRoute, useNavigate, useSearch } from "@tanstack/solid-router";
+import { changeLanguage, language, t } from "~/lib/i18n";
 import ErrorDisplay from "~/components/error-display";
 import Icon from "~/components/icon";
 import { Button } from "~/components/ui/button";
@@ -13,7 +15,7 @@ import { type FileMetadataInfo, resolveFileMetadata, sendToPeer } from "~/lib/ta
 import { device } from "~/stores/device";
 import type { PeerInfo } from "~/stores/peers";
 import { peers } from "~/stores/peers";
-import { resolvedTheme, setDestinationDir, setTheme, settings, theme } from "~/stores/settings";
+import { setDestinationDir, setTheme, settings, theme } from "~/stores/settings";
 import {
 	abortTransfer,
 	acceptIncoming,
@@ -29,23 +31,26 @@ type SendFlowState =
 	| { step: "pending-files"; files: FileItem[] }
 	| { step: "preview"; peer: PeerInfo; files: FileItem[] };
 
-function App() {
+function HomePage() {
+	const search = useSearch({ from: "/" });
+	const navigate = useNavigate();
 	const [sendFlow, setSendFlow] = createSignal<SendFlowState>({ step: "idle" });
 	const [error, setError] = createSignal<string | null>(null);
-	const [showSettings, setShowSettings] = createSignal(false);
 
-	createEffect(() => {
-		const dark = resolvedTheme() === "dark";
-		document.documentElement.classList.toggle("dark", dark);
-		document.documentElement.setAttribute("data-kb-theme", dark ? "dark" : "light");
-	});
+	const showSettings = () => search().settings === true;
+
+	function openSettings() {
+		navigate({ to: "/", search: { settings: true } });
+	}
+
+	function closeSettings() {
+		navigate({ to: "/", search: { settings: undefined } });
+	}
 
 	const pendingFilesLabel = createMemo(() => {
 		const state = sendFlow();
 		if (state.step !== "pending-files") return null;
-		return state.files.length === 1
-			? "1 item ready to send"
-			: `${state.files.length} items ready to send`;
+		return t("itemCount", { count: state.files.length });
 	});
 
 	async function handleChangeDestination() {
@@ -133,7 +138,7 @@ function App() {
 								)}
 							</Show>
 						</div>
-						<Button variant="outline" size="icon" onClick={() => setShowSettings(true)}>
+						<Button variant="outline" size="icon" onClick={openSettings}>
 							<Icon name="mdi:cog-outline" size={16} />
 						</Button>
 					</div>
@@ -147,7 +152,7 @@ function App() {
 							<div class="flex items-center justify-between rounded-lg border border-border bg-card px-3 py-2 text-xs text-muted-foreground shadow-sm">
 								<span>{label()}</span>
 								<Button variant="ghost" size="sm" onClick={() => setSendFlow({ step: "idle" })}>
-									Clear
+									{t("cancel")}
 								</Button>
 							</div>
 						)}
@@ -181,7 +186,7 @@ function App() {
 							);
 						}}
 						onAbortTransfer={(id) => abortTransfer(id)}
-					  onDismissTransfer={(id) => dismissPeerTransfer(id)}
+						onDismissTransfer={(id) => dismissPeerTransfer(id)}
 					/>
 				</div>
 			</main>
@@ -193,14 +198,21 @@ function App() {
 			/>
 			<SettingsModal
 				open={showSettings()}
-				destinationDir={settings()?.destination_dir ?? "Loading..."}
+				destinationDir={settings()?.destination_dir ?? "..."}
 				theme={theme()}
+				language={language()}
 				onChangeDestination={handleChangeDestination}
 				onChangeTheme={setTheme}
-				onClose={() => setShowSettings(false)}
+				onChangeLanguage={changeLanguage}
+				onClose={closeSettings}
 			/>
 		</DropZone>
 	);
 }
 
-export default App;
+export const Route = createFileRoute("/")({
+	component: HomePage,
+	validateSearch: (search: Record<string, unknown>) => ({
+		settings: search.settings === true || search.settings === "true" || undefined,
+	}),
+});

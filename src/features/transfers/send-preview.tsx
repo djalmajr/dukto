@@ -1,4 +1,5 @@
 import { For } from "solid-js";
+import { t } from "~/lib/i18n";
 import Icon from "~/components/icon";
 import { Button } from "~/components/ui/button";
 import { formatBytes, sortFileItems } from "~/lib/format";
@@ -94,10 +95,10 @@ function SendPreview(props: SendPreviewProps) {
 			{/* Actions */}
 			<div class="flex gap-2 border-t border-border pt-3">
 				<Button size="sm" class="flex-1" onClick={props.onConfirm}>
-					Send
+					{t("send")}
 				</Button>
 				<Button variant="outline" size="sm" class="flex-1" onClick={props.onCancel}>
-					Cancel
+					{t("cancel")}
 				</Button>
 			</div>
 		</div>

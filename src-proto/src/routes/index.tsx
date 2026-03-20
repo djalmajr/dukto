@@ -1,6 +1,7 @@
 import { For, Show, createEffect, onCleanup } from "solid-js";
+import { createFileRoute } from "@tanstack/solid-router";
 import EmptyState from "~/components/empty-state";
-import { Button } from "~/components/ui/button";
+import { t } from "../lib/i18n";
 import PeerCard from "~/features/peers/peer-card";
 import IncomingRequestDialog from "~/features/transfers/incoming-request";
 import SendPreview from "~/features/transfers/send-preview";
@@ -9,24 +10,19 @@ import {
 	MOCK_FILES,
 	type PeerInfo,
 	abortTransfer,
-	clearAllTransfers,
 	dismissTransfer,
-	failTransfer,
 	getPeerTransfers,
-	hidePeers,
 	peers,
 	screen,
 	setScreen,
-	showPeers,
 	startTransfer,
 	tickAllTransfers,
 	transfers,
 } from "../stores/app";
 
-function AppContent() {
+function HomePage() {
 	const s = screen;
 
-	// Tick all active transfers
 	let timer: number | undefined;
 	createEffect(() => {
 		let hasActive = false;
@@ -56,15 +52,14 @@ function AppContent() {
 	return (
 		<>
 			<div class="flex w-full flex-1 flex-col space-y-3">
-				{/* Peer list */}
 				<div class="flex flex-1 flex-col space-y-2">
 					<Show
 						when={peers.length > 0}
 						fallback={
 							<div class="flex flex-1 items-center justify-center">
 								<EmptyState
-									title="No devices found"
-									description="Make sure other devices are running Dukto on the same network"
+									title={t("noDevices")}
+									description={t("noDevicesHint")}
 								/>
 							</div>
 						}
@@ -108,7 +103,6 @@ function AppContent() {
 				</div>
 			</div>
 
-			{/* Incoming request dialog */}
 			<Show when={s().id === "incoming" && s()}>
 				{(cur) => {
 					const data = () => cur() as { from: PeerInfo; itemCount: number; totalSize: number };
@@ -129,4 +123,6 @@ function AppContent() {
 	);
 }
 
-export default AppContent;
+export const Route = createFileRoute("/")({
+	component: HomePage,
+});

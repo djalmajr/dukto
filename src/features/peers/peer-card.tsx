@@ -1,6 +1,7 @@
 import { For, type JSX, Show, createEffect, createSignal, onCleanup } from "solid-js";
 import Icon from "~/components/icon";
 import { formatBytes } from "~/lib/format";
+import { t } from "~/lib/i18n";
 import { platformIcon } from "~/lib/platform";
 
 export interface TransferSlot {
@@ -38,11 +39,12 @@ function TransferRow(props: {
 }) {
 	const label = () => {
 		const dir = props.slot.direction;
+		const arrow = dir === "send" ? "\u2191" : "\u2193";
 		if (props.slot.status === "active")
-			return dir === "send" ? "\u2191 Sending..." : "\u2193 Receiving...";
+			return `${arrow} ${dir === "send" ? t("sending") : t("receiving")}`;
 		if (props.slot.status === "complete")
-			return dir === "send" ? "\u2191 Sent" : "\u2193 Received";
-		return dir === "send" ? "\u2191 Failed" : "\u2193 Failed";
+			return `${arrow} ${dir === "send" ? t("sent") : t("received")}`;
+		return `${arrow} ${t("failed")}`;
 	};
 
 	const isError = () => props.slot.status === "error";
