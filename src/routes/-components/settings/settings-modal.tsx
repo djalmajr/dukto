@@ -1,5 +1,5 @@
 import { Show } from "solid-js";
-import Icon from "~/components/icon";
+import LucideX from "~icons/lucide/x";
 import { Button } from "~/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { TextField, TextFieldInput } from "~/components/ui/text-field";
@@ -27,7 +27,7 @@ function SettingsModal(props: SettingsModalProps) {
 					<div class="flex items-center justify-between">
 						<h2 class="text-sm font-semibold">{t("settings")}</h2>
 						<Button variant="ghost" size="icon" class="size-6" onClick={props.onClose}>
-							<Icon name="lucide:x" size={14} />
+							<LucideX width={14} height={14} />
 							<span class="sr-only">Close</span>
 						</Button>
 					</div>

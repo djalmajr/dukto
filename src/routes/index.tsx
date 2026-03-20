@@ -1,13 +1,10 @@
-import { createFileRoute, useNavigate, useSearch } from "@tanstack/solid-router";
-import { open } from "@tauri-apps/plugin-dialog";
+import { createFileRoute } from "@tanstack/solid-router";
 import { Show, createMemo, createSignal } from "solid-js";
 import ErrorDisplay from "~/components/error-display";
-import Icon from "~/components/icon";
 import { Button } from "~/components/ui/button";
-import { changeLanguage, language, t } from "~/helpers/i18n";
+import { t } from "~/helpers/i18n";
 import { type FileMetadataInfo, resolveFileMetadata, sendToPeer } from "~/helpers/tauri";
 import PeerList from "~/routes/-components/peers/peer-list";
-import SettingsModal from "~/routes/-components/settings/settings-modal";
 import DropZone from "~/routes/-components/transfers/drop-zone";
 import IncomingRequestDialog from "~/routes/-components/transfers/incoming-request";
 import SendPreview from "~/routes/-components/transfers/send-preview";
@@ -21,10 +18,8 @@ import {
 	rejectIncoming,
 	startSendTransfer,
 } from "~/routes/-stores/transfers";
-import { device } from "~/stores/device";
 import type { PeerInfo } from "~/stores/peers";
 import { peers } from "~/stores/peers";
-import { setDestinationDir, setTheme, settings, theme } from "~/stores/settings";
 
 type SendFlowState =
 	| { step: "idle" }
@@ -32,33 +27,14 @@ type SendFlowState =
 	| { step: "preview"; peer: PeerInfo; files: FileItem[] };
 
 function HomePage() {
-	const search = useSearch({ from: "/" });
-	const navigate = useNavigate();
 	const [sendFlow, setSendFlow] = createSignal<SendFlowState>({ step: "idle" });
 	const [error, setError] = createSignal<string | null>(null);
-
-	const showSettings = () => search().settings === true;
-
-	function openSettings() {
-		navigate({ to: "/", search: { settings: true } });
-	}
-
-	function closeSettings() {
-		navigate({ to: "/", search: { settings: undefined } });
-	}
 
 	const pendingFilesLabel = createMemo(() => {
 		const state = sendFlow();
 		if (state.step !== "pending-files") return null;
 		return t("itemCount", { count: state.files.length });
 	});
-
-	async function handleChangeDestination() {
-		const selected = await open({ directory: true, multiple: false });
-		if (selected) {
-			await setDestinationDir(selected as string);
-		}
-	}
 
 	function handleFilesDropped(files: FileMetadataInfo[]) {
 		if (files.length > 0) {
@@ -79,11 +55,12 @@ function HomePage() {
 			return;
 		}
 
-		const selected = await open({ multiple: true, directory: false });
-		const paths = normalizeDialogSelection(selected);
-		if (paths.length === 0) return;
-
 		try {
+			const { open } = await import("@tauri-apps/plugin-dialog");
+			const selected = await open({ multiple: true, directory: false });
+			const paths = normalizeDialogSelection(selected);
+			if (paths.length === 0) return;
+
 			const files = await resolveFileMetadata(paths);
 			if (files.length > 0) {
 				setError(null);
@@ -125,36 +102,21 @@ function HomePage() {
 
 	return (
 		<DropZone onFilesDropped={handleFilesDropped}>
-			<main class="min-h-screen bg-background px-4 py-8 text-foreground">
-				<div class="mx-auto flex w-full max-w-md flex-col gap-4">
-					<div class="flex items-start justify-between gap-3">
-						<div class="min-w-0">
-							<h1 class="text-2xl font-bold tracking-tight">Dukto</h1>
-							<Show when={device()}>
-								{(currentDevice) => (
-									<p class="mt-1 truncate text-xs text-muted-foreground">
-										{currentDevice().display_name} . {currentDevice().hostname}
-									</p>
-								)}
-							</Show>
+			<div class="flex w-full flex-1 flex-col space-y-3">
+				<Show when={error()}>
+					{(message) => <ErrorDisplay message={message()} onDismiss={() => setError(null)} />}
+				</Show>
+				<Show when={pendingFilesLabel()}>
+					{(label) => (
+						<div class="flex items-center justify-between rounded-lg border border-border bg-card px-3 py-2 text-xs text-muted-foreground shadow-sm">
+							<span>{label()}</span>
+							<Button variant="ghost" size="sm" onClick={() => setSendFlow({ step: "idle" })}>
+								{t("cancel")}
+							</Button>
 						</div>
-						<Button variant="outline" size="icon" onClick={openSettings}>
-							<Icon name="mdi:cog-outline" size={16} />
-						</Button>
-					</div>
-					<Show when={error()}>
-						{(message) => <ErrorDisplay message={message()} onDismiss={() => setError(null)} />}
-					</Show>
-					<Show when={pendingFilesLabel()}>
-						{(label) => (
-							<div class="flex items-center justify-between rounded-lg border border-border bg-card px-3 py-2 text-xs text-muted-foreground shadow-sm">
-								<span>{label()}</span>
-								<Button variant="ghost" size="sm" onClick={() => setSendFlow({ step: "idle" })}>
-									{t("cancel")}
-								</Button>
-							</div>
-						)}
-					</Show>
+					)}
+				</Show>
+				<div class="flex flex-1 flex-col space-y-2">
 					<PeerList
 						onPeerSelect={handlePeerClick}
 						getTransfers={(peer) => getPeerTransfers(peer.device_id)}
@@ -186,21 +148,11 @@ function HomePage() {
 						onDismissTransfer={(id) => dismissPeerTransfer(id)}
 					/>
 				</div>
-			</main>
+			</div>
 			<IncomingRequestDialog
 				request={incomingData()}
 				onAccept={acceptIncoming}
 				onReject={rejectIncoming}
-			/>
-			<SettingsModal
-				open={showSettings()}
-				destinationDir={settings()?.destination_dir ?? "..."}
-				theme={theme()}
-				language={language()}
-				onChangeDestination={handleChangeDestination}
-				onChangeTheme={setTheme}
-				onChangeLanguage={changeLanguage}
-				onClose={closeSettings}
 			/>
 		</DropZone>
 	);

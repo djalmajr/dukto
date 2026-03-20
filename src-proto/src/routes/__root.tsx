@@ -150,7 +150,7 @@ function RootLayout() {
 		<z-proto
 			figma-key="U4hNHfRc8UGfcQk0GEEh8s"
 			window-title="djalmajr · MacBook-Pro.local"
-			window-width="480"
+			window-width="600"
 			window-height="640"
 		>
 			<z-proto-header>

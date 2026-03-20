@@ -17,10 +17,14 @@ function PeerList(props: PeerListProps) {
 	const peerEntries = () => Object.values(peers);
 
 	return (
-		<div class="w-full space-y-2">
+		<div class="flex w-full flex-1 flex-col space-y-2">
 			<Show
 				when={peerEntries().length > 0}
-				fallback={<EmptyState title={t("noDevices")} description={t("noDevicesHint")} />}
+				fallback={
+					<div class="flex flex-1 items-center justify-center">
+						<EmptyState title={t("noDevices")} description={t("noDevicesHint")} />
+					</div>
+				}
 			>
 				<For each={peerEntries()}>
 					{(peer) => (

@@ -1,9 +1,11 @@
-import { For } from "solid-js";
-import Icon from "~/components/icon";
+import { For, Show } from "solid-js";
+import LucideX from "~icons/lucide/x";
+import MdiFileOutline from "~icons/mdi/file-outline";
+import MdiFolderOutline from "~icons/mdi/folder-outline";
+import PlatformIcon from "~/components/platform-icon";
 import { Button } from "~/components/ui/button";
 import { t } from "~/helpers/i18n";
 import { formatBytes, sortFileItems } from "~/utils/format";
-import { platformIcon } from "~/utils/platform";
 
 export interface FileItem {
 	name: string;
@@ -40,10 +42,10 @@ function SendPreview(props: SendPreviewProps) {
 			}}
 		>
 			{/* Header */}
-			{!props.embedded && (
+			<Show when={!props.embedded}>
 				<div class="flex items-center gap-3 border-b border-border bg-muted/50 px-4 py-3">
 					<span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-background text-muted-foreground shadow-sm">
-						<Icon name={platformIcon(props.peer.platform)} size={20} />
+						<PlatformIcon platform={props.peer.platform} class="h-5 w-5" />
 					</span>
 					<div class="min-w-0 flex-1">
 						<p class="text-sm font-semibold leading-tight">Send to {props.peer.display_name}</p>
@@ -54,10 +56,10 @@ function SendPreview(props: SendPreviewProps) {
 						class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
 						onClick={props.onCancel}
 					>
-						<Icon name="mdi:close" size={14} />
+						<LucideX width={14} height={14} />
 					</button>
 				</div>
-			)}
+			</Show>
 			{/* Summary */}
 			<div class="border-b border-border px-4 py-2">
 				<p class="text-xs font-medium text-muted-foreground">
@@ -69,11 +71,14 @@ function SendPreview(props: SendPreviewProps) {
 				<For each={sorted()}>
 					{(file) => (
 						<li class="group flex items-center gap-2.5 px-4 py-2 transition-colors hover:bg-muted/50">
-							<Icon
-								name={file.is_dir ? "mdi:folder-outline" : "mdi:file-outline"}
-								size={16}
-								class="shrink-0 text-muted-foreground"
-							/>
+							<Show
+								when={file.is_dir}
+								fallback={
+									<MdiFileOutline class="h-4 w-4 shrink-0 text-muted-foreground" />
+								}
+							>
+								<MdiFolderOutline class="h-4 w-4 shrink-0 text-muted-foreground" />
+							</Show>
 							<span class="min-w-0 flex-1 truncate text-xs">{file.name}</span>
 							<span class="shrink-0 text-xs tabular-nums text-muted-foreground">
 								{formatBytes(file.size)}
@@ -85,7 +90,7 @@ function SendPreview(props: SendPreviewProps) {
 									onClick={() => props.onRemoveFile?.(file.path)}
 									title="Remove"
 								>
-									<Icon name="mdi:close" size={12} />
+									<LucideX width={12} height={12} />
 								</button>
 							)}
 						</li>

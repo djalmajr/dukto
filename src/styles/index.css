@@ -9,12 +9,62 @@
 
 body {
 	margin: 0;
-	min-height: 100vh;
+	height: 100vh;
+	overflow: hidden;
 	background-color: var(--color-background);
 	color: var(--color-foreground);
+	user-select: none;
+	-webkit-user-select: none;
 }
 
-/* Prevent text selection during drag */
-.dragging * {
-	user-select: none;
+/* Subtle scrollbar */
+* {
+	scrollbar-width: thin;
+	scrollbar-color: hsl(var(--muted-foreground) / 0.4) transparent;
+}
+
+::-webkit-scrollbar {
+	width: 8px;
+	height: 8px;
+}
+
+::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+	background: hsl(var(--muted-foreground) / 0.4);
+	border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+	background: hsl(var(--muted-foreground) / 0.6);
+}
+
+/* Window drag region (macOS title bar overlay) */
+.app-drag-region {
+	-webkit-app-region: drag;
+}
+
+.app-drag-region button,
+.app-drag-region [role="button"],
+.app-drag-region a,
+.app-drag-region input,
+.app-drag-region select,
+.app-drag-region textarea {
+	-webkit-app-region: no-drag;
+}
+
+/* Desktop app: default arrow cursor everywhere */
+*,
+a,
+button,
+[role="button"],
+[role="menuitem"],
+[role="option"],
+[role="tab"],
+input,
+select,
+textarea {
+	cursor: default !important;
 }

@@ -42,7 +42,7 @@ function DropZone(props: DropZoneProps) {
 
 	return (
 		<div
-			class="relative min-h-screen"
+			class="relative flex flex-1 flex-col"
 			classList={{
 				"ring-2 ring-blue-500 ring-inset bg-blue-50/50 dark:bg-blue-950/20": isDragOver(),
 			}}

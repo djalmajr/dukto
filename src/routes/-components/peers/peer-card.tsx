@@ -1,8 +1,9 @@
 import { For, type JSX, Show, createEffect, createSignal, onCleanup } from "solid-js";
-import Icon from "~/components/icon";
+import LucideBan from "~icons/lucide/ban";
+import LucideX from "~icons/lucide/x";
+import PlatformIcon from "~/components/platform-icon";
 import { t } from "~/helpers/i18n";
 import { formatBytes } from "~/utils/format";
-import { platformIcon } from "~/utils/platform";
 
 export interface TransferSlot {
 	id: string;
@@ -101,7 +102,7 @@ function TransferRow(props: {
 								props.onAbort?.();
 							}}
 						>
-							<Icon name="lucide:ban" size={12} />
+							<LucideBan width={12} height={12} />
 						</button>
 					</Show>
 					<Show when={props.slot.status !== "active"}>
@@ -113,7 +114,7 @@ function TransferRow(props: {
 								props.onDismiss?.();
 							}}
 						>
-							<Icon name="lucide:x" size={12} />
+							<LucideX width={12} height={12} />
 						</button>
 					</Show>
 				</span>
@@ -138,7 +139,6 @@ function TransferRow(props: {
 }
 
 function PeerCard(props: PeerCardProps) {
-	const iconName = () => platformIcon(props.peer.platform);
 	const slots = () => props.transfers ?? [];
 	const hasActive = () => slots().some((s) => s.status === "active");
 	const hasError = () => slots().some((s) => s.status === "error");
@@ -164,7 +164,7 @@ function PeerCard(props: PeerCardProps) {
 				onClick={props.onClick}
 			>
 				<span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-					<Icon name={iconName()} size={22} />
+					<PlatformIcon platform={props.peer.platform} class="h-[22px] w-[22px]" />
 				</span>
 				<div class="min-w-0 flex-1">
 					<p class="truncate text-sm font-semibold">{props.peer.display_name}</p>
