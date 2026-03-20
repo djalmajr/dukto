@@ -1,9 +1,8 @@
 import { For, Show, createEffect, onCleanup } from "solid-js";
 import { createFileRoute } from "@tanstack/solid-router";
 import EmptyState from "~/components/empty-state";
-import { t } from "../lib/i18n";
+import { t } from "~/lib/i18n";
 import PeerCard from "~/features/peers/peer-card";
-import IncomingRequestDialog from "~/features/transfers/incoming-request";
 import SendPreview from "~/features/transfers/send-preview";
 import {
 	type FileItem,
@@ -102,23 +101,6 @@ function HomePage() {
 					</Show>
 				</div>
 			</div>
-
-			<Show when={s().id === "incoming" && s()}>
-				{(cur) => {
-					const data = () => cur() as { from: PeerInfo; itemCount: number; totalSize: number };
-					return (
-						<IncomingRequestDialog
-							request={{
-								sender_name: data().from.display_name,
-								item_count: data().itemCount,
-								total_size: data().totalSize,
-							}}
-							onAccept={() => handleAcceptIncoming(data().from, data().totalSize)}
-							onReject={() => setScreen({ id: "idle" })}
-						/>
-					);
-				}}
-			</Show>
 		</>
 	);
 }

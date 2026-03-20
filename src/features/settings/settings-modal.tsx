@@ -23,7 +23,7 @@ function SettingsModal(props: SettingsModalProps) {
 		<Show when={props.open}>
 			<div class="absolute inset-0 z-50 flex items-center justify-center">
 				<div class="absolute inset-0 bg-background/60 backdrop-blur-[1px]" />
-				<div class="relative z-10 mx-4 w-full max-w-xs space-y-4 rounded-lg border border-border bg-background p-5 shadow-lg">
+				<div class="relative z-10 mx-4 w-full max-w-xs space-y-4 rounded-lg border border-border bg-background p-5 text-foreground shadow-lg">
 					<div class="flex items-center justify-between">
 						<h2 class="text-sm font-semibold">{t("settings")}</h2>
 						<Button variant="ghost" size="icon" class="size-6" onClick={props.onClose}>

@@ -43,6 +43,12 @@ Do not implement socket logic, filesystem writes, cryptographic handshakes, or p
 - Never inline ad-hoc styled elements that duplicate what a solid-ui component already provides (e.g. a styled `<button>` when `<Button>` exists, a styled `<input>` when `<TextFieldInput>` exists).
 - Reference Skedly's `@zomme/ui` for component API conventions when creating new solid-ui components.
 
+## Dialog / Modal Behavior
+
+- Modals must only close via explicit user action: clicking a close button (X), a cancel/reject button, or a confirm/accept button.
+- Never dismiss on overlay click or Escape key. Use `onInteractOutside` and `onEscapeKeyDown` with `preventDefault()` on the Kobalte `DialogContent`.
+- Keep `onOpenChange` functional so the X (CloseButton) works: `onOpenChange={(open) => !open && onClose()}`.
+
 ## Styling Rules
 
 - Centralize colors, radius, spacing, and motion as CSS variables early

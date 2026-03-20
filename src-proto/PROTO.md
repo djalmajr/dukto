@@ -56,7 +56,7 @@ resolve: {
 
 | Component | Purpose |
 | --- | --- |
-| `WindowFrame` | macOS window chrome with traffic lights, device info in titlebar, theme select, settings gear |
+| `<z-proto>` | Web component (Light DOM, vanilla JS) — prototyping shell. See `public/z-proto.js` + `public/z-proto.css`. API docs in proto-ui skill. |
 | `Icon` | Thin wrapper around `<iconify-icon>` web component |
 | `PeerCard` | Proto version with `resolvedTheme()` for dark mode (app version uses `dark:` classes) |
 | `TransferBar` | Progress bar with direction, status, bytes, speed, dismiss |

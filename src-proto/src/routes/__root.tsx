@@ -1,10 +1,11 @@
-import { For, createEffect, createSignal } from "solid-js";
+import { For, Show, createEffect, createSignal } from "solid-js";
 import { Outlet, createRootRoute, useNavigate, useSearch } from "@tanstack/solid-router";
 import Icon from "~/components/icon";
+import IncomingRequestDialog from "~/features/transfers/incoming-request";
 import SettingsModal from "~/features/settings/settings-modal";
-import { changeLanguage, language } from "../lib/i18n";
-import WindowFrame from "../components/window-frame";
+import { changeLanguage, language } from "~/lib/i18n";
 import {
+	type PeerInfo,
 	MOCK_FILES,
 	clearAllTransfers,
 	destinationDir,
@@ -12,6 +13,7 @@ import {
 	hidePeers,
 	peers,
 	resolvedTheme,
+	screen,
 	setScreen,
 	setTheme,
 	showPeers,
@@ -145,13 +147,31 @@ function RootLayout() {
 	});
 
 	return (
-		<WindowFrame
-			deviceName="djalmajr"
-			hostname="MacBook-Pro.local"
-			onSettingsClick={() =>
-				navigate({ to: "/", search: showSettings() ? {} : { settings: true } })
-			}
-			overlay={
+		<z-proto
+			figma-key="U4hNHfRc8UGfcQk0GEEh8s"
+			window-title="djalmajr · MacBook-Pro.local"
+			window-width="480"
+			window-height="640"
+		>
+			<z-proto-header>
+				<ProtoToolbar />
+			</z-proto-header>
+			<z-proto-window-extras>
+				<button
+					type="button"
+					class="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+					onClick={() =>
+						navigate({ to: "/", search: showSettings() ? {} : { settings: true } })
+					}
+					title="Settings"
+				>
+					<Icon name="lucide:settings" size={16} />
+				</button>
+			</z-proto-window-extras>
+			<z-proto-window-content>
+				<div class="flex min-h-full w-full flex-1 flex-col items-center bg-background px-4 py-6 text-foreground">
+					<Outlet />
+				</div>
 				<SettingsModal
 					open={showSettings()}
 					destinationDir={destinationDir()}
@@ -162,14 +182,47 @@ function RootLayout() {
 					onChangeLanguage={changeLanguage}
 					onClose={() => navigate({ to: "/", search: {} })}
 				/>
-			}
-			toolbar={<ProtoToolbar />}
-		>
-			<Outlet />
-		</WindowFrame>
+				<Show when={screen().id === "incoming" && screen()}>
+					{(cur) => {
+						const data = () => cur() as { from: PeerInfo; itemCount: number; totalSize: number };
+						return (
+							<IncomingRequestDialog
+								request={{
+									sender_name: data().from.display_name,
+									item_count: data().itemCount,
+									total_size: data().totalSize,
+								}}
+								onAccept={() => {
+									startTransfer(data().from.device_id, "receive", data().totalSize, "18.7 MB/s");
+									setScreen({ id: "idle" });
+								}}
+								onReject={() => setScreen({ id: "idle" })}
+							/>
+						);
+					}}
+				</Show>
+			</z-proto-window-content>
+		</z-proto>
 	);
 }
 
 export const Route = createRootRoute({
 	component: RootLayout,
 });
+
+declare module "solid-js" {
+	namespace JSX {
+		interface IntrinsicElements {
+			"z-proto": JSX.HTMLAttributes<HTMLElement> & {
+				"figma-key"?: string;
+				"window-title"?: string;
+				"window-width"?: string | number;
+				"window-height"?: string | number;
+				zoom?: string | number;
+			};
+			"z-proto-header": JSX.HTMLAttributes<HTMLElement>;
+			"z-proto-window-extras": JSX.HTMLAttributes<HTMLElement>;
+			"z-proto-window-content": JSX.HTMLAttributes<HTMLElement>;
+		}
+	}
+}

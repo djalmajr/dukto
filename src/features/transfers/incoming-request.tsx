@@ -28,7 +28,11 @@ function IncomingRequestDialog(props: IncomingRequestProps) {
 		<Show when={props.request}>
 			{(req) => (
 				<Dialog open onOpenChange={(open) => !open && props.onReject()}>
-					<DialogContent class="max-w-xs">
+					<DialogContent
+						class="max-w-xs"
+						onInteractOutside={(e: Event) => e.preventDefault()}
+						onEscapeKeyDown={(e: Event) => e.preventDefault()}
+					>
 						<DialogHeader>
 							<DialogTitle>{t("incoming")}</DialogTitle>
 							<DialogDescription>
