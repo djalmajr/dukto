@@ -124,8 +124,11 @@ impl MdnsDiscovery {
             loop {
                 std::thread::sleep(std::time::Duration::from_secs(30));
                 tracing::debug!("Re-browsing for peers");
-                if daemon.browse(SERVICE_TYPE).is_err() {
-                    break;
+                match daemon.browse(SERVICE_TYPE) {
+                    Ok(_receiver) => {
+                        // Drop the receiver — events flow through the original browse receiver
+                    }
+                    Err(_) => break,
                 }
             }
         });
