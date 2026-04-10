@@ -9,6 +9,7 @@ interface PeerListProps {
 	onPeerSelect?: (peer: PeerInfo) => void;
 	getExpandedContent?: (peer: PeerInfo) => JSX.Element | undefined;
 	getTransfers?: (peer: PeerInfo) => TransferSlot[] | undefined;
+	dropHighlight?: boolean;
 	onAbortTransfer?: (transferId: string) => void;
 	onDismissTransfer?: (transferId: string) => void;
 }
@@ -32,6 +33,7 @@ function PeerList(props: PeerListProps) {
 							peer={peer}
 							transfers={props.getTransfers?.(peer)}
 							expandedContent={props.getExpandedContent?.(peer)}
+							dropHighlight={props.dropHighlight}
 							onClick={() => props.onPeerSelect?.(peer)}
 							onAbortTransfer={(id) => props.onAbortTransfer?.(id)}
 							onDismissTransfer={(id) => props.onDismissTransfer?.(id)}

@@ -1,10 +1,10 @@
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { type JSX, createSignal, onCleanup, onMount } from "solid-js";
+import { type Accessor, type JSX, createSignal, onCleanup, onMount } from "solid-js";
 import { type FileMetadataInfo, resolveFileMetadata } from "~/helpers/tauri";
 
 interface DropZoneProps {
-	children: JSX.Element;
+	children: (isDragOver: Accessor<boolean>) => JSX.Element;
 	onFilesDropped: (files: FileMetadataInfo[]) => void;
 }
 
@@ -40,23 +40,7 @@ function DropZone(props: DropZoneProps) {
 		unlistenLeave?.();
 	});
 
-	return (
-		<div
-			class="relative flex flex-1 flex-col"
-			classList={{
-				"ring-2 ring-blue-500 ring-inset bg-blue-50/50 dark:bg-blue-950/20": isDragOver(),
-			}}
-		>
-			{props.children}
-			{isDragOver() && (
-				<div class="pointer-events-none absolute inset-0 flex items-center justify-center">
-					<div class="rounded-lg bg-blue-500 px-6 py-3 text-sm font-medium text-white shadow-lg">
-						Drop files to send
-					</div>
-				</div>
-			)}
-		</div>
-	);
+	return <>{props.children(isDragOver)}</>;
 }
 
 export default DropZone;

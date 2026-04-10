@@ -60,7 +60,7 @@ function RootLayout() {
 					<LucideSettings width={16} height={16} />
 				</button>
 			</header>
-			<div class="flex w-full flex-1 flex-col items-center overflow-y-auto overflow-x-hidden px-4 pb-6">
+			<div class="mx-auto flex w-full max-w-[480px] flex-1 flex-col overflow-y-auto overflow-x-hidden px-4 pb-6">
 				<Outlet />
 			</div>
 			<SettingsModal

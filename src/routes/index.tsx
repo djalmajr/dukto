@@ -81,7 +81,12 @@ function HomePage() {
 		setSendFlow({ step: "idle" });
 
 		try {
-			const transferId = await sendToPeer(peer.device_id, paths);
+			const transferId = await sendToPeer(
+				peer.device_id,
+				paths,
+				peer.addresses?.[0],
+				peer.port,
+			);
 			startSendTransfer(transferId, totalSize, peer.device_id);
 		} catch (e) {
 			setError(String(e));
@@ -102,58 +107,61 @@ function HomePage() {
 
 	return (
 		<DropZone onFilesDropped={handleFilesDropped}>
-			<div class="flex w-full flex-1 flex-col space-y-3">
-				<Show when={error()}>
-					{(message) => <ErrorDisplay message={message()} onDismiss={() => setError(null)} />}
-				</Show>
-				<Show when={pendingFilesLabel()}>
-					{(label) => (
-						<div class="flex items-center justify-between rounded-lg border border-border bg-card px-3 py-2 text-xs text-muted-foreground shadow-sm">
-							<span>{label()}</span>
-							<Button variant="ghost" size="sm" onClick={() => setSendFlow({ step: "idle" })}>
-								{t("cancel")}
-							</Button>
-						</div>
-					)}
-				</Show>
-				<div class="flex flex-1 flex-col space-y-2">
-					<PeerList
-						onPeerSelect={handlePeerClick}
-						getTransfers={(peer) => getPeerTransfers(peer.device_id)}
-						getExpandedContent={(peer) => {
-							const state = sendFlow();
-							if (state.step !== "preview" || state.peer.device_id !== peer.device_id) {
-								return undefined;
-							}
+			{(isDragOver) => (
+				<div class="flex w-full flex-1 flex-col space-y-3">
+					<Show when={error()}>
+						{(message) => <ErrorDisplay message={message()} onDismiss={() => setError(null)} />}
+					</Show>
+					<Show when={pendingFilesLabel()}>
+						{(label) => (
+							<div class="flex items-center justify-between rounded-lg border border-border bg-card px-3 py-2 text-xs text-muted-foreground shadow-sm">
+								<span>{label()}</span>
+								<Button variant="ghost" size="sm" onClick={() => setSendFlow({ step: "idle" })}>
+									{t("cancel")}
+								</Button>
+							</div>
+						)}
+					</Show>
+					<div class="flex flex-1 flex-col space-y-2">
+						<PeerList
+							dropHighlight={isDragOver()}
+							onPeerSelect={handlePeerClick}
+							getTransfers={(peer) => getPeerTransfers(peer.device_id)}
+							getExpandedContent={(peer) => {
+								const state = sendFlow();
+								if (state.step !== "preview" || state.peer.device_id !== peer.device_id) {
+									return undefined;
+								}
 
-							return (
-								<SendPreview
-									embedded
-									peer={state.peer}
-									files={state.files}
-									onConfirm={handleSend}
-									onCancel={() => setSendFlow({ step: "idle" })}
-									onRemoveFile={(path) => {
-										const nextFiles = state.files.filter((file) => file.path !== path);
-										if (nextFiles.length === 0) {
-											setSendFlow({ step: "idle" });
-										} else {
-											setSendFlow({ step: "preview", peer: state.peer, files: nextFiles });
-										}
-									}}
-								/>
-							);
-						}}
-						onAbortTransfer={(id) => abortTransfer(id)}
-						onDismissTransfer={(id) => dismissPeerTransfer(id)}
+								return (
+									<SendPreview
+										embedded
+										peer={state.peer}
+										files={state.files}
+										onConfirm={handleSend}
+										onCancel={() => setSendFlow({ step: "idle" })}
+										onRemoveFile={(path) => {
+											const nextFiles = state.files.filter((file) => file.path !== path);
+											if (nextFiles.length === 0) {
+												setSendFlow({ step: "idle" });
+											} else {
+												setSendFlow({ step: "preview", peer: state.peer, files: nextFiles });
+											}
+										}}
+									/>
+								);
+							}}
+							onAbortTransfer={(id) => abortTransfer(id)}
+							onDismissTransfer={(id) => dismissPeerTransfer(id)}
+						/>
+					</div>
+					<IncomingRequestDialog
+						request={incomingData()}
+						onAccept={acceptIncoming}
+						onReject={rejectIncoming}
 					/>
 				</div>
-			</div>
-			<IncomingRequestDialog
-				request={incomingData()}
-				onAccept={acceptIncoming}
-				onReject={rejectIncoming}
-			/>
+			)}
 		</DropZone>
 	);
 }

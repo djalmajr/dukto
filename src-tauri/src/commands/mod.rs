@@ -33,6 +33,8 @@ pub fn set_destination_dir(state: State<'_, AppState>, path: String) -> Result<(
 }
 
 /// Send files/folders to a peer by device_id.
+/// The frontend passes peer_address and peer_port as fallback in case the peer
+/// has already been removed from the backend's discovery map (mDNS TTL expired).
 /// Returns the transfer_id so the frontend can track progress.
 #[tauri::command]
 pub async fn send_to_peer(
@@ -40,19 +42,19 @@ pub async fn send_to_peer(
     state: State<'_, AppState>,
     device_id: String,
     paths: Vec<String>,
+    peer_address: Option<String>,
+    peer_port: Option<u16>,
 ) -> Result<String, String> {
-    // Find the peer
-    let peer = state
-        .peers
-        .get(&device_id)
-        .map(|p| p.clone())
-        .ok_or_else(|| format!("Peer {} not found", device_id))?;
-
-    let addr = peer
-        .addresses
-        .first()
-        .ok_or("Peer has no address")?;
-    let socket_addr = SocketAddr::new(*addr, peer.port);
+    // Try backend state first, fall back to frontend-provided address
+    let socket_addr = if let Some(peer) = state.peers.get(&device_id) {
+        let addr = peer.addresses.first().ok_or("Peer has no address")?;
+        SocketAddr::new(*addr, peer.port)
+    } else if let (Some(addr_str), Some(port)) = (&peer_address, peer_port) {
+        let addr: std::net::IpAddr = addr_str.parse().map_err(|e| format!("Invalid address: {}", e))?;
+        SocketAddr::new(addr, port)
+    } else {
+        return Err(format!("Peer {} not found", device_id));
+    };
 
     let sender_device_id = state.device.device_id.clone();
     let transfer_id = uuid::Uuid::new_v4().to_string();

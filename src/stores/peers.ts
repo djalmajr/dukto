@@ -1,5 +1,5 @@
 import { listen } from "@tauri-apps/api/event";
-import { createStore } from "solid-js/store";
+import { createStore, produce } from "solid-js/store";
 
 export interface PeerInfo {
 	device_id: string;
@@ -11,24 +11,36 @@ export interface PeerInfo {
 	protocol_version: string;
 }
 
-const [peers, setPeers] = createStore<Record<string, PeerInfo>>({});
+const REMOVAL_GRACE_MS = 60_000;
 
-// Listen for discovery events from Rust
+const [peers, setPeers] = createStore<Record<string, PeerInfo>>({});
+const removalTimers = new Map<string, number>();
+
 listen<PeerInfo>("peer:found", (event) => {
-	setPeers(event.payload.device_id, event.payload);
+	const id = event.payload.device_id;
+
+	// Cancel pending removal if peer re-appeared
+	const timer = removalTimers.get(id);
+	if (timer) {
+		clearTimeout(timer);
+		removalTimers.delete(id);
+	}
+
+	setPeers(id, event.payload);
 });
 
 listen<string>("peer:removed", (event) => {
-	// Remove peer by finding which one has a matching fullname
-	// For now, remove by iterating (fullname contains device_id)
 	const fullname = event.payload;
-	for (const [id] of Object.entries(peers)) {
+	for (const id of Object.keys(peers)) {
 		if (fullname.includes(id)) {
-			setPeers((prev) => {
-				const next = { ...prev };
-				delete next[id];
-				return next;
-			});
+			// Already scheduled? skip
+			if (removalTimers.has(id)) break;
+
+			const timer = window.setTimeout(() => {
+				removalTimers.delete(id);
+				setPeers(produce((state) => { delete state[id]; }));
+			}, REMOVAL_GRACE_MS);
+			removalTimers.set(id, timer);
 			break;
 		}
 	}

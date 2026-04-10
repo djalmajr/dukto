@@ -1,5 +1,5 @@
 import { listen } from "@tauri-apps/api/event";
-import { createStore } from "solid-js/store";
+import { createStore, produce } from "solid-js/store";
 import { respondTransfer } from "~/helpers/tauri";
 import type { TransferSlot } from "~/routes/-components/peers/peer-card";
 import { formatBytes } from "~/utils/format";
@@ -187,11 +187,11 @@ async function rejectIncoming() {
 }
 
 function clearTransfer(transferId: string) {
-	setTransfers((prev) => {
-		const next = { ...prev };
-		delete next[transferId];
-		return next;
-	});
+	setTransfers(
+		produce((state) => {
+			delete state[transferId];
+		}),
+	);
 }
 
 function abortTransfer(transferId: string) {

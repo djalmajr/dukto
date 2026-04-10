@@ -26,6 +26,7 @@ export interface PeerCardProps {
 	};
 	transfers?: TransferSlot[];
 	expandedContent?: JSX.Element;
+	dropHighlight?: boolean;
 	onClick?: () => void;
 	onAbortTransfer?: (transferId: string) => void;
 	onDismissTransfer?: (transferId: string) => void;
@@ -147,11 +148,13 @@ function PeerCard(props: PeerCardProps) {
 
 	return (
 		<div
-			class="overflow-hidden rounded-xl border border-border bg-card shadow-[0_1px_6px_0_rgba(0,0,0,0.05)] transition-colors"
+			class="relative overflow-hidden rounded-xl border bg-card shadow-[0_1px_6px_0_rgba(0,0,0,0.05)] transition-colors"
 			classList={{
-				"border-primary/30": hasActive() && !hasError(),
-				"border-destructive/30": hasError(),
-				"border-primary/40": hasExpanded() && !hasAny() && !hasError(),
+				"border-blue-500 ring-2 ring-blue-500 ring-inset bg-blue-50/50 dark:bg-blue-950/20": !!props.dropHighlight,
+				"border-primary/30": !props.dropHighlight && hasActive() && !hasError(),
+				"border-destructive/30": !props.dropHighlight && hasError(),
+				"border-primary/40": !props.dropHighlight && hasExpanded() && !hasAny() && !hasError(),
+				"border-border": !props.dropHighlight && !hasActive() && !hasError() && !(hasExpanded() && !hasAny()),
 			}}
 		>
 			<button
@@ -187,6 +190,13 @@ function PeerCard(props: PeerCardProps) {
 			</Show>
 			<Show when={props.expandedContent}>
 				<div class="border-t border-border bg-background/80 p-3">{props.expandedContent}</div>
+			</Show>
+			<Show when={props.dropHighlight}>
+				<div class="pointer-events-none absolute inset-0 flex items-center justify-center bg-blue-50/60 dark:bg-blue-950/40">
+					<div class="rounded-lg bg-blue-500 px-4 py-2 text-xs font-medium text-white shadow-lg">
+						Drop files to send
+					</div>
+				</div>
 			</Show>
 		</div>
 	);
