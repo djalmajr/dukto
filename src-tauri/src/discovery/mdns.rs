@@ -78,7 +78,7 @@ impl MdnsDiscovery {
     }
 
     /// Start browsing for peers in a background thread.
-    /// Returns a JoinHandle that runs until the daemon shuts down.
+    /// Periodically re-browses to compensate for mDNS query backoff.
     pub fn start_browsing(&self) -> Result<(), Box<dyn std::error::Error>> {
         let receiver = self.daemon.browse(SERVICE_TYPE)?;
         let own_device_id = self.own_device_id.clone();
@@ -114,6 +114,18 @@ impl MdnsDiscovery {
                         tracing::debug!(service_type = %s, "mDNS browse started");
                     }
                     _ => {}
+                }
+            }
+        });
+
+        // Periodic re-browse to discover peers that arrived after initial query backoff
+        let daemon = self.daemon.clone();
+        std::thread::spawn(move || {
+            loop {
+                std::thread::sleep(std::time::Duration::from_secs(30));
+                tracing::debug!("Re-browsing for peers");
+                if daemon.browse(SERVICE_TYPE).is_err() {
+                    break;
                 }
             }
         });
