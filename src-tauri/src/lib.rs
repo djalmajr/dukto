@@ -8,7 +8,7 @@ pub mod transfer;
 
 use tauri::{Emitter, Manager};
 
-use discovery::mdns::{DiscoveryEvent, MdnsDiscovery};
+use discovery::mdns::{DiscoveryEvent, DiscoveryHandle, MdnsDiscovery};
 use state::app_state::AppState;
 use state::device::DeviceIdentity;
 use transfer::server::TransferServer;
@@ -96,8 +96,9 @@ pub fn run() {
                 }
             });
 
-            // Store discovery handle for shutdown (leak for now)
-            std::mem::forget(mdns_discovery);
+            // Store discovery handle — DiscoveryHandle unregisters the
+            // mDNS service on drop, preventing name collisions on restart.
+            app.manage(DiscoveryHandle::new(mdns_discovery));
 
             Ok(())
         })

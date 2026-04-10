@@ -22,6 +22,30 @@ pub struct MdnsDiscovery {
     event_tx: broadcast::Sender<DiscoveryEvent>,
 }
 
+/// RAII wrapper that unregisters the mDNS service on drop,
+/// preventing name collisions (e.g. the `(2)` suffix) on restart.
+pub struct DiscoveryHandle {
+    inner: std::sync::Mutex<Option<MdnsDiscovery>>,
+}
+
+impl DiscoveryHandle {
+    pub fn new(discovery: MdnsDiscovery) -> Self {
+        Self {
+            inner: std::sync::Mutex::new(Some(discovery)),
+        }
+    }
+}
+
+impl Drop for DiscoveryHandle {
+    fn drop(&mut self) {
+        if let Some(discovery) = self.inner.lock().unwrap().take() {
+            if let Err(e) = discovery.shutdown() {
+                tracing::warn!("Failed to shut down mDNS discovery: {}", e);
+            }
+        }
+    }
+}
+
 impl MdnsDiscovery {
     /// Create a new discovery instance, register our service, and start browsing.
     pub fn new(
@@ -118,17 +142,31 @@ impl MdnsDiscovery {
             }
         });
 
-        // Periodic re-browse to discover peers that arrived after initial query backoff
+        // Periodic re-browse to discover peers that arrived after initial query backoff.
+        // Each browse() sends fresh mDNS queries; responses reach ALL active browsers,
+        // including the main one above. We keep the receiver alive briefly so the
+        // daemon can deliver SearchStarted without a "closed channel" error.
         let daemon = self.daemon.clone();
         std::thread::spawn(move || {
             loop {
                 std::thread::sleep(std::time::Duration::from_secs(30));
                 tracing::debug!("Re-browsing for peers");
                 match daemon.browse(SERVICE_TYPE) {
-                    Ok(_receiver) => {
-                        // Drop the receiver — events flow through the original browse receiver
+                    Ok(receiver) => {
+                        // Drain for a short window so the channel stays open
+                        let deadline =
+                            std::time::Instant::now() + std::time::Duration::from_secs(3);
+                        while std::time::Instant::now() < deadline {
+                            match receiver.recv_timeout(std::time::Duration::from_millis(200)) {
+                                Ok(_) => {}
+                                Err(_) => break,
+                            }
+                        }
                     }
-                    Err(_) => break,
+                    Err(e) => {
+                        tracing::warn!("Re-browse failed: {}", e);
+                        break;
+                    }
                 }
             }
         });
