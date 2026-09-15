@@ -28,7 +28,7 @@ Artifacts stay in `.cache/release/<target>`. Publishing a draft is a separate, u
 
 ## Signing and compatibility
 
-Current evaluation installers are unsigned. macOS distribution needs Developer ID signing and Apple notarization before a frictionless public release; Windows Authenticode also requires a signing setup. The installer workflow deliberately uses `--no-sign`; signing and notarization are not configured there yet. Review the platform signing setup before publishing a release.
+Existing evaluation installers are unsigned. The manual installer workflow now supports Developer ID signing and Apple notarization for both macOS architectures, enabled by default and requiring the six Apple secrets. It validates the stapled app before collecting artifacts. Explicit evaluation runs can disable notarization; draft release notes record the mode. See [macOS signing setup](macos-notarization.md). The separate CLI archives and Windows installers remain unsigned. No signed release has been produced merely by adding this configuration.
 
 Linux arm64 artifacts built locally in Ubuntu 26.04 do not establish compatibility with older distributions. CI uses an older supported WebKitGTK 4.1 baseline. The dedicated Linux VM and Mac hold their local build artifacts; the Windows report under `.cache/cli-lan/mac-report.json` contains paths and checksums.
 

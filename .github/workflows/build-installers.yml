@@ -2,6 +2,10 @@ name: Build installers (manual)
 on:
   workflow_dispatch:
     inputs:
+      notarize_macos:
+        description: Sign and notarize macOS apps (requires Apple secrets)
+        type: boolean
+        default: true
       create_release_draft:
         description: Create a GitHub release draft after all builds (only after review)
         type: boolean
@@ -45,7 +49,58 @@ jobs:
       - run: bun run site:check
       - run: cargo test --manifest-path src-tauri/Cargo.toml --no-default-features --locked
       - run: bun test
-      - name: Build desktop installer
+      - name: Prepare Apple notarization key
+        if: runner.os == 'macOS' && inputs.notarize_macos
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_P8_BASE64: ${{ secrets.APPLE_API_KEY_P8_BASE64 }}
+        run: |
+          set -euo pipefail
+          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_API_ISSUER APPLE_API_KEY APPLE_API_KEY_P8_BASE64; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "::error::Required secret is missing: $name"
+              exit 1
+            fi
+          done
+          umask 077
+          python3 - <<'PYKEY'
+          import base64, os, pathlib
+          key = base64.b64decode("".join(os.environ["APPLE_API_KEY_P8_BASE64"].split()), validate=True)
+          pathlib.Path(os.environ["RUNNER_TEMP"], "DuktoAuthKey.p8").write_bytes(key)
+          PYKEY
+          openssl pkey -in "$RUNNER_TEMP/DuktoAuthKey.p8" -noout
+          echo "APPLE_API_KEY_PATH=$RUNNER_TEMP/DuktoAuthKey.p8" >> "$GITHUB_ENV"
+      - name: Build signed and notarized macOS app
+        if: runner.os == 'macOS' && inputs.notarize_macos
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+        run: bun run build -- --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+      - name: Verify macOS signing and notarization ticket
+        if: runner.os == 'macOS' && inputs.notarize_macos
+        shell: bash
+        env:
+          RUST_TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          app="src-tauri/target/$RUST_TARGET/release/bundle/macos/Dukto.app"
+          codesign --verify --deep --strict --verbose=2 "$app"
+          xcrun stapler validate "$app"
+          spctl --assess --type execute --verbose=2 "$app"
+      - name: Remove temporary Apple API key
+        if: always() && runner.os == 'macOS' && inputs.notarize_macos
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/DuktoAuthKey.p8"
+      - name: Build evaluation or non-macOS installer
+        if: runner.os != 'macOS' || !inputs.notarize_macos
         run: bun run build -- --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} --no-sign
         env:
           APPIMAGE_EXTRACT_AND_RUN: "1"
@@ -83,6 +138,13 @@ jobs:
       - name: Create reviewable draft only
         env:
           GH_TOKEN: ${{ github.token }}
+          MACOS_NOTARIZED: ${{ inputs.notarize_macos }}
         run: |
           VERSION=$(node -p 'require("./package.json").version')
-          gh release create "v$VERSION" artifacts/* --draft --target "$GITHUB_SHA" --title "Dukto $VERSION" --notes-file docs/releases/RELEASE-NOTES.md
+          cp docs/releases/RELEASE-NOTES.md release-notes.md
+          if [ "$MACOS_NOTARIZED" = "true" ]; then
+            printf '\nmacOS desktop apps: Developer ID signed, notarized and ticket validated.\n' >> release-notes.md
+          else
+            printf '\nmacOS desktop apps: unsigned evaluation build; not notarized.\n' >> release-notes.md
+          fi
+          gh release create "v$VERSION" artifacts/* --draft --target "$GITHUB_SHA" --title "Dukto $VERSION" --notes-file release-notes.md
