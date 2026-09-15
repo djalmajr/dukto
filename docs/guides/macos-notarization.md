@@ -2,9 +2,9 @@
 
 Dukto follows Markdraw's `.github/workflows/build-desktop.yml`: a Developer ID Application certificate signs the app, and an App Store Connect API key authenticates Apple notarization. Tauri performs signing, submission and stapling during its normal build. The reference was inspected locally on 2026-09-14; no Markdraw files or credentials were modified.
 
-## Required repository secrets
+## Required environment secrets
 
-Configure these in [Dukto Actions secrets](https://github.com/djalmajr/dukto/settings/secrets/actions), using the original signing materials. The same names exist in Markdraw. GitHub exposes their names but does not return their decrypted values, so they cannot be copied from one repository with `gh secret list`.
+Configure these in [Dukto release environment](https://github.com/djalmajr/dukto/settings/environments), using the original signing materials. The same names exist in Markdraw. GitHub exposes their names but does not return their decrypted values, so they cannot be copied from one repository with `gh secret list`.
 
 | Secret | Value |
 | --- | --- |
