@@ -16,7 +16,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-#[path = "../cli/receive.rs"]
 mod receive;
 
 type Error = Box<dyn std::error::Error + Send + Sync>;

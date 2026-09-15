@@ -5,7 +5,7 @@ QUIC transport, Noise encryption and receiver implementation as the desktop app.
 It runs without a window or WebView. Install Rust to build it:
 
 ```sh
-cargo build --manifest-path src-tauri/Cargo.toml --no-default-features --bin dukto-cli --release
+cargo build --manifest-path src-tauri/Cargo.toml --no-default-features --features cli --bin dukto-cli --release
 ```
 
 The CLI archive contains `dukto` (`dukto.exe` on Windows). Extract it into its own directory and add that directory to PATH. Do not overwrite the desktop executable: it also uses this filename. If both are available on PATH, use the CLI's full path to avoid ambiguity.
@@ -114,8 +114,8 @@ it does not add persistent trusted-device pairing.
 ## Verify
 
 ```sh
-cargo test --manifest-path src-tauri/Cargo.toml --no-default-features
-cargo build --manifest-path src-tauri/Cargo.toml --no-default-features --bin dukto-cli
+cargo test --manifest-path src-tauri/Cargo.toml --no-default-features --features cli
+cargo build --manifest-path src-tauri/Cargo.toml --no-default-features --features cli --bin dukto-cli
 node scripts/test-cli.mjs
 ```
 
@@ -128,7 +128,7 @@ loopback tests; cross-machine and UI interoperability require separate validatio
 Run the large-file concurrency regression separately:
 
 ```sh
-cargo build --manifest-path src-tauri/Cargo.toml --no-default-features --bin dukto-cli --release
+cargo build --manifest-path src-tauri/Cargo.toml --no-default-features --features cli --bin dukto-cli --release
 DUKTO_CLI=src-tauri/target/release/dukto-cli DUKTO_TEST_REPORT=.cache/concurrency-test/report.json node scripts/test-cli-concurrency.mjs
 ```
 

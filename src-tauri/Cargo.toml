@@ -16,7 +16,8 @@ required-features = ["desktop"]
 
 [[bin]]
 name = "dukto-cli"
-path = "src/bin/dukto-cli.rs"
+path = "src/cli/main.rs"
+required-features = ["cli"]
 
 [dependencies]
 tauri = { version = "2", features = [], optional = true }
@@ -47,6 +48,7 @@ dirs = "6"
 tauri-build = { version = "2", features = [], optional = true }
 
 [features]
+cli = []
 default = ["desktop", "custom-protocol"]
 desktop = ["dep:tauri", "dep:tauri-build", "dep:tauri-plugin-dialog", "dep:tauri-plugin-notification", "dep:tauri-plugin-os", "dep:tauri-plugin-shell", "dep:tauri-plugin-updater", "dep:tauri-plugin-process"]
 custom-protocol = ["desktop", "tauri/custom-protocol"]

@@ -36,7 +36,7 @@ The macOS DMG passed `hdiutil verify`, and the updater archive signature was ind
 
 The connected Windows session built isolated NSIS installers for 0.1.0 and 0.1.1 with updater signatures. Its frontend checks and four release-mode transfer/update exclusion tests passed. Native Windows interaction remains pending because the session is locked (black capture and activation failure). Installer execution, update installation/relaunch, and UI behavior on Windows are not recorded as passed.
 
-The manual workflow builds five platform targets and verifies every updater signature before assembling `latest.json`. Evaluation artifacts do not constitute a public release. Apple notarization remains pending the six Apple signing secrets; the updater signature is separate and does not replace Apple code signing/notarization.
+The manual workflow builds five platform targets and verifies every updater signature before assembling `latest.json`. Evaluation artifacts do not constitute a public release. The Apple signing secrets were subsequently provisioned from the Markdraw backups (see the current notarization guide); the updater signature is separate and does not replace Apple code signing/notarization.
 
 ## Hosted installer evaluation
 

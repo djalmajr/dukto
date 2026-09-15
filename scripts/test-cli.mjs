@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 // Real CLI processes over QUIC + Noise; hashes and directory trees are the oracle.
-// Run after: cargo build --manifest-path src-tauri/Cargo.toml --no-default-features --bin dukto-cli
+// Run after: cargo build --manifest-path src-tauri/Cargo.toml --no-default-features --features cli --bin dukto-cli
 import { spawn } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import { once } from "node:events";
