@@ -3,11 +3,13 @@ import type { PeerInfo } from "./peers";
 
 test("hydrates existing peers and preserves updates arriving during the snapshot", async () => {
 	const handlers = new Map<string, (event: { payload: unknown }) => void>();
-	const removals: Array<() => void> = [];
+	const removals: Array<{ callback: () => void; delay: number }> = [];
 	const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
 	Object.defineProperty(globalThis, "window", {
 		configurable: true,
-		value: { setTimeout: (callback: () => void) => removals.push(callback) },
+		value: {
+			setTimeout: (callback: () => void, delay: number) => removals.push({ callback, delay }),
+		},
 	});
 	let resolveSnapshot!: (peers: PeerInfo[]) => void;
 	const snapshot = new Promise<PeerInfo[]>((resolve) => {
@@ -50,7 +52,8 @@ test("hydrates existing peers and preserves updates arriving during the snapshot
 		expect(peers.existing.display_name).toBe("existing");
 		expect(peers.updated.display_name).toBe("New name");
 		expect(removals).toHaveLength(1);
-		removals[0]();
+		expect(removals[0].delay).toBe(2_000);
+		removals[0].callback();
 		expect(peers.removed).toBeUndefined();
 		handlers.get("peer:found")?.({ payload: peer("late") });
 		expect(peers.late.addresses).toEqual(["192.168.0.15"]);
