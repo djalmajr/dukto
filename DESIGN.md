@@ -60,3 +60,17 @@ Use native file selection and drag and drop while keeping all actions accessible
 Use a compact 32-pixel logo and 24-pixel wordmark. On compact layouts, show only the logo and download icon, retaining accessible names. Keep navigation links visible after compacting the controls; use the menu button only at narrow widths where the links and controls no longer fit. Keep light and dark themes consistent.
 
 The website mobile navigation is a compact dropdown aligned with its menu button. Size it to its links with modest padding; do not stretch it across the viewport or repeat the download action inside it.
+
+Keep the website navigation centered independently of the logo and action controls whenever there is room. Icon-only download buttons have no text-spacing margin on the icon.
+
+Header icon-only action buttons use 32-by-32-pixel boxes matching the logo, with centered glyphs.
+
+Download cards follow their content height without stretching empty space. Package rows use labeled icon-only download actions, and installation guides are plain links.
+
+The CLI download section places its introduction above three platform cards in a single row, stacking on narrow screens; avoid a two-column grid that leaves an empty fourth cell.
+
+The header download link indicates the active Downloads page with the navigation accent and a subtle background, including its icon-only state.
+
+Use the Lucide cloud-download glyph consistently for website download actions in the header, calls to action, desktop packages, and CLI archives.
+
+Downloads belongs in the main website navigation alongside Home and Documentation, with the same active-link treatment. It is not a separate header action. This supersedes the earlier icon-only header download treatment.
