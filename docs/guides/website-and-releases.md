@@ -30,7 +30,7 @@ Artifacts stay in `.cache/release/<target>`. Publishing a draft is a separate, u
 
 ## Signing and compatibility
 
-Existing evaluation installers are unsigned. The manual installer workflow supports Developer ID signing and Apple notarization for both macOS architectures, enabled by default and requiring the six Apple secrets. It validates the stapled app before collecting artifacts. Explicit evaluation runs can disable notarization; draft release notes record the mode. See [macOS signing setup](macos-notarization.md). The separate CLI archives and Windows installers remain unsigned for operating-system code signing. No signed release has been produced merely by adding this configuration.
+The signed build [34937932924](https://github.com/djalmajr/dukto/actions/runs/34937932924) passed Developer ID signing and Apple notarization checks for both macOS architectures. Earlier evaluation installers remain unsigned. The manual workflow enables notarization by default and requires the six Apple secrets. It validates the stapled app before collecting artifacts. Explicit evaluation runs can disable notarization; draft release notes record the mode. See [macOS signing setup](macos-notarization.md). The separate CLI archives and Windows installers remain unsigned for operating-system code signing. The notarized packages are workflow artifacts; no public release was created.
 
 Linux arm64 artifacts built locally in Ubuntu 26.04 do not establish compatibility with older distributions. CI uses an older supported WebKitGTK 4.1 baseline. The dedicated Linux VM and Mac hold their local build artifacts; the Windows report under `.cache/cli-lan/mac-report.json` contains paths and checksums.
 

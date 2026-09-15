@@ -41,3 +41,9 @@ The manual workflow builds five platform targets and verifies every updater sign
 ## Hosted installer evaluation
 
 The first main-branch evaluation run (`34926352630`) exposed an environment dependency before packaging: both hosted macOS runners failed four multicast discovery tests, including resolving their own raw mDNS announcement. Only IPv6 interfaces appeared in that diagnostic. The macOS installer job now excludes the five LAN-dependent discovery tests (including the negative self-discovery test, which cannot be meaningful without working discovery). It still runs the remaining core/CLI/end-to-end tests. Full discovery coverage remains required on Linux/Windows in the matrix and passed in the local macOS lab. No production discovery code or test assertions were weakened.
+
+## Apple notarization — 2026-09-15
+
+The Markdraw memory identified existing signing backups. Their certificate validity and API key structure were verified before provisioning the six Apple secrets in Dukto's `release` environment. The first run found an unsigned CLI inside the Intel bundle; PR #6 separated the CLI with an explicit feature and a non-auto-discovered entry point. Native bundle/archive inspection, CLI functional checks, and CI passed for the correction.
+
+Run [34937932924](https://github.com/djalmajr/dukto/actions/runs/34937932924), source `4b26124`, passed signature, stapled-ticket, and Gatekeeper verification on both macOS architectures. The downloaded Apple Silicon DMG was also checked locally and accepted as `Notarized Developer ID`. This does not claim notarization for standalone CLI archives or Windows Authenticode, and no public release was created.

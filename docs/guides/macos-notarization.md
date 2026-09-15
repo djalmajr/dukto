@@ -31,7 +31,9 @@ The separate CLI archives are not signed or notarized by this desktop flow. Wind
 
 The six Apple secrets are configured in the `release` environment from the existing Markdraw signing backups. The certificate was checked for expiry and the signing identity was extracted directly from the certificate to preserve its Unicode spelling. Markdraw credentials and backup files were not changed.
 
-Initial signed run [34936943117](https://github.com/djalmajr/dukto/actions/runs/34936943117) passed Apple Silicon signing, stapling and Gatekeeper verification. Intel exposed an extra unsigned `dukto-cli` inside the desktop bundle. The CLI now requires the explicit `cli` feature and its entry point lives outside `src/bin`, which the current Tauri CLI scans independently. Desktop packages contain only `dukto`; the standalone CLI is built separately. CI checks both the app directory and updater archive for this separation.
+Signed run [34937932924](https://github.com/djalmajr/dukto/actions/runs/34937932924), built from `4b26124`, passed `codesign --verify`, `stapler validate`, and Gatekeeper assessment for both Apple Silicon and Intel. The downloaded Apple Silicon DMG was mounted read-only and independently passed the same checks locally, with `source=Notarized Developer ID`. No release was published.
+
+The first signed run exposed an extra unsigned `dukto-cli` inside the Intel desktop bundle. The CLI now requires the explicit `cli` feature and its entry point lives outside `src/bin`, which the current Tauri CLI scans independently. Desktop packages contain only `dukto`; the standalone CLI is built separately. CI checks both the app directory and updater archive for this separation.
 
 Reference: [Tauri macOS signing and notarization](https://v2.tauri.app/distribute/sign/macos/).
 
