@@ -1,0 +1,12 @@
+import { hydrate, render } from "solid-js/web";
+import { App } from "./App";
+import { pageMetadata } from "./metadata";
+import "./style.css";
+const path = window.location.pathname;
+const meta = pageMetadata(path);
+document.title = meta.title;
+document.documentElement.lang = meta.locale;
+const root = document.getElementById("root");
+if (!root) throw new Error("Missing root");
+if (root.hasChildNodes()) hydrate(() => <App path={path} />, root);
+else render(() => <App path={path} />, root);

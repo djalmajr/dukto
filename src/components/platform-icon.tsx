@@ -1,6 +1,6 @@
 import { Match, Switch } from "solid-js";
-import IcBaselineApple from "~icons/ic/baseline-apple";
 import CibLinux from "~icons/cib/linux";
+import IcBaselineApple from "~icons/ic/baseline-apple";
 import MdiMicrosoftWindows from "~icons/mdi/microsoft-windows";
 import MdiMonitor from "~icons/mdi/monitor";
 

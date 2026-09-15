@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::net::IpAddr;
 
 pub const SERVICE_TYPE: &str = "_dukto._tcp.local.";
-pub const PROTOCOL_VERSION: &str = "0.1";
+pub const PROTOCOL_VERSION: &str = "0.2";
 
 pub const TXT_PROTOCOL_VERSION: &str = "proto_ver";
 pub const TXT_DEVICE_ID: &str = "device_id";

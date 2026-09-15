@@ -34,15 +34,20 @@ impl DiscoveryHandle {
             inner: std::sync::Mutex::new(Some(discovery)),
         }
     }
-}
 
-impl Drop for DiscoveryHandle {
-    fn drop(&mut self) {
+    /// Tauri exits the process directly, so call this from its Exit event.
+    pub fn shutdown(&self) {
         if let Some(discovery) = self.inner.lock().unwrap().take() {
             if let Err(e) = discovery.shutdown() {
                 tracing::warn!("Failed to shut down mDNS discovery: {}", e);
             }
         }
+    }
+}
+
+impl Drop for DiscoveryHandle {
+    fn drop(&mut self) {
+        self.shutdown();
     }
 }
 
@@ -102,72 +107,17 @@ impl MdnsDiscovery {
     }
 
     /// Start browsing for peers in a background thread.
-    /// Periodically re-browses to compensate for mDNS query backoff.
+    /// Keep one receiver alive: mdns-sd refreshes queries and handles announcements.
+    /// Calling browse again for this service would replace its event receiver.
     pub fn start_browsing(&self) -> Result<(), Box<dyn std::error::Error>> {
         let receiver = self.daemon.browse(SERVICE_TYPE)?;
         let own_device_id = self.own_device_id.clone();
         let event_tx = self.event_tx.clone();
 
         std::thread::spawn(move || {
+            let mut active_services = HashMap::new();
             while let Ok(event) = receiver.recv() {
-                match event {
-                    ServiceEvent::ServiceResolved(info) => {
-                        let props = txt_properties_to_map(info.get_properties());
-                        let addresses: Vec<std::net::IpAddr> =
-                            info.get_addresses().iter().copied().collect();
-                        let port = info.get_port();
-
-                        if let Some(peer) = PeerInfo::from_txt_records(&props, addresses, port) {
-                            if peer.device_id == own_device_id {
-                                tracing::debug!("Skipping own device in discovery");
-                                continue;
-                            }
-                            tracing::info!(
-                                device_id = %peer.device_id,
-                                display_name = %peer.display_name,
-                                "Peer found"
-                            );
-                            let _ = event_tx.send(DiscoveryEvent::PeerFound(peer));
-                        }
-                    }
-                    ServiceEvent::ServiceRemoved(_service_type, fullname) => {
-                        tracing::info!(fullname = %fullname, "Peer removed");
-                        let _ = event_tx.send(DiscoveryEvent::PeerRemoved(fullname));
-                    }
-                    ServiceEvent::SearchStarted(s) => {
-                        tracing::debug!(service_type = %s, "mDNS browse started");
-                    }
-                    _ => {}
-                }
-            }
-        });
-
-        // Periodic re-browse to discover peers that arrived after initial query backoff.
-        // Each browse() sends fresh mDNS queries; responses reach ALL active browsers,
-        // including the main one above. We keep the receiver alive briefly so the
-        // daemon can deliver SearchStarted without a "closed channel" error.
-        let daemon = self.daemon.clone();
-        std::thread::spawn(move || {
-            loop {
-                std::thread::sleep(std::time::Duration::from_secs(30));
-                tracing::debug!("Re-browsing for peers");
-                match daemon.browse(SERVICE_TYPE) {
-                    Ok(receiver) => {
-                        // Drain for a short window so the channel stays open
-                        let deadline =
-                            std::time::Instant::now() + std::time::Duration::from_secs(3);
-                        while std::time::Instant::now() < deadline {
-                            match receiver.recv_timeout(std::time::Duration::from_millis(200)) {
-                                Ok(_) => {}
-                                Err(_) => break,
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        tracing::warn!("Re-browse failed: {}", e);
-                        break;
-                    }
-                }
+                forward_service_event(event, &own_device_id, &mut active_services, &event_tx);
             }
         });
 
@@ -182,6 +132,53 @@ impl MdnsDiscovery {
         let _ = receiver.recv_timeout(std::time::Duration::from_secs(2));
         self.daemon.shutdown()?;
         Ok(())
+    }
+}
+
+fn forward_service_event(
+    event: ServiceEvent,
+    own_device_id: &str,
+    active_services: &mut HashMap<String, String>,
+    event_tx: &broadcast::Sender<DiscoveryEvent>,
+) {
+    match event {
+        ServiceEvent::ServiceResolved(info) => {
+            let props = txt_properties_to_map(info.get_properties());
+            let addresses: Vec<std::net::IpAddr> = info.get_addresses().iter().copied().collect();
+            let port = info.get_port();
+
+            if let Some(peer) = PeerInfo::from_txt_records(&props, addresses, port) {
+                if peer.device_id == own_device_id {
+                    tracing::debug!("Skipping own device in discovery");
+                    return;
+                }
+                active_services.insert(info.get_fullname().to_owned(), peer.device_id.clone());
+                tracing::info!(
+                    device_id = %peer.device_id,
+                    display_name = %peer.display_name,
+                    fullname = %info.get_fullname(),
+                    "Peer found"
+                );
+                let _ = event_tx.send(DiscoveryEvent::PeerFound(peer));
+            }
+        }
+        ServiceEvent::ServiceRemoved(_service_type, fullname) => {
+            let Some(device_id) = active_services.remove(&fullname) else {
+                return;
+            };
+            // A restarted device can coexist with its old mDNS name (e.g. "(2)").
+            // Retiring one announcement must not hide another live announcement.
+            if active_services.values().any(|id| id == &device_id) {
+                tracing::debug!(%fullname, %device_id, "Another service still announces this peer");
+                return;
+            }
+            tracing::info!(fullname = %fullname, "Peer removed");
+            let _ = event_tx.send(DiscoveryEvent::PeerRemoved(fullname));
+        }
+        ServiceEvent::SearchStarted(s) => {
+            tracing::debug!(service_type = %s, "mDNS browse started");
+        }
+        _ => {}
     }
 }
 
@@ -207,6 +204,67 @@ mod tests {
             hostname: format!("host-{}", id),
             platform: "macos".into(),
         }
+    }
+
+    #[test]
+    fn removing_old_service_alias_keeps_current_peer_visible() {
+        let (tx, mut rx) = broadcast::channel(16);
+        let mut active_services = HashMap::new();
+        let device = test_device("alias-peer");
+        let properties = [
+            (TXT_DEVICE_ID, device.device_id.as_str()),
+            (TXT_DISPLAY_NAME, device.display_name.as_str()),
+            (TXT_HOSTNAME, device.hostname.as_str()),
+            (TXT_PLATFORM, device.platform.as_str()),
+        ];
+        let service = |name| {
+            ServiceInfo::new(
+                SERVICE_TYPE,
+                name,
+                "alias-host.local.",
+                "127.0.0.1",
+                4242,
+                &properties[..],
+            )
+            .unwrap()
+        };
+        let old = service("alias-peer");
+        let current = service("alias-peer (2)");
+        let old_name = old.get_fullname().to_owned();
+        let current_name = current.get_fullname().to_owned();
+        forward_service_event(
+            ServiceEvent::ServiceResolved(old),
+            "observer",
+            &mut active_services,
+            &tx,
+        );
+        forward_service_event(
+            ServiceEvent::ServiceResolved(current),
+            "observer",
+            &mut active_services,
+            &tx,
+        );
+        assert!(matches!(rx.try_recv(), Ok(DiscoveryEvent::PeerFound(_))));
+        assert!(matches!(rx.try_recv(), Ok(DiscoveryEvent::PeerFound(_))));
+        forward_service_event(
+            ServiceEvent::ServiceRemoved(SERVICE_TYPE.into(), old_name),
+            "observer",
+            &mut active_services,
+            &tx,
+        );
+        assert!(
+            rx.try_recv().is_err(),
+            "Removing an old alias must not hide the active device"
+        );
+        forward_service_event(
+            ServiceEvent::ServiceRemoved(SERVICE_TYPE.into(), current_name.clone()),
+            "observer",
+            &mut active_services,
+            &tx,
+        );
+        assert!(
+            matches!(rx.try_recv(), Ok(DiscoveryEvent::PeerRemoved(name)) if name == current_name)
+        );
     }
 
     #[test]
@@ -304,6 +362,74 @@ mod tests {
 
         discovery_b.shutdown().ok();
         discovery_a.shutdown().ok();
+    }
+
+    #[test]
+    fn explicit_shutdown_announces_peer_removal() {
+        let observer = test_device(&uuid::Uuid::new_v4().to_string());
+        let (discovery, mut events) = MdnsDiscovery::new(&observer, 9006).unwrap();
+        discovery.start_browsing().unwrap();
+        let peer = test_device(&uuid::Uuid::new_v4().to_string());
+        let (advertiser, _events) = MdnsDiscovery::new(&peer, 9007).unwrap();
+        let handle = DiscoveryHandle::new(advertiser);
+
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        let mut found = false;
+        while std::time::Instant::now() < deadline {
+            if let Ok(DiscoveryEvent::PeerFound(info)) = events.try_recv() {
+                if info.device_id == peer.device_id {
+                    found = true;
+                    break;
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        assert!(found, "Peer must be visible before testing departure");
+        handle.shutdown();
+        handle.shutdown(); // Exit cleanup and Drop must be safe together.
+
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        let mut removed = false;
+        while std::time::Instant::now() < deadline {
+            if let Ok(DiscoveryEvent::PeerRemoved(fullname)) = events.try_recv() {
+                if fullname.starts_with(&peer.device_id) {
+                    removed = true;
+                    break;
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        discovery.shutdown().unwrap();
+        assert!(
+            removed,
+            "Departure must arrive without waiting for the mDNS TTL"
+        );
+    }
+
+    #[test]
+    fn discovers_peer_arriving_after_thirty_seconds() {
+        // Regression: the periodic browse replaced the event consumer after 30s.
+        let observer = test_device(&uuid::Uuid::new_v4().to_string());
+        let (discovery, mut events) = MdnsDiscovery::new(&observer, 9004).unwrap();
+        discovery.start_browsing().unwrap();
+        std::thread::sleep(std::time::Duration::from_secs(35));
+
+        let late_peer = test_device(&uuid::Uuid::new_v4().to_string());
+        let (advertiser, _events) = MdnsDiscovery::new(&late_peer, 9005).unwrap();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        let mut found = false;
+        while std::time::Instant::now() < deadline {
+            if let Ok(DiscoveryEvent::PeerFound(peer)) = events.try_recv() {
+                if peer.device_id == late_peer.device_id {
+                    found = true;
+                    break;
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        advertiser.shutdown().unwrap();
+        discovery.shutdown().unwrap();
+        assert!(found, "The active discovery stream must report a late peer");
     }
 
     #[test]

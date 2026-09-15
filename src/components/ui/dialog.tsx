@@ -41,12 +41,18 @@ type DialogContentProps<T extends ValidComponent = "div"> =
 		class?: string | undefined;
 		children?: JSX.Element;
 		mountId?: string;
+		overlayClass?: string;
 	};
 
 const DialogContent = <T extends ValidComponent = "div">(
 	props: PolymorphicProps<T, DialogContentProps<T>>,
 ) => {
-	const [local, rest] = splitProps(props as DialogContentProps, ["class", "children", "mountId"]);
+	const [local, rest] = splitProps(props as DialogContentProps, [
+		"class",
+		"children",
+		"mountId",
+		"overlayClass",
+	]);
 	const mountEl = () =>
 		local.mountId ? (document.getElementById(local.mountId) ?? undefined) : undefined;
 	const isContained = () => !!mountEl();
@@ -63,6 +69,7 @@ const DialogContent = <T extends ValidComponent = "div">(
 					class={cn(
 						"inset-0 z-50 bg-background/60 backdrop-blur-[1px] data-expanded:animate-in data-closed:animate-out data-[closed]:fade-out-0 data-[expanded]:fade-in-0",
 						isContained() ? "absolute" : "fixed",
+						local.overlayClass,
 					)}
 				/>
 				<DialogPrimitive.Content

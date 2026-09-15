@@ -24,5 +24,10 @@
 	"language": "Language",
 	"light": "light",
 	"dark": "dark",
-	"system": "system"
+	"system": "system",
+	"addFiles": "Add files",
+	"addFolders": "Add folders",
+	"minimizeWindow": "Minimize window",
+	"maximizeWindow": "Maximize window",
+	"closeWindow": "Close window"
 }

@@ -1,6 +1,6 @@
 import { Show } from "solid-js";
-import LucideX from "~icons/lucide/x";
 import { Button } from "~/components/ui/button";
+import { Dialog, DialogContent, DialogTitle } from "~/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { TextField, TextFieldInput } from "~/components/ui/text-field";
 import { t } from "~/helpers/i18n";
@@ -20,67 +20,59 @@ interface SettingsModalProps {
 
 function SettingsModal(props: SettingsModalProps) {
 	return (
-		<Show when={props.open}>
-			<div class="absolute inset-0 z-50 flex items-center justify-center">
-				<div class="absolute inset-0 bg-background/60 backdrop-blur-[1px]" />
-				<div class="relative z-10 mx-4 w-full max-w-xs space-y-4 rounded-lg border border-border bg-background p-5 text-foreground shadow-lg">
-					<div class="flex items-center justify-between">
-						<h2 class="text-sm font-semibold">{t("settings")}</h2>
-						<Button variant="ghost" size="icon" class="size-6" onClick={props.onClose}>
-							<LucideX width={14} height={14} />
-							<span class="sr-only">Close</span>
-						</Button>
-					</div>
-					<div class="space-y-3">
-						<div class="space-y-1">
-							<p class="text-xs font-medium text-muted-foreground">{t("saveFilesTo")}</p>
-							<div class="flex items-center gap-1.5">
-								<TextField class="min-w-0 flex-1">
-									<TextFieldInput disabled value={props.destinationDir} class="bg-muted" />
-								</TextField>
-								<Button variant="outline" onClick={props.onChangeDestination}>
-									{t("change")}
-								</Button>
-							</div>
+		<Dialog open={props.open} onOpenChange={(open) => !open && props.onClose()}>
+			<DialogContent
+				class="max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-xs gap-4 rounded-lg p-5"
+				overlayClass="bg-black/40"
+				onEscapeKeyDown={(event: Event) => event.preventDefault()}
+			>
+				<DialogTitle class="text-sm font-semibold">{t("settings")}</DialogTitle>
+				<div class="space-y-3">
+					<div class="space-y-1">
+						<p class="text-xs font-medium text-muted-foreground">{t("saveFilesTo")}</p>
+						<div class="flex items-center gap-1.5">
+							<TextField class="min-w-0 flex-1">
+								<TextFieldInput disabled value={props.destinationDir} class="bg-muted" />
+							</TextField>
+							<Button variant="outline" onClick={props.onChangeDestination}>
+								{t("change")}
+							</Button>
 						</div>
+					</div>
+					<div class="space-y-1">
+						<p class="text-xs font-medium text-muted-foreground">{t("appearance")}</p>
+						<Tabs value={props.theme} onChange={(value) => props.onChangeTheme(value as ThemeMode)}>
+							<TabsList class="h-8">
+								<TabsTrigger value="light" class="capitalize">
+									{t("light")}
+								</TabsTrigger>
+								<TabsTrigger value="dark" class="capitalize">
+									{t("dark")}
+								</TabsTrigger>
+								<TabsTrigger value="system" class="capitalize">
+									{t("system")}
+								</TabsTrigger>
+							</TabsList>
+						</Tabs>
+					</div>
+					<Show when={props.onChangeLanguage}>
 						<div class="space-y-1">
-							<p class="text-xs font-medium text-muted-foreground">{t("appearance")}</p>
+							<p class="text-xs font-medium text-muted-foreground">{t("language")}</p>
 							<Tabs
-								value={props.theme}
-								onChange={(value) => props.onChangeTheme(value as ThemeMode)}
+								value={props.language ?? "pt"}
+								onChange={(value) => props.onChangeLanguage?.(value)}
 							>
 								<TabsList class="h-8">
-									<TabsTrigger value="light" class="capitalize">
-										{t("light")}
-									</TabsTrigger>
-									<TabsTrigger value="dark" class="capitalize">
-										{t("dark")}
-									</TabsTrigger>
-									<TabsTrigger value="system" class="capitalize">
-										{t("system")}
-									</TabsTrigger>
+									<TabsTrigger value="en">English</TabsTrigger>
+									<TabsTrigger value="pt">Português</TabsTrigger>
+									<TabsTrigger value="es">Español</TabsTrigger>
 								</TabsList>
 							</Tabs>
 						</div>
-						<Show when={props.onChangeLanguage}>
-							<div class="space-y-1">
-								<p class="text-xs font-medium text-muted-foreground">{t("language")}</p>
-								<Tabs
-									value={props.language ?? "pt"}
-									onChange={(value) => props.onChangeLanguage?.(value)}
-								>
-									<TabsList class="h-8">
-										<TabsTrigger value="en">English</TabsTrigger>
-										<TabsTrigger value="pt">Português</TabsTrigger>
-										<TabsTrigger value="es">Español</TabsTrigger>
-									</TabsList>
-								</Tabs>
-							</div>
-						</Show>
-					</div>
+					</Show>
 				</div>
-			</div>
-		</Show>
+			</DialogContent>
+		</Dialog>
 	);
 }
 

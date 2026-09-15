@@ -11,7 +11,7 @@
 # Build and dependencies
 dist
 node_modules
-bun.lock
+src-proto/bun.lock
 src-proto/node_modules
 src-proto/dist
 

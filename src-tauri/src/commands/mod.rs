@@ -19,6 +19,15 @@ pub fn get_device_info(state: State<'_, AppState>) -> DeviceIdentity {
 }
 
 #[tauri::command]
+pub fn get_peers(state: State<'_, AppState>) -> Vec<crate::discovery::types::PeerInfo> {
+    state
+        .peers
+        .iter()
+        .map(|peer| peer.value().clone())
+        .collect()
+}
+
+#[tauri::command]
 pub fn get_settings(state: State<'_, AppState>) -> Settings {
     state.get_settings()
 }
@@ -47,18 +56,45 @@ pub async fn send_to_peer(
 ) -> Result<String, String> {
     // Try backend state first, fall back to frontend-provided address
     let socket_addr = if let Some(peer) = state.peers.get(&device_id) {
-        let addr = peer.addresses.first().ok_or("Peer has no address")?;
+        if peer.protocol_version != crate::discovery::types::PROTOCOL_VERSION {
+            return Err("Peer uses an incompatible protocol. Update both Dukto apps.".into());
+        }
+        let addr = peer
+            .addresses
+            .iter()
+            .find(|ip| ip.is_ipv4())
+            .ok_or("Peer has no IPv4 address")?;
         SocketAddr::new(*addr, peer.port)
     } else if let (Some(addr_str), Some(port)) = (&peer_address, peer_port) {
-        let addr: std::net::IpAddr = addr_str.parse().map_err(|e| format!("Invalid address: {}", e))?;
+        let addr: std::net::IpAddr = addr_str
+            .parse()
+            .map_err(|e| format!("Invalid address: {}", e))?;
         SocketAddr::new(addr, port)
     } else {
         return Err(format!("Peer {} not found", device_id));
     };
 
-    let sender_device_id = state.device.device_id.clone();
+    let sender = state.device.clone();
     let transfer_id = uuid::Uuid::new_v4().to_string();
     let input_paths: Vec<PathBuf> = paths.iter().map(PathBuf::from).collect();
+    let control = state
+        .transfer_registry
+        .register(transfer_id.clone())
+        .await?;
+    let registry = state.transfer_registry.clone();
+
+    #[derive(Serialize)]
+    struct SendStarted {
+        transfer_id: String,
+        peer_device_id: String,
+    }
+    let _ = app_handle.emit(
+        "transfer:send-started",
+        &SendStarted {
+            transfer_id: transfer_id.clone(),
+            peer_device_id: device_id.clone(),
+        },
+    );
 
     let tid = transfer_id.clone();
     let handle = app_handle.clone();
@@ -71,52 +107,64 @@ pub async fn send_to_peer(
         "Initiating transfer to peer"
     );
 
-    // Connect in background
+    // Each outgoing transfer owns its endpoint and cancellation control.
     tauri::async_runtime::spawn(async move {
         let result = async {
             let endpoint = create_endpoint("0.0.0.0:0".parse().unwrap())
                 .map_err(|e| format!("Endpoint creation failed: {}", e))?;
+            let result = tokio::select! {
+                biased;
+                _ = control.cancelled() => Err("Transfer cancelled".to_string()),
+                result = async {
+                    let conn = endpoint
+                        .connect(socket_addr, "localhost")
+                        .map_err(|e| format!("Connect call failed: {}", e))?
+                        .await
+                        .map_err(|e| format!("Connection failed: {}", e))?;
+                    if !control.attach_connection(conn.clone()).await {
+                        return Err("Transfer cancelled".to_string());
+                    }
 
-            let conn = endpoint
-                .connect(socket_addr, "localhost")
-                .map_err(|e| format!("Connect call failed: {}", e))?
-                .await
-                .map_err(|e| format!("Connection failed: {}", e))?;
+                    let (mut send, mut recv) = conn
+                        .open_bi()
+                        .await
+                        .map_err(|e| format!("Open bi failed: {}", e))?;
 
-            let (mut send, mut recv) = conn
-                .open_bi()
-                .await
-                .map_err(|e| format!("Open bi failed: {}", e))?;
+                    let mut noise = handshake_initiator(&mut send, &mut recv)
+                        .await
+                        .map_err(|e| format!("Noise handshake failed: {}", e))?;
 
-            let mut noise = handshake_initiator(&mut send, &mut recv)
-                .await
-                .map_err(|e| format!("Noise handshake failed: {}", e))?;
+                    tracing::info!(transfer_id = %tid, "Noise handshake done, sending files");
 
-            tracing::info!(transfer_id = %tid, "Noise handshake done, sending files");
+                    let handle_progress = handle.clone();
+                    let bytes = send_transfer(
+                        &mut send,
+                        &mut recv,
+                        &mut noise,
+                        &input_paths,
+                        &tid,
+                        &sender,
+                        move |progress| {
+                            let _ = handle_progress.emit("transfer:progress", progress);
+                        },
+                    )
+                    .await
+                    .map_err(|e| format!("Transfer failed: {}", e))?;
 
-            let handle_progress = handle.clone();
-            let _tid_progress = tid.clone();
-
-            let bytes = send_transfer(
-                &mut send,
-                &mut recv,
-                &mut noise,
-                &input_paths,
-                &tid,
-                &sender_device_id,
-                move |p| {
-                    let _ = handle_progress.emit("transfer:progress", p);
-                },
-            )
-            .await
-            .map_err(|e| format!("Transfer failed: {}", e))?;
-
-            conn.close(0u32.into(), b"done");
-            endpoint.close(0u32.into(), b"shutdown");
-
-            Ok::<u64, String>(bytes)
+                    Ok::<u64, String>(bytes)
+                } => result,
+            };
+            endpoint.close(0u32.into(), b"transfer finished");
+            result
         }
         .await;
+        registry.remove(&tid, &control).await;
+        control.close_connection().await;
+
+        if control.is_cancelled() {
+            tracing::info!(transfer_id = %tid, "Transfer cancelled");
+            return;
+        }
 
         match result {
             Ok(bytes) => {
@@ -153,6 +201,20 @@ pub async fn send_to_peer(
     });
 
     Ok(transfer_id)
+}
+
+/// Cancel exactly one active incoming or outgoing transfer.
+#[tauri::command]
+pub async fn cancel_transfer(
+    app_handle: tauri::AppHandle,
+    state: State<'_, AppState>,
+    transfer_id: String,
+) -> Result<(), String> {
+    if !state.transfer_registry.cancel(&transfer_id).await {
+        return Err(format!("Transfer {transfer_id} is not active"));
+    }
+    let _ = app_handle.emit("transfer:cancelled", &transfer_id);
+    Ok(())
 }
 
 /// Respond to an incoming transfer request (accept or reject).
@@ -235,8 +297,8 @@ mod tests {
     use super::*;
 
     fn temp_dir(suffix: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir()
-            .join(format!("duto-cmd-test-{}-{}", suffix, uuid::Uuid::new_v4()));
+        let dir =
+            std::env::temp_dir().join(format!("duto-cmd-test-{}-{}", suffix, uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
         dir
     }
@@ -286,7 +348,9 @@ mod tests {
         let folder = dir.join("myfolder");
         tokio::fs::write(&file, "data").await.unwrap();
         tokio::fs::create_dir_all(&folder).await.unwrap();
-        tokio::fs::write(folder.join("inner.txt"), "inner").await.unwrap();
+        tokio::fs::write(folder.join("inner.txt"), "inner")
+            .await
+            .unwrap();
 
         let result = resolve_file_metadata(vec![
             file.to_string_lossy().to_string(),

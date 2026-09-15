@@ -1,4 +1,4 @@
-import { Show } from "solid-js";
+import { Show, createEffect, createSignal } from "solid-js";
 import { Button } from "~/components/ui/button";
 import {
 	Dialog,
@@ -19,15 +19,35 @@ export interface IncomingRequestData {
 
 interface IncomingRequestProps {
 	request: IncomingRequestData | null;
-	onAccept: () => void;
-	onReject: () => void;
+	onAccept: () => void | Promise<void>;
+	onReject: () => void | Promise<void>;
 }
 
 function IncomingRequestDialog(props: IncomingRequestProps) {
+	const [busy, setBusy] = createSignal(false);
+	const [responseError, setResponseError] = createSignal<string | null>(null);
+	createEffect(() => {
+		props.request;
+		setResponseError(null);
+	});
+
+	async function respond(action: IncomingRequestProps["onAccept"]) {
+		if (busy()) return;
+		setBusy(true);
+		setResponseError(null);
+		try {
+			await action();
+		} catch (error) {
+			setResponseError(String(error));
+		} finally {
+			setBusy(false);
+		}
+	}
+
 	return (
 		<Show when={props.request}>
 			{(req) => (
-				<Dialog open onOpenChange={(open) => !open && props.onReject()}>
+				<Dialog open onOpenChange={(open) => !open && void respond(props.onReject)}>
 					<DialogContent
 						class="max-w-xs"
 						onInteractOutside={(e: Event) => e.preventDefault()}
@@ -39,14 +59,22 @@ function IncomingRequestDialog(props: IncomingRequestProps) {
 								{req().item_count} {req().item_count === 1 ? "item" : "items"} &middot;{" "}
 								{formatBytes(req().total_size)}
 								<br />
-								From: {req().sender_name}
+								From: <span class="break-all">{req().sender_name}</span>
 							</DialogDescription>
 						</DialogHeader>
+						<Show when={responseError()}>
+							{(message) => <p class="text-sm text-destructive">{message()}</p>}
+						</Show>
 						<DialogFooter class="flex-row gap-2">
-							<Button class="flex-1" onClick={props.onAccept}>
+							<Button class="flex-1" disabled={busy()} onClick={() => void respond(props.onAccept)}>
 								{t("accept")}
 							</Button>
-							<Button variant="outline" class="flex-1" onClick={props.onReject}>
+							<Button
+								variant="outline"
+								class="flex-1"
+								disabled={busy()}
+								onClick={() => void respond(props.onReject)}
+							>
 								{t("reject")}
 							</Button>
 						</DialogFooter>

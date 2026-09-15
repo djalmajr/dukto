@@ -5,6 +5,7 @@ use tokio::io::AsyncReadExt;
 use crate::crypto::noise::{recv_framed, send_framed};
 use crate::protocol::framing::decode_packet_header;
 use crate::protocol::types::*;
+use crate::state::device::DeviceIdentity;
 use crate::transfer::fs::{walk_directory, WalkItem};
 
 // Noise max message is 65535. Keep chunks under the limit with overhead.
@@ -20,7 +21,7 @@ pub async fn send_transfer<F>(
     noise: &mut TransportState,
     inputs: &[PathBuf],
     transfer_id: &str,
-    sender_device_id: &str,
+    sender: &DeviceIdentity,
     mut on_progress: F,
 ) -> Result<u64, Box<dyn std::error::Error + Send + Sync>>
 where
@@ -28,13 +29,17 @@ where
 {
     // 1. Build flat item list from all inputs
     let items = collect_items(inputs)?;
+    if items.is_empty() {
+        return Err("No transferable items selected".into());
+    }
     let item_count = items.len() as u32;
     let total_size: u64 = items.iter().map(|i| i.size).sum();
 
     // 2. Send TransferHeader
     let header = TransferHeader {
         transfer_id: transfer_id.to_string(),
-        sender_device_id: sender_device_id.to_string(),
+        sender_device_id: sender.device_id.clone(),
+        sender: Some(sender.clone()),
         item_count,
         total_size,
     };
@@ -113,6 +118,26 @@ where
 
     // 5. Send Success
     send_encrypted_raw(send, noise, PacketType::Success, &[]).await?;
+    send.finish()?;
+
+    // Do not report success or close QUIC while payloads are still in flight.
+    let data = tokio::time::timeout(
+        std::time::Duration::from_secs(30),
+        recv_encrypted(recv, noise),
+    )
+    .await
+    .map_err(|_| "Timed out waiting for receiver acknowledgement (requires protocol 0.2)")??;
+    let (ptype, payload) = decode_packet_header(&data)?;
+    if ptype != PacketType::Success {
+        return Err(format!("Receiver did not confirm completion: {:?}", ptype).into());
+    }
+    let receipt: TransferReceipt = serde_json::from_slice(payload)?;
+    if receipt.transfer_id != transfer_id
+        || receipt.items_received != item_count
+        || receipt.bytes_received != total_sent
+    {
+        return Err("Receiver acknowledgement does not match the transfer".into());
+    }
 
     Ok(total_sent)
 }
@@ -124,7 +149,7 @@ pub async fn send_file<F>(
     noise: &mut TransportState,
     file_path: &Path,
     transfer_id: &str,
-    sender_device_id: &str,
+    sender: &DeviceIdentity,
     on_progress: F,
 ) -> Result<u64, Box<dyn std::error::Error + Send + Sync>>
 where
@@ -136,14 +161,16 @@ where
         noise,
         &[file_path.to_path_buf()],
         transfer_id,
-        sender_device_id,
+        sender,
         on_progress,
     )
     .await
 }
 
 /// Collect all items from inputs (files and directories).
-fn collect_items(inputs: &[PathBuf]) -> Result<Vec<WalkItem>, Box<dyn std::error::Error + Send + Sync>> {
+fn collect_items(
+    inputs: &[PathBuf],
+) -> Result<Vec<WalkItem>, Box<dyn std::error::Error + Send + Sync>> {
     fn wrap(e: Box<dyn std::error::Error>) -> Box<dyn std::error::Error + Send + Sync> {
         e.to_string().into()
     }

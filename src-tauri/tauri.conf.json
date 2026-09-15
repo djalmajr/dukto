@@ -4,6 +4,7 @@
 	"version": "0.1.0",
 	"identifier": "com.dukto.app",
 	"build": {
+		"features": ["desktop"],
 		"beforeDevCommand": "bun run vite:dev",
 		"devUrl": "http://localhost:1420",
 		"beforeBuildCommand": "bun run vite:build",
@@ -15,12 +16,16 @@
 			{
 				"title": "Dukto",
 				"width": 600,
+				"minWidth": 480,
+				"maxWidth": 640,
 				"height": 600,
+				"minHeight": 360,
 				"resizable": true,
+				"maximizable": false,
 				"fullscreen": false,
 				"center": true,
-		  	"titleBarStyle": "Overlay",
-			  "hiddenTitle": true
+				"titleBarStyle": "Overlay",
+				"hiddenTitle": true
 			}
 		],
 		"security": {

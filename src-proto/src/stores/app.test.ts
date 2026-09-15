@@ -34,10 +34,10 @@ describe("proto transfer store", () => {
 
 		const p1 = getPeerTransfers("p1");
 		expect(p1).toBeDefined();
-		expect(p1!.length).toBe(2);
+		expect(p1?.length).toBe(2);
 
 		const p2 = getPeerTransfers("p2");
-		expect(p2!.length).toBe(1);
+		expect(p2?.length).toBe(1);
 
 		expect(getPeerTransfers("p3")).toBeUndefined();
 	});
@@ -48,8 +48,8 @@ describe("proto transfer store", () => {
 		startTransfer("p1", "send", 3000);
 
 		const slots = getPeerTransfers("p1");
-		expect(slots!.length).toBe(3);
-		expect(slots!.every((s) => s.direction === "send")).toBe(true);
+		expect(slots?.length).toBe(3);
+		expect(slots?.every((s) => s.direction === "send")).toBe(true);
 	});
 
 	test("dismissTransfer removes a specific transfer", () => {
@@ -58,8 +58,8 @@ describe("proto transfer store", () => {
 
 		dismissTransfer(id1);
 		const slots = getPeerTransfers("p1");
-		expect(slots!.length).toBe(1);
-		expect(slots![0].id).toBe(id2);
+		expect(slots?.length).toBe(1);
+		expect(slots?.[0].id).toBe(id2);
 	});
 
 	test("abortTransfer removes an active transfer", () => {
@@ -74,9 +74,9 @@ describe("proto transfer store", () => {
 		failTransfer("p1", "send", "Connection refused");
 
 		const slots = getPeerTransfers("p1");
-		expect(slots!.length).toBe(1);
-		expect(slots![0].status).toBe("error");
-		expect(slots![0].errorMsg).toBe("Connection refused");
+		expect(slots?.length).toBe(1);
+		expect(slots?.[0].status).toBe("error");
+		expect(slots?.[0].errorMsg).toBe("Connection refused");
 	});
 
 	test("tickAllTransfers advances active transfers", () => {
@@ -102,7 +102,8 @@ describe("proto transfer store", () => {
 	test("tickAllTransfers does not advance error transfers", () => {
 		failTransfer("p1", "send", "Error");
 		const slots = getPeerTransfers("p1");
-		const errorId = slots![0].id;
+		const errorId = slots?.[0].id;
+		if (!errorId) throw new Error("Expected an error transfer");
 
 		tickAllTransfers();
 		const after = transfers[errorId];
