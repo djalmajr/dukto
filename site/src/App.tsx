@@ -60,7 +60,7 @@ function Header(props: { path: string }) {
 		<header class="header">
 			<a class="brand" href={localPath("/")} aria-label={t("Dukto, início")}>
 				<Mark />
-				Dukto
+				<span class="brand-name">Dukto</span>
 			</a>
 			<nav id="main-navigation" classList={{ "nav-open": open() }} aria-label={t("Principal")}>
 				<a href={localPath("/")} aria-current={props.path === "/" ? "page" : undefined}>
@@ -74,13 +74,6 @@ function Header(props: { path: string }) {
 				>
 					{t("Documentação")}
 				</a>
-				<div class="mobile-download">
-					{" "}
-					<LinkButton href={localPath("/downloads/")}>
-						{t("Obter o Dukto")}
-						<ArrowDown class="arrow-icon" aria-hidden="true" />
-					</LinkButton>
-				</div>
 			</nav>
 			<div class="header-actions">
 				<Preferences />
@@ -98,11 +91,17 @@ function Header(props: { path: string }) {
 					<IconGithub aria-hidden="true" />
 				</Button>
 				<div class="header-download">
-					{" "}
-					<LinkButton href={localPath("/downloads/")}>
-						{t("Obter o Dukto")}
+					<Button
+						as="a"
+						href={localPath("/downloads/")}
+						aria-label={t("Obter o Dukto")}
+						title={t("Obter o Dukto")}
+						class="action"
+						size="lg"
+					>
+						<span class="download-label">{t("Obter o Dukto")}</span>
 						<ArrowDown class="arrow-icon" aria-hidden="true" />
-					</LinkButton>
+					</Button>
 				</div>
 			</div>
 			<Button
