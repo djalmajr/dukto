@@ -180,7 +180,7 @@ jobs:
             key_file="$(mktemp)"
             trap 'rm -f "$key_file"' EXIT
             printf '%s' "$TAURI_SIGNING_PRIVATE_KEY" > "$key_file"
-            bunx tauri signer sign \
+            env -u TAURI_SIGNING_PRIVATE_KEY bunx tauri signer sign \
               --private-key-path "$key_file" \
               --password "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" \
               "$asset"
