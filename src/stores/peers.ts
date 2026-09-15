@@ -15,7 +15,9 @@ export interface PeerInfo extends PeerIdentity {
 	protocol_version: string;
 }
 
-const REMOVAL_GRACE_MS = 60_000;
+// Briefly tolerate an mDNS announcement being replaced during an interface
+// change or app restart, without keeping a departed host visible for a minute.
+const REMOVAL_GRACE_MS = 2_000;
 
 const [peers, setPeers] = createStore<Record<string, PeerInfo>>({});
 const removalTimers = new Map<string, number>();
