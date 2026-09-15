@@ -23,6 +23,8 @@ jobs:
           bun-version: 1.4.0
       - uses: dtolnay/rust-toolchain@stable
       - run: bun install --frozen-lockfile
+      - name: Build frontend and generate route types
+        run: bun run vite:build
       - run: bun run lint
       - run: bun run site:check
       - run: bun test
