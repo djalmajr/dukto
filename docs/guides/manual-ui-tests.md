@@ -1,215 +1,87 @@
-# Roteiro manual — Dukto no Windows e macOS
+# Manual Desktop UI Tests
 
-Objetivo: validar descoberta, seleção, aprovação, transferência e integridade usando as interfaces reais. Linux fica para uma rodada posterior com VM gráfica.
+Use two computers with current Dukto builds on the same local network. Test real file dialogs and native drag and drop; CLI or browser-only checks do not replace desktop testing.
 
-## 1. Preparar os dois computadores
+## Prepare
 
-1. Abra os builds atuais do Dukto no Windows e no Mac, na mesma rede. Evite executar duas cópias da interface no mesmo computador.
-2. Windows: `C:\Users\dj4lm\repo.git\djalmajr\dukto\src-tauri\target\release\dukto.exe`.
-3. Mac: o build preparado pela sessão remota está em `/private/tmp/dukto-ui-test/Dukto.app`.
-4. Em Settings → Save files to → Change, escolha uma pasta exclusiva para testes em cada computador. Anote a pasta anterior para restaurá-la ao final. Não presuma que a mudança já foi aplicada: a preparação foi interrompida antes da confirmação.
-5. Destino sugerido Windows: `C:\Users\dj4lm\repo.git\djalmajr\dukto\.cache\ui-matrix\received`. Mac: `/Users/djalmajr/Developer/djalmajr/dukto/.cache/ui-test/received`.
-6. Resolva eventuais permissões de rede dos aplicativos. Confira que as portas anunciadas estão liberadas na rede de teste; as regras anteriores da CLI não garantem a liberação do executável gráfico.
+- Avoid running duplicate desktop instances on one computer.
+- Choose an empty destination folder on each receiver and note the current destination so it can be restored.
+- Confirm that the app is allowed through the local firewall for mDNS and the receiver's advertised UDP port.
+- Use the same compatible app version on both computers.
 
-## 2. Conferir descoberta
+## Discovery
 
-- [ ] Windows mostra o Mac (observado nesta preparação como `djalmajr / Run2Biz.local`).
-- [ ] Mac mostra o Windows.
-- [ ] Fechar o Dukto de um lado remove o dispositivo do outro após a atualização da descoberta.
-- [ ] Reabrir o aplicativo faz o dispositivo reaparecer.
+- Confirm each app lists the other without using a direct address.
+- Close one app and confirm the peer disappears after discovery updates.
+- Reopen it and confirm the peer returns.
+- Record discovery and transfer results separately. A direct-address send is not discovery success.
 
-Registre o tempo aproximado. Se não aparecer, registre como falha de descoberta; não conte um envio por endereço direto como aprovação deste teste.
+## Fixture set
 
-## 3. Seleções a testar
+Prepare equivalent fixtures on both computers:
 
-Fixtures Windows prontas em `C:\Users\dj4lm\repo.git\djalmajr\dukto\.cache\ui-matrix\source`.
+| Case | Selection |
+| --- | --- |
+| A | One small file |
+| B | Several files, including a Unicode filename, a filename with spaces, and an empty file |
+| C | One folder containing a nested folder and an empty folder |
+| D | Several root folders, including an empty folder |
+| E | A file and a folder selected together |
 
-| Caso | Abra a subpasta | Selecione estes itens, sem selecionar a subpasta do caso |
-|---|---|---|
-| A — um arquivo | `single` | `win-single.bin` (~2 MiB) |
-| B — vários arquivos | `multiple` | Todos os quatro arquivos: inclui acentos, espaços e arquivo vazio |
-| C — uma pasta | `folder` | `WinProject` (inclui subpasta e pasta vazia) |
-| D — várias pastas | `folders` | `WinAlpha`, `WinBeta`, `WinEmpty` |
-| E — arquivos e pastas | `mixed` | `win-loose.txt` e `WinMixed` juntos |
+Repeat each case in both directions.
 
-No Mac, use as fixtures em `/Users/djalmajr/Developer/djalmajr/dukto/.cache/ui-test/source`, verificando a estrutura antes de selecionar. Se não encontrar equivalentes, prepare os mesmos cinco conjuntos no Finder; inclua arquivo vazio, nome com acento/espaço, subpasta e pasta vazia.
+## UI-to-UI transfer
 
-## 4. Procedimento UI → UI
+For each direction and case:
 
-Repita A–E de Windows para Mac e depois de Mac para Windows.
+1. Set a unique, empty destination folder on the receiver.
+2. Select the destination host's ellipsis menu and choose Add files or Add folders, or drop items directly onto that host card.
+3. Confirm the preview shows the intended host, names, item count, and size.
+4. Send the files. On the receiver, inspect the sender and items, then accept.
+5. Confirm progress and completion on both sides. The sender should receive an acknowledgment.
+6. Verify filenames, relative folder structure, empty files, and empty folders.
+7. Compare SHA-256 for every file and record the result.
 
-1. Use um destino vazio por caso (por exemplo `received/win-ui_mac-ui/A`), configurando-o nas preferências do receptor. Isso evita que arquivos de tentativas anteriores mascarem erros.
-2. Para A e B: abra o menu ⋮ do dispositivo de destino, escolha **Adicionar arquivos** e selecione os arquivos no diálogo nativo.
-3. Para C, D e E: use **Adicionar pastas** no menu ⋮ do destino ou arraste os itens do Explorer/Finder diretamente para o card desse destino. Combine arquivos e pastas adicionando-os ao mesmo card.
-4. Confira a prévia: nomes, destino, quantidade e tamanho. Uma pasta selecionada pode representar vários itens no protocolo; confira principalmente se os itens escolhidos estão corretos.
-5. Confirme o envio. No receptor, confira remetente, quantidade e tamanho, então aceite.
-6. Confira progresso e conclusão nos dois lados. Não deve ficar indefinidamente em “aguardando” após o recebimento.
-7. Abra a pasta de destino. Verifique nomes, estrutura, arquivos vazios e pastas vazias. Abra os textos e compare tamanhos; faça a checagem de hash descrita abaixo.
-8. Registre o resultado antes de passar ao próximo caso.
+Repeat single- and multi-file selection using native drag and drop on both operating systems. A picker test does not validate native file dragging.
 
-Para A e B, faça também uma repetição por arrastar e soltar em cada sistema, para cobrir as duas entradas da UI.
+## UI and CLI interoperability
 
-## 5. UI ↔ CLI
+Build the CLI from the repository root:
 
-Repita os mesmos cinco casos nas quatro direções adicionais da matriz abaixo. Mantenha a UI no receptor quando estiver testando CLI → UI: é nela que você deve aceitar.
+~~~sh
+cargo build --manifest-path src-tauri/Cargo.toml --no-default-features --features cli --bin dukto-cli --release
+~~~
 
-### Preparar o terminal
+The build output is named dukto-cli (dukto-cli.exe on Windows). Keep it separate from the desktop executable. For UI-to-CLI, start a CLI receiver on an unused port, choose a dedicated destination, then approve the transfer in the terminal. For CLI-to-UI, keep the desktop app open as the receiver and accept the incoming request in the app.
 
-Execute a partir da raiz do repositório. Os comandos abaixo usam o binário compilado `dukto-cli`; o pacote distribuível usa o nome `dukto`.
+Use peers to obtain the current receiver ID. If discovery is unavailable, test a direct address separately and record it as a transfer test rather than a discovery test. A successful JSON send exits with status 0 and includes acknowledged: true.
 
-Windows / PowerShell:
+## Host-specific draft behavior
 
-```powershell
-$cli = '.\src-tauri\target\release\dukto-cli.exe'
-& $cli --help
-& $cli --json peers --timeout 10
-```
+- Add items to one host, open another host's menu, and confirm the two drafts stay separate.
+- Open file and folder pickers repeatedly. New selections should accumulate in the same host draft.
+- Cancel a picker and confirm the existing draft remains.
+- Add a duplicate path and confirm it appears only once.
+- Remove an item, add it again, and verify the count and size.
+- Mix picker selection and drag and drop.
+- Cancel a preview and start a fresh selection. Old items must not return.
+- Make a host disappear while its draft is open. Its items must not move to another host.
+- Drop over each card and over empty space. Only the card under the pointer may receive the drop.
 
-macOS / terminal:
+## Window and ordering
 
-```sh
-CLI=./src-tauri/target/release/dukto-cli
-"$CLI" --help
-"$CLI" --json peers --timeout 10
-```
+- Drag the host header to reorder the list. Confirm the list swaps positions as the preview passes other hosts.
+- Drop to save the order; press Escape to restore the prior order.
+- Confirm progress rows, menus, and drafts remain attached to the correct host.
+- Test at widths of 480, 600, and 640 pixels. Check long names, menus, and previews without horizontal scrolling.
+- At the minimum window height of 360 pixels, reach every card and action with vertical scrolling and keyboard navigation.
 
-Se o binário não existir nesse caminho, use o executável CLI extraído do pacote. Não use o executável gráfico `dukto.exe` como CLI.
+## Concurrent transfers
 
-### UI → CLI
+For native concurrency checks, use large synthetic files and a dedicated destination. Follow the [concurrency testing guide](concurrency-validation.md): wait for real progress before starting another transfer, verify overlap, cancel one transfer, and check acknowledgments and hashes.
 
-1. No receptor, inicie a CLI em porta diferente da UI. Use 44242, já empregada nos testes anteriores, desde que esteja livre.
-2. Troque a pasta de destino por uma exclusiva para direção/caso.
-3. A CLI aparecerá como `Windows-CLI-manual` ou `Mac-CLI-manual`. Se a UI também estiver aberta, os dois dispositivos virtuais podem aparecer; selecione a CLI correta.
-4. Envie pela UI, aprove no terminal quando solicitado e confira a conclusão e os arquivos. `--once` encerra o receptor depois de uma tentativa; reinicie para cada caso.
+## Record results and clean up
 
-Windows receptor:
+For each failure, record the direction, case, sender and receiver, expected and observed behavior, exact error, and screenshots. Identify whether it failed during discovery, selection, preview, approval, transfer, or integrity checking.
 
-```powershell
-& $cli --name Windows-CLI-manual receive --port 44242 --destination .\.cache\ui-matrix\received\mac-ui_win-cli\A --once
-```
-
-Mac receptor:
-
-```sh
-"$CLI" --name Mac-CLI-manual receive --port 44242 --destination ./.cache/ui-test/received/win-ui_mac-cli/A --once
-```
-
-### CLI → UI
-
-1. Deixe o receptor gráfico aberto e configure seu destino para a direção/caso atual.
-2. Liste dispositivos com `peers` e copie o ID da UI, não o ID de outro receptor CLI.
-3. Envie os caminhos do caso. Substitua `ID_DA_UI` pelo ID real e os caminhos pelos itens escolhidos. Vários arquivos/pastas são argumentos separados.
-4. Aceite no aplicativo receptor e confira sua conclusão. A CLI deve terminar com código 0 e evento `sent` com `acknowledged: true`.
-
-Windows remetente (caso A):
-
-```powershell
-& $cli --json send --peer ID_DA_UI -- .\.cache\ui-matrix\source\single\win-single.bin
-$LASTEXITCODE
-```
-
-Mac remetente (substitua o caminho pelo arquivo real da fixture):
-
-```sh
-"$CLI" --json send --peer ID_DA_UI -- "/caminho/do/arquivo"
-echo $?
-```
-
-Se precisar diagnosticar descoberta separadamente, substitua `--peer ID_DA_UI` por `--address IP:PORTA`, usando a porta anunciada pelo receptor. A UI preparada usa 4242; confirme o anúncio atual. Não use `--peer` e `--address` juntos.
-
-## 6. Matriz de execução
-
-Preencha cada célula com OK, FALHOU ou BLOQUEADO. Não marque como OK um caso que o controle da UI não permitiu executar.
-
-| Origem → destino | A | B | C | D | E |
-|---|---|---|---|---|---|
-| Windows UI → Mac UI | | | | | |
-| Mac UI → Windows UI | | | | | |
-| Windows UI → Mac CLI | | | | | |
-| Mac CLI → Windows UI | | | | | |
-| Mac UI → Windows CLI | | | | | |
-| Windows CLI → Mac UI | | | | | |
-
-São 30 transferências principais, mais as repetições por arrastar e soltar dos casos A/B.
-
-## 7. Integridade e comportamento
-
-Compare SHA-256 de cada arquivo na origem e no destino. Um hash igual confirma conteúdo idêntico; a estrutura e as pastas vazias precisam ser conferidas separadamente.
-
-Windows:
-
-```powershell
-Get-FileHash -Algorithm SHA256 -LiteralPath 'C:\caminho\arquivo'
-```
-
-Mac:
-
-```sh
-shasum -a 256 '/caminho/arquivo'
-```
-
-O manifesto das fixtures Windows já está em `.cache/ui-matrix/windows-source-manifest.json`, com caminho, tamanho e SHA-256.
-
-Teste também uma vez em cada direção UI → UI:
-
-- [ ] Cancelar o seletor não inicia transferência.
-- [ ] Remover um item da prévia exclui apenas esse item do envio.
-- [ ] Cancelar a prévia não envia nada.
-- [ ] Rejeitar no receptor informa a rejeição no remetente e não entrega os arquivos.
-- [ ] Cancelar um arquivo grande durante o envio encerra a operação sem anunciar sucesso. Registre se sobraram arquivos parciais.
-- [ ] Fechar o receptor durante um envio produz erro recuperável; após reabrir, um novo envio funciona.
-
-Para os dois últimos testes, use uma cópia descartável de arquivo suficientemente grande para permitir a ação; os arquivos pequenos podem terminar antes do clique.
-
-## 8. Registrar falhas e encerrar
-
-Para cada falha, anote: direção, caso, nomes dos dispositivos, caminho de origem/destino, mensagem exata, comportamento esperado/observado e screenshot dos dois lados. Indique se falhou na descoberta, seleção, prévia, aprovação, transmissão ou integridade.
-
-Ao terminar, pare receptores CLI com Ctrl+C, restaure a pasta de recebimento original nas UIs e guarde as evidências. Não apague arquivos pessoais nem resultados antes de revisar.
-
-Os resultados da execução ficam separados em `.cache/ui-matrix/RESULTADOS.md`. Os 60 testes CLI anteriores são evidências separadas.
-
-## 9. Adicionar itens um por vez
-
-Repita no Windows e no Mac, enviando ao outro computador. Use uma pasta de destino exclusiva para cada execução.
-
-1. Abra o menu ⋮ do destinatário, clique em **Adicionar arquivos** e escolha um arquivo.
-2. No menu ⋮ do mesmo host, clique novamente em **Adicionar arquivos** e escolha outro arquivo. Os dois devem permanecer e o destinatário deve ser o mesmo.
-3. No menu ⋮ do mesmo host, clique em **Adicionar pastas** e escolha uma pasta com subpasta e pasta vazia. Confira os três itens e a soma dos tamanhos.
-4. Adicione novamente o primeiro arquivo: ele deve continuar aparecendo apenas uma vez.
-5. Abra cada seletor e cancele. A seleção anterior deve permanecer intacta.
-6. Remova um item e adicione-o novamente. Confira nome, quantidade e tamanho.
-7. Envie, aceite no outro computador e compare nomes, estrutura, pastas vazias, tamanhos e SHA-256.
-8. Repita com arrastes separados: primeiro um arquivo, depois outro, depois uma pasta. Solte sempre sobre o card do destinatário, inclusive com a prévia aberta. Nenhum arraste deve substituir os itens anteriores. Soltar no espaço vazio não deve selecionar arquivos nem escolher um host automaticamente.
-9. Misture os métodos: arraste um arquivo e adicione uma pasta pelo botão; depois faça o inverso.
-10. Cancele a prévia e inicie uma seleção nova. Nenhum item antigo deve reaparecer. Remova também o último item para confirmar que a seleção é encerrada.
-
-Na altura mínima da janela, confira rolagem, botões de adicionar, remover, enviar e cancelar. Registre cada método separadamente: um teste pelo botão não comprova o arraste nativo.
-
-## 10. Associação ao host e limites da janela
-
-- [ ] Com dois hosts, adicione arquivos diferentes pelo menu de cada um. Cada prévia contém somente seus próprios arquivos.
-- [ ] Cancele/remova itens de um host: a seleção do outro permanece intacta.
-- [ ] Envie uma prévia: o pedido chega apenas ao host correspondente.
-- [ ] Remova um host da descoberta durante a seleção: nenhum item migra para outro host nem reaparece quando o host retorna.
-- [ ] Arraste sobre cada card: somente o destinatário sob o ponteiro fica realçado. Solte fora dos cards: nenhuma seleção muda.
-- [ ] Redimensione entre 480 e 640 px; tente ultrapassar os dois limites. Confira menu, nomes longos e prévia sem rolagem horizontal.
-- [ ] Na altura mínima de 360 px, alcance todos os cards e botões por rolagem vertical e teclado.
-
-## 11. Transferências simultâneas
-
-Use arquivos sintéticos grandes (512 MiB ou maiores) e uma pasta exclusiva de
-recebimento. A conclusão dos testes CLI não substitui esta rodada nativa da UI.
-
-- [ ] Envie um arquivo grande ao host A. Espere progresso real acima de zero e abaixo de 100%.
-- [ ] Ainda durante esse envio, use o menu ⋮ do mesmo host e envie outro arquivo grande e, em uma terceira transferência, um arquivo pequeno.
-- [ ] Confira três progressos independentes; o pequeno pode concluir antes do primeiro grande.
-- [ ] Durante os envios, inicie um envio no sentido inverso e aceite na UI. Envio e recebimento devem progredir juntos no card correspondente.
-- [ ] Faça dois pedidos de recebimento antes de responder. Aceitar/rejeitar o primeiro deve mostrar o segundo sem perder nenhum pedido.
-- [ ] Cancele somente uma transferência ativa. Ela deve parar de transmitir; as demais continuam e concluem com SHA-256 correto.
-- [ ] Interrompa um remetente. Apenas o recebimento correspondente deve apresentar erro; o receptor permanece disponível.
-- [ ] Repita com nomes de arquivos iguais e conteúdos diferentes. Os arquivos completos devem permanecer distintos, usando sufixos de conflito.
-- [ ] Confira cada recibo, quantidade, tamanho e SHA-256. Registre intervalos de progresso sobrepostos; iniciar dois processos ou ver duas barras não comprova concorrência.
-
-Restaure as pastas originais e remova somente os arquivos sintéticos criados para
-essa rodada, depois de guardar manifestos e resultados.
+Stop temporary CLI receivers with Ctrl+C, restore original destination settings, and remove only the synthetic files created for the test. Preserve manifests and logs until reviewed. Never recursively delete a directory that may contain personal files.

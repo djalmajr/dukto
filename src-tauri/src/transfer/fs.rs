@@ -175,76 +175,10 @@ pub fn resolve_conflict(path: &Path) -> PathBuf {
     parent.join(&new_name)
 }
 
-/// Atomically create a destination file, choosing the first available conflict name.
-///
-/// `resolve_conflict` is useful for displaying a candidate path, but its existence check
-/// cannot reserve that path. Receivers must use this helper when opening the file so that
-/// concurrent transfers cannot truncate one another after choosing the same name.
-pub async fn create_conflict_free_file(
-    path: &Path,
-) -> Result<(PathBuf, tokio::fs::File), std::io::Error> {
-    let parent = path.parent().unwrap_or(Path::new("."));
-    let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("file");
-    let ext = path.extension().and_then(|e| e.to_str());
-
-    for index in 0..=999 {
-        let candidate = if index == 0 {
-            path.to_path_buf()
-        } else {
-            let name = match ext {
-                Some(extension) => format!("{} ({}).{}", stem, index, extension),
-                None => format!("{} ({})", stem, index),
-            };
-            parent.join(name)
-        };
-
-        match tokio::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&candidate)
-            .await
-        {
-            Ok(file) => return Ok((candidate, file)),
-            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
-            Err(error) => return Err(error),
-        }
-    }
-
-    // Preserve the existing UUID fallback contract, while still making the final
-    // creation atomic in the unlikely event that all numbered candidates exist.
-    for _ in 0..64 {
-        let name = match ext {
-            Some(extension) => format!("{}_{}.{}", stem, uuid::Uuid::new_v4(), extension),
-            None => format!("{}_{}", stem, uuid::Uuid::new_v4()),
-        };
-        let candidate = parent.join(name);
-
-        match tokio::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&candidate)
-            .await
-        {
-            Ok(file) => return Ok((candidate, file)),
-            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
-            Err(error) => return Err(error),
-        }
-    }
-
-    Err(std::io::Error::new(
-        std::io::ErrorKind::AlreadyExists,
-        format!(
-            "Unable to create a unique destination for {}",
-            path.display()
-        ),
-    ))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::fs;
-    use std::sync::Arc;
 
     fn temp_dir(suffix: &str) -> PathBuf {
         let dir =
@@ -420,52 +354,5 @@ mod tests {
         );
 
         fs::remove_dir_all(&dir).ok();
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-    async fn concurrent_conflict_free_creations_reserve_distinct_files() {
-        use tokio::io::AsyncWriteExt;
-        use tokio::sync::Barrier;
-
-        let dir = temp_dir("concurrent-reservation");
-        let requested_path = dir.join("shared.bin");
-        let start = Arc::new(Barrier::new(2));
-        let opened = Arc::new(Barrier::new(2));
-        let payloads = [vec![b'A'; 256 * 1024], vec![b'B'; 256 * 1024]];
-
-        let mut tasks = Vec::new();
-        for payload in payloads {
-            let path = requested_path.clone();
-            let start = start.clone();
-            let opened = opened.clone();
-            tasks.push(tokio::spawn(async move {
-                start.wait().await;
-                let (created_path, mut file) = create_conflict_free_file(&path).await.unwrap();
-                // Ensure both handles are open before either writes. Replacing create_new
-                // with create+truncate then deterministically targets the same path twice.
-                opened.wait().await;
-                file.write_all(&payload).await.unwrap();
-                (created_path, payload)
-            }));
-        }
-
-        let mut results = Vec::new();
-        for task in tasks {
-            results.push(task.await.unwrap());
-        }
-
-        let paths = [results[0].0.clone(), results[1].0.clone()];
-        let contents = [
-            fs::read(&results[0].0).unwrap(),
-            fs::read(&results[1].0).unwrap(),
-        ];
-        fs::remove_dir_all(&dir).unwrap();
-
-        assert_ne!(
-            paths[0], paths[1],
-            "each transfer must reserve a unique path"
-        );
-        assert_eq!(contents[0], results[0].1);
-        assert_eq!(contents[1], results[1].1);
     }
 }

@@ -2,57 +2,37 @@
 
 ## Prerequisites
 
-- **Bun** — package manager and test runner
-- **Rust** — stable toolchain via rustup
-- **Tauri CLI** — `cargo install tauri-cli@^2`
+- **Bun** for frontend dependencies, scripts, and tests.
+- **Rust** stable toolchain, installed with rustup.
+- Platform prerequisites required by Tauri. Linux builds require WebKitGTK and related system libraries; see the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for your operating system.
 
-On macOS, no additional dependencies. On Linux, you may need webkit2gtk and related system libraries (see Tauri's prerequisites docs).
+## Install and run
 
-## Running
+Run these commands from the repository root:
 
-```bash
-bun install              # install frontend dependencies
-bun run dev              # full app: Tauri + SolidJS + Rust (hot reload for both)
-bun run proto:dev        # prototype only: standalone Vite server, no Rust needed
-```
+~~~sh
+bun install
+bun run dev
+~~~
 
-The prototype is useful for UI iteration — it uses the same real components with mock data, so you can design and test UI flows without compiling Rust or having a second device on the network.
+The development command runs the Tauri desktop shell with the Vite frontend. Frontend changes hot-reload; Rust changes rebuild the native backend.
 
-## Building
+The standalone prototype is optional and does not connect to the network or native APIs:
 
-```bash
-bun run build            # production build (Tauri bundles the app)
-bun run vite:build       # frontend only (outputs to dist/)
-```
+~~~sh
+bun run proto:dev
+~~~
 
-## Linting and Testing
+It uses mock state to preview common host, transfer, and settings flows. Use the desktop app for native dialogs, network transfers, operating-system integration, and final accessibility checks.
 
-```bash
-bun run lint             # biome check + TypeScript noEmit
-bun run lint:fix         # biome auto-fix (import sorting, formatting)
-bun run test             # bun test runner
-```
+## Build and validate
 
-Biome handles import organization, formatting (tabs, double quotes, semicolons), and recommended lint rules. It runs on both the main app and the prototype.
+~~~sh
+bun run build
+bun run lint
+bun run test
+bun run site:check
+bun run site:build
+~~~
 
-## How Development Mode Works
-
-`bun run dev` starts two processes:
-
-1. **Vite dev server** on port 1420 — serves the SolidJS frontend with hot module replacement
-2. **Tauri dev process** — compiles and runs the Rust backend, opens the native window pointing at localhost:1420
-
-Changes to frontend code hot-reload instantly. Changes to Rust code trigger a recompile (typically 2-5 seconds for incremental builds).
-
-## How the Prototype Works
-
-`bun run proto:dev` starts a standalone Vite server (port 3333) that serves the same SolidJS components but wired to mock stores instead of Tauri. The `<z-proto>` web component provides the desktop window chrome with viewport controls, resize handles, and device presets.
-
-The prototype imports real components from the main app via the `~/` alias. This means any component changes in the main app are immediately reflected in the prototype (and vice versa — components are developed and tested in the prototype first, then used in the real app without changes).
-
-## Environment
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `TAURI_DEV_HOST` | — | Override Tauri's dev server host |
-| `RUST_LOG` | `dukto_lib=debug` | Rust logging filter (tracing-subscriber) |
+`bun run build` creates desktop bundles for the current platform. The site commands type-check and build the public website. Platform installers and signed updater artifacts are produced by the release workflow.

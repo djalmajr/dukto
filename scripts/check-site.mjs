@@ -16,12 +16,28 @@ assert.equal(files.length, 33);
 for (const file of files) {
 	const html = await readFile(file, "utf8");
 	assert.equal((html.match(/<h1[\s>]/g) || []).length, 1, file);
-	const locale = file.replaceAll("\\", "/").includes("/en-us/")
+	const normalizedFile = file.replaceAll("\\", "/");
+	const routeLocale = normalizedFile.includes("/en-us/")
 		? "en-us"
-		: file.replaceAll("\\", "/").includes("/es-es/")
+		: normalizedFile.includes("/es-es/")
 			? "es-es"
 			: "pt-br";
-	assert.ok(html.includes(`<html lang="${locale}"`), file);
+	const isGuidePage = /\/docs\/[^/]+\/index\.html$/.test(normalizedFile);
+	const expectedHtmlLocale = isGuidePage ? "en-us" : routeLocale;
+	const htmlLocale = html.match(/<html lang="([^"]+)"/)?.[1]?.toLowerCase();
+	assert.equal(htmlLocale, expectedHtmlLocale, `${file}: unexpected document language`);
+	if (isGuidePage) {
+		const sidebar = html.match(/<aside class="docs-sidebar">([\s\S]*?)<\/aside>/)?.[1];
+		assert.ok(sidebar, `${file}: missing documentation sidebar`);
+		const localizedNavigation = {
+			"pt-br": ["USANDO O DUKTO", "Arquivos e pastas"],
+			"en-us": ["USING DUKTO", "Files and folders"],
+			"es-es": ["USAR DUKTO", "Archivos y carpetas"],
+		}[routeLocale];
+		for (const label of localizedNavigation) {
+			assert.ok(sidebar.includes(label), `${file}: missing localized navigation label: ${label}`);
+		}
+	}
 	assert.match(html, /hreflang="en-us"/, file);
 	assert.match(html, /hreflang="es-es"/, file);
 	assert.match(html, /data-hk=/, `${file}: missing prerendered content`);

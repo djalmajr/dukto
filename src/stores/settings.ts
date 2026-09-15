@@ -3,6 +3,7 @@ import { createResource, createSignal } from "solid-js";
 
 export interface AppSettings {
 	destination_dir: string;
+	peer_order: string[];
 }
 
 export type ThemeMode = "light" | "dark" | "system";
@@ -17,7 +18,8 @@ async function fetchSettings(): Promise<AppSettings> {
 	return invoke<AppSettings>("get_settings");
 }
 
-const [settings, { refetch: refetchSettings }] = createResource<AppSettings>(fetchSettings);
+const [settings, { refetch: refetchSettings, mutate: mutateSettings }] =
+	createResource<AppSettings>(fetchSettings);
 
 function resolvedTheme(): "light" | "dark" {
 	const selectedTheme = theme();
@@ -38,3 +40,8 @@ async function setDestinationDir(path: string) {
 }
 
 export { settings, theme, resolvedTheme, setTheme, setDestinationDir };
+
+export async function savePeerOrder(order: string[]) {
+	await invoke("set_peer_order", { order });
+	mutateSettings((current) => (current ? { ...current, peer_order: order } : current));
+}

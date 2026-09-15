@@ -1,8 +1,10 @@
 #[cfg(feature = "desktop")]
 pub mod cancellation;
 pub mod fs;
+pub mod partial_file;
 pub mod quic;
 pub mod receiver;
+pub mod safe_destination;
 pub mod sender;
 #[cfg(feature = "desktop")]
 pub mod server;

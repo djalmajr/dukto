@@ -9,9 +9,9 @@ import { pageMetadata } from "./metadata";
 
 describe("website localization", () => {
 	test("language switching preserves the guide and anchor without duplicate prefixes", () => {
-		const path = "/en-us/docs/cli/#secao-2";
-		expect(localizedPath("es-es", path)).toBe("/es-es/docs/cli/#secao-2");
-		expect(localizedPath("pt-br", path)).toBe("/docs/cli/#secao-2");
+		const path = "/en-us/docs/cli/#section-2";
+		expect(localizedPath("es-es", path)).toBe("/es-es/docs/cli/#section-2");
+		expect(localizedPath("pt-br", path)).toBe("/docs/cli/#section-2");
 		expect(localizedPath("en-us", path)).toBe(path);
 		expect(stripLocale("/es-es/")).toBe("/");
 		expect(routeLocale("/en-us/")).toBe("en-us");
@@ -20,15 +20,19 @@ describe("website localization", () => {
 			"https://github.com/djalmajr/dukto",
 		);
 	});
-	test("both translations cover every guide, item, and literal UI message", () => {
+	test("navigation is localized while documentation content remains English", () => {
 		expect(Object.keys(en).sort()).toEqual(Object.keys(es).sort());
-		const messages = new Set<string>();
+		const navigation = new Set<string>();
+		const documentContent = new Set<string>();
 		for (const guide of guides) {
-			for (const text of [guide.title, guide.summary, guide.group]) messages.add(text);
+			navigation.add(guide.navTitle);
+			navigation.add(guide.navGroup);
+			for (const text of [guide.title, guide.group, guide.summary]) documentContent.add(text);
 			for (const section of guide.sections) {
-				messages.add(section.title);
-				if (section.text) messages.add(section.text);
-				for (const item of section.items || []) messages.add(item);
+				documentContent.add(section.title);
+				if (section.text) documentContent.add(section.text);
+				for (const item of section.items || []) documentContent.add(item);
+				if (section.code) documentContent.add(section.code);
 			}
 		}
 		const file = ts.createSourceFile(
@@ -45,19 +49,38 @@ describe("website localization", () => {
 				node.arguments[0] &&
 				ts.isStringLiteral(node.arguments[0])
 			)
-				messages.add(node.arguments[0].text);
+				navigation.add(node.arguments[0].text);
 			ts.forEachChild(node, visit);
 		}
 		visit(file);
-		for (const message of messages) {
+		for (const message of navigation) {
 			expect((en as Record<string, string>)[message], `Missing English: ${message}`).toBeTruthy();
 			expect((es as Record<string, string>)[message], `Missing Spanish: ${message}`).toBeTruthy();
 		}
+		for (const message of documentContent) {
+			expect(
+				(en as Record<string, string>)[message],
+				`Documentation should not be translated: ${message}`,
+			).toBeUndefined();
+			expect(
+				(es as Record<string, string>)[message],
+				`Documentation should not be translated: ${message}`,
+			).toBeUndefined();
+		}
 	});
-	test("page metadata follows the locale including not found pages", () => {
-		expect(pageMetadata("/en-us/docs/primeiros-passos/").title).toBe(
-			"Getting started — Dukto Docs",
-		);
+	test("guide metadata and document language stay en-US on every route", () => {
+		for (const path of [
+			"/docs/primeiros-passos/",
+			"/en-us/docs/primeiros-passos/",
+			"/es-es/docs/primeiros-passos/",
+		]) {
+			const metadata = pageMetadata(path);
+			expect(metadata.locale).toBe("en-US");
+			expect(metadata.title).toBe("Getting started — Dukto Docs");
+			expect(metadata.description).toBe(
+				"Two computers. One network. Your files where they belong.",
+			);
+		}
 		expect(pageMetadata("/es-es/404.html").title).toBe("Página no encontrada — Dukto");
 		expect(translate("pt-br", "Primeiros passos")).toBe("Primeiros passos");
 	});

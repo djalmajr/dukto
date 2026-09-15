@@ -5,6 +5,8 @@ import { Tabs, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { TextField, TextFieldInput } from "~/components/ui/text-field";
 import type { AppUpdateErrorCode, AppUpdateStatus } from "~/helpers/app-update-controller";
 import { t } from "~/helpers/i18n";
+import { nativeErrorKey } from "~/helpers/native-error";
+import LucideRefreshCw from "~icons/lucide/refresh-cw";
 
 export type ThemeMode = "light" | "dark" | "system";
 
@@ -60,13 +62,19 @@ function SettingsModal(props: SettingsModalProps) {
 	const errorMessage = () => {
 		if (props.updateErrorCode === "feedUnavailable") return t("updateFeedUnavailable");
 		if (props.updateErrorCode === "check") {
-			return t("updateCheckFailedWithDetails", { message: props.updateErrorMessage ?? "" });
+			return t("updateCheckFailedWithDetails", {
+				message: t(nativeErrorKey(props.updateErrorMessage)),
+			});
 		}
 		if (props.updateErrorCode === "download") {
-			return t("updateDownloadFailedWithDetails", { message: props.updateErrorMessage ?? "" });
+			return t("updateDownloadFailedWithDetails", {
+				message: t(nativeErrorKey(props.updateErrorMessage)),
+			});
 		}
 		if (props.updateErrorCode === "install") {
-			return t("updateInstallFailedWithDetails", { message: props.updateErrorMessage ?? "" });
+			return t("updateInstallFailedWithDetails", {
+				message: t(nativeErrorKey(props.updateErrorMessage)),
+			});
 		}
 		return null;
 	};
@@ -122,31 +130,46 @@ function SettingsModal(props: SettingsModalProps) {
 							</Tabs>
 						</div>
 					</Show>
-					<div class="space-y-1">
-						<p class="text-xs font-medium text-muted-foreground">{t("appUpdates")}</p>
+					<footer class="space-y-1.5 border-t border-border pt-3" aria-label={t("appUpdates")}>
 						<div class="flex items-center justify-between gap-2">
-							<div class="min-w-0 space-y-0.5">
-								<p class="text-xs">
-									{t("currentVersion", { version: props.currentVersion ?? "..." })}
-								</p>
-								<p class="text-xs text-muted-foreground">{statusMessage()}</p>
-							</div>
+							<span
+								class="shrink-0 text-xs text-muted-foreground"
+								aria-label={t("currentVersion", { version: props.currentVersion ?? "..." })}
+							>
+								v{props.currentVersion ?? "..."}
+							</span>
 							<Button
-								variant="outline"
+								variant="ghost"
+								class="h-6 min-w-0 gap-1.5 px-1.5 text-xs font-normal text-muted-foreground hover:text-foreground [&_svg]:size-3"
 								disabled={props.updateBusy}
 								onClick={props.onCheckForUpdates}
 							>
-								{props.updateStatus === "checking"
-									? t("checkingForUpdates")
-									: props.availableVersion
-										? t("viewUpdate")
-										: t("checkForUpdates")}
+								<LucideRefreshCw
+									class="size-3 shrink-0"
+									classList={{ "motion-safe:animate-spin": props.updateStatus === "checking" }}
+								/>
+								{props.availableVersion ? t("viewUpdate") : t("checkForUpdates")}
 							</Button>
 						</div>
-						<Show when={errorMessage()}>
-							{(message) => <p class="text-xs text-destructive">{message()}</p>}
+						<Show
+							when={
+								props.updateStatus !== "idle" &&
+								props.updateStatus !== "checking" &&
+								!errorMessage()
+							}
+						>
+							<output class="block text-xs leading-relaxed text-muted-foreground">
+								{statusMessage()}
+							</output>
 						</Show>
-					</div>
+						<Show when={errorMessage()}>
+							{(message) => (
+								<output class="block break-words text-xs leading-relaxed text-destructive">
+									{message()}
+								</output>
+							)}
+						</Show>
+					</footer>
 				</div>
 			</DialogContent>
 		</Dialog>

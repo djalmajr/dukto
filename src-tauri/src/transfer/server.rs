@@ -5,14 +5,16 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager};
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::{mpsc, watch, Mutex};
 
-use crate::crypto::noise::handshake_responder;
+use crate::crypto::noise::{
+    handshake_responder, is_remote_transfer_cancellation, RemoteTransferCancelled,
+};
 use crate::state::app_state::AppState;
 use crate::state::device::DeviceIdentity;
 use crate::transfer::cancellation::TransferRegistry;
 use crate::transfer::quic::create_endpoint;
-use crate::transfer::receiver::receive_transfer_with_accept;
+use crate::transfer::receiver::receive_transfer_with_cancellation;
 
 /// Event emitted to the frontend when an incoming transfer request arrives.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -58,17 +60,37 @@ async fn handle_incoming(
     let approval_handle = app_handle.clone();
     let progress_handle = app_handle.clone();
     let active_transfer = Arc::new(Mutex::new(None));
+    let (cancellation_sender, cancellation_receiver) =
+        watch::channel(None::<Arc<crate::transfer::cancellation::TransferCancellation>>);
     let was_rejected = Arc::new(AtomicBool::new(false));
+    let was_remote_cancelled = Arc::new(AtomicBool::new(false));
     let active_transfer_for_approval = active_transfer.clone();
     let was_rejected_for_approval = was_rejected.clone();
+    let was_remote_cancelled_for_approval = was_remote_cancelled.clone();
     let registry_for_approval = registry.clone();
-    let result = receive_transfer_with_accept(
+    let pending_for_approval = pending.clone();
+    let cancellation_sender_for_approval = cancellation_sender.clone();
+    let cancellation_wait = async move {
+        let mut receiver = cancellation_receiver;
+        loop {
+            let control = { receiver.borrow().clone() };
+            if let Some(control) = control {
+                control.cancelled().await;
+                return;
+            }
+            if receiver.changed().await.is_err() {
+                return;
+            }
+        }
+    };
+    let result = receive_transfer_with_cancellation(
         &mut send,
         &mut recv,
         &mut noise,
         &destination,
-        move |header| async move {
+        move |header, peer_cancelled| async move {
             let transfer_id = header.transfer_id.clone();
+            let approval_connection = transfer_connection.clone();
             let control = match registry_for_approval.register(transfer_id.clone()).await {
                 Ok(control) => control,
                 Err(error) => {
@@ -82,11 +104,12 @@ async fn handle_incoming(
             }
             *active_transfer_for_approval.lock().await =
                 Some((transfer_id.clone(), control.clone()));
+            cancellation_sender_for_approval.send_replace(Some(control.clone()));
 
             let (tx, mut rx) = mpsc::channel(1);
             // Register the decision before notifying the UI to avoid losing fast responses.
             let inserted = {
-                let mut pending = pending.lock().await;
+                let mut pending = pending_for_approval.lock().await;
                 if pending.contains_key(&transfer_id) {
                     false
                 } else {
@@ -99,13 +122,6 @@ async fn handle_incoming(
                 *active_transfer_for_approval.lock().await = None;
                 return false;
             }
-            use tauri_plugin_notification::NotificationExt;
-            let _ = approval_handle
-                .notification()
-                .builder()
-                .title("Incoming transfer")
-                .body(format!("{} items from another device", header.item_count))
-                .show();
             let request = IncomingTransferRequest {
                 transfer_id: header.transfer_id.clone(),
                 sender_device_id: header.sender_device_id,
@@ -114,15 +130,37 @@ async fn handle_incoming(
                 total_size: header.total_size,
             };
             let _ = approval_handle.emit("transfer:incoming", &request);
+            let mut peer_cancelled = peer_cancelled;
+            let peer_cancel_wait = async {
+                loop {
+                    let was_cancelled = *peer_cancelled.borrow();
+                    if was_cancelled {
+                        break;
+                    }
+                    if peer_cancelled.changed().await.is_err() {
+                        break;
+                    }
+                }
+            };
             let decision = tokio::select! {
                 biased;
                 _ = control.cancelled() => None,
+                _ = peer_cancel_wait => {
+                    was_remote_cancelled_for_approval.store(true, Ordering::Release);
+                    None
+                },
+                reason = approval_connection.closed() => {
+                    if is_remote_transfer_cancellation(&reason) {
+                        was_remote_cancelled_for_approval.store(true, Ordering::Release);
+                    }
+                    None
+                },
                 decision = tokio::time::timeout(std::time::Duration::from_secs(60), rx.recv()) => {
                     decision.ok().flatten()
                 }
             };
             {
-                let mut pending = pending.lock().await;
+                let mut pending = pending_for_approval.lock().await;
                 if pending
                     .get(&transfer_id)
                     .is_some_and(|current| current.tx.same_channel(&tx))
@@ -131,7 +169,10 @@ async fn handle_incoming(
                 }
             }
             let accepted = decision.unwrap_or(false);
-            if !accepted && !control.is_cancelled() {
+            if !accepted
+                && !control.is_cancelled()
+                && !was_remote_cancelled_for_approval.load(Ordering::Acquire)
+            {
                 was_rejected_for_approval.store(true, Ordering::Release);
                 let _ = approval_handle.emit("transfer:rejected", &transfer_id);
             }
@@ -140,10 +181,17 @@ async fn handle_incoming(
         move |progress| {
             let _ = progress_handle.emit("transfer:progress", progress);
         },
+        cancellation_wait,
     )
     .await;
+    let result = if was_remote_cancelled.load(Ordering::Acquire) {
+        Err(Box::new(RemoteTransferCancelled) as Box<dyn std::error::Error + Send + Sync>)
+    } else {
+        result
+    };
     let active = active_transfer.lock().await.take();
     let transfer_context = if let Some((transfer_id, control)) = active {
+        pending.lock().await.remove(&transfer_id);
         registry.remove(&transfer_id, &control).await;
         control.close_connection().await;
         Some((transfer_id, control))

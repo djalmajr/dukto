@@ -4,7 +4,10 @@ use dukto_lib::{
     crypto::noise::handshake_initiator,
     discovery::types::{PeerInfo, PROTOCOL_VERSION},
     state::device::DeviceIdentity,
-    transfer::{quic::create_endpoint, sender::send_transfer},
+    transfer::{
+        quic::create_endpoint,
+        sender::{send_transfer_with_cancellation, CancellableSendCallbacks},
+    },
 };
 use serde_json::{json, Value};
 use std::{
@@ -13,12 +16,67 @@ use std::{
     net::SocketAddr,
     path::PathBuf,
     process::ExitCode,
+    sync::Mutex,
     time::{Duration, Instant},
 };
+use tokio::sync::watch;
 
 mod receive;
 
 type Error = Box<dyn std::error::Error + Send + Sync>;
+
+struct Shutdown {
+    endpoint: Mutex<Option<quinn::Endpoint>>,
+    cancelled: watch::Sender<bool>,
+}
+
+impl Default for Shutdown {
+    fn default() -> Self {
+        let (cancelled, _) = watch::channel(false);
+        Self {
+            endpoint: Mutex::new(None),
+            cancelled,
+        }
+    }
+}
+
+impl Shutdown {
+    fn register(&self, endpoint: &quinn::Endpoint) {
+        *self.endpoint.lock().expect("endpoint lock poisoned") = Some(endpoint.clone());
+    }
+
+    fn cancel(&self) {
+        self.cancelled.send_replace(true);
+    }
+
+    fn cancellation_receiver(&self) -> watch::Receiver<bool> {
+        self.cancelled.subscribe()
+    }
+
+    async fn wait_cancelled(&self) {
+        wait_for_cancel(self.cancellation_receiver()).await;
+    }
+
+    async fn close_endpoint(&self) {
+        let endpoint = self.endpoint.lock().expect("endpoint lock poisoned").take();
+        if let Some(endpoint) = endpoint {
+            endpoint.close(
+                dukto_lib::protocol::types::TRANSFER_CANCEL_CLOSE_CODE.into(),
+                dukto_lib::protocol::types::TRANSFER_CANCEL_CLOSE_REASON,
+            );
+            // Let QUIC deliver its close packet before the runtime exits.
+            let _ = tokio::time::timeout(Duration::from_secs(5), endpoint.wait_idle()).await;
+        }
+    }
+}
+
+async fn wait_for_cancel(mut receiver: watch::Receiver<bool>) {
+    while !*receiver.borrow() {
+        if receiver.changed().await.is_err() {
+            break;
+        }
+    }
+}
 
 #[derive(Parser)]
 #[command(
@@ -98,9 +156,20 @@ async fn main() -> ExitCode {
             tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "warn".into()),
         )
         .init();
+    let shutdown = Shutdown::default();
+    // Keep the operation alive long enough to exchange reliable stream-level
+    // cancellation signals before closing its endpoint.
+    let execution = run(&args, &shutdown);
+    tokio::pin!(execution);
     let result = tokio::select! {
-        result = run(&args) => result,
-        _ = tokio::signal::ctrl_c() => Err("Interrupted".into()),
+        biased;
+        result = &mut execution => result,
+        _ = tokio::signal::ctrl_c() => {
+            shutdown.cancel();
+            let _ = tokio::time::timeout(Duration::from_secs(5), &mut execution).await;
+            shutdown.close_endpoint().await;
+            Err("Transfer cancelled".into())
+        },
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,
@@ -115,7 +184,7 @@ async fn main() -> ExitCode {
     }
 }
 
-async fn run(args: &Args) -> Result<(), Error> {
+async fn run(args: &Args, shutdown: &Shutdown) -> Result<(), Error> {
     let data_dir = args
         .data_dir
         .clone()
@@ -167,6 +236,7 @@ async fn run(args: &Args) -> Result<(), Error> {
                     addresses
                 };
                 let endpoint = create_endpoint("0.0.0.0:0".parse()?).map_err(|e| e.to_string())?;
+                shutdown.register(&endpoint);
                 let mut connected = None;
                 let mut last_error = "Peer has no usable IPv4 endpoint".to_string();
                 for addr in addresses {
@@ -192,18 +262,21 @@ async fn run(args: &Args) -> Result<(), Error> {
                 let (mut send, mut recv) = conn.open_bi().await?;
                 let mut noise = handshake_initiator(&mut send, &mut recv).await?;
                 let mut last_progress = Instant::now();
-                let bytes = send_transfer(
+                let bytes = send_transfer_with_cancellation(
                     &mut send,
                     &mut recv,
                     &mut noise,
                     paths,
                     &transfer_id,
                     &device,
-                    |p| {
-                        if last_progress.elapsed() >= Duration::from_secs(1) {
-                            emit(args.json, "progress", json!(p));
-                            last_progress = Instant::now();
-                        }
+                    CancellableSendCallbacks {
+                        cancelled: shutdown.wait_cancelled(),
+                        on_progress: |p: &dukto_lib::protocol::types::TransferProgress| {
+                            if last_progress.elapsed() >= Duration::from_secs(1) {
+                                emit(args.json, "progress", json!(p));
+                                last_progress = Instant::now();
+                            }
+                        },
                     },
                 )
                 .await?;
@@ -236,6 +309,7 @@ async fn run(args: &Args) -> Result<(), Error> {
                     timeout: Duration::from_secs(*timeout),
                 },
                 &device,
+                shutdown,
             )
             .await?;
         }

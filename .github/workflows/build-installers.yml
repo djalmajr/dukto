@@ -147,6 +147,18 @@ jobs:
           APPIMAGE_EXTRACT_AND_RUN: "1"
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      - name: Patch Linux AppImage for host Mesa compatibility
+        if: runner.os == 'Linux'
+        env:
+          RUST_TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          asset="$(find "src-tauri/target/$RUST_TARGET/release/bundle" -type f -name '*.AppImage' -print -quit)"
+          if [[ -z "$asset" ]]; then
+            echo "::error::No AppImage was produced for $RUST_TARGET"
+            exit 1
+          fi
+          node scripts/patch-appimage.mjs "$RUST_TARGET" "$asset"
       - name: Sign updater bundle when --no-sign skipped its signature
         shell: bash
         env:
@@ -171,6 +183,12 @@ jobs:
             exit 1
           fi
           asset="${bundles[0]}"
+          # Linux AppImages are repacked immediately before this step, so any
+          # signature emitted by the bundler describes stale bytes. Always sign
+          # the final AppImage; other targets keep a signature emitted by Tauri.
+          if [[ "$RUST_TARGET" == *-unknown-linux-gnu ]]; then
+            rm -f "$asset.sig"
+          fi
           if [[ ! -s "$asset.sig" ]]; then
             if [[ -z "$TAURI_SIGNING_PRIVATE_KEY" ]]; then
               echo "::error::TAURI_SIGNING_PRIVATE_KEY is required to sign $asset"

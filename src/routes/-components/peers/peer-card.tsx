@@ -9,6 +9,7 @@ import {
 	DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
 import { t } from "~/helpers/i18n";
+import { nativeErrorKey } from "~/helpers/native-error";
 import { formatBytes } from "~/utils/format";
 import LucideBan from "~icons/lucide/ban";
 import LucideEllipsisVertical from "~icons/lucide/ellipsis-vertical";
@@ -37,6 +38,7 @@ export interface PeerCardProps {
 	};
 	transfers?: TransferSlot[];
 	expandedContent?: JSX.Element;
+	headerDrag?: JSX.HTMLAttributes<HTMLDivElement>;
 	dropHighlight?: boolean;
 	dropTargetEnabled?: boolean;
 	actionsDisabled?: boolean;
@@ -122,34 +124,41 @@ function TransferRow(props: {
 				<span class="ml-auto flex shrink-0 items-center gap-1.5 tabular-nums text-muted-foreground">
 					<Show when={props.slot.status === "active"}>
 						{formatBytes(props.slot.bytesSent)} / {formatBytes(props.slot.bytesTotal)}
-						<button
-							type="button"
-							class="pointer-events-auto flex h-5 w-5 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-							title="Abort transfer"
+						<Button
+							variant="ghost"
+							size="icon-sm"
+							class="pointer-events-auto shrink-0 text-muted-foreground [&_svg]:size-3"
+							data-transfer-abort
+							title={t("abortTransfer")}
+							aria-label={t("abortTransfer")}
 							onClick={(e) => {
 								e.stopPropagation();
 								props.onAbort?.();
 							}}
 						>
 							<LucideBan width={12} height={12} />
-						</button>
+						</Button>
 					</Show>
 					<Show when={props.slot.status !== "active"}>
-						<button
-							type="button"
-							class="pointer-events-auto flex h-5 w-5 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+						<Button
+							aria-label={t("dismissTransfer")}
+							variant="ghost"
+							size="icon-sm"
+							class="pointer-events-auto shrink-0 text-muted-foreground [&_svg]:size-3"
 							onClick={(e) => {
 								e.stopPropagation();
 								props.onDismiss?.();
 							}}
 						>
 							<LucideX width={12} height={12} />
-						</button>
+						</Button>
 					</Show>
 				</span>
 			</div>
 			<Show when={isError() && props.slot.errorMsg}>
-				<p class="text-xs text-destructive/80">{props.slot.errorMsg}</p>
+				<p class="text-xs text-destructive/80">
+					{t(nativeErrorKey(props.slot.errorMsg, "transferFailed"))}
+				</p>
 			</Show>
 			<Show when={props.slot.status === "active"}>
 				<div class="h-1 overflow-hidden rounded-full bg-muted">
@@ -185,7 +194,14 @@ function PeerCard(props: PeerCardProps) {
 				"border-border": !props.dropHighlight && !hasActive() && !hasError(),
 			}}
 		>
-			<div class="flex w-full items-center gap-3 px-3.5 py-3.5">
+			<div
+				{...props.headerDrag}
+				class="flex w-full items-center gap-3 px-3.5 py-3.5 rounded-xl outline-none transition-colors data-[active=true]:bg-accent"
+				classList={{
+					"touch-none select-none cursor-grab active:cursor-grabbing":
+						props.headerDrag?.tabIndex === 0,
+				}}
+			>
 				<Show
 					when={props.onClick}
 					fallback={
@@ -207,10 +223,13 @@ function PeerCard(props: PeerCardProps) {
 						<DropdownMenuTrigger
 							as={Button}
 							variant="ghost"
-							size="icon"
+							size="icon-sm"
 							disabled={props.actionsDisabled}
-							class="size-8 shrink-0 text-muted-foreground"
-							aria-label={`Actions for ${props.peer.display_name} (${props.peer.hostname})`}
+							class="shrink-0 text-muted-foreground"
+							aria-label={t("hostActions", {
+								name: props.peer.display_name,
+								host: props.peer.hostname,
+							})}
 						>
 							<LucideEllipsisVertical class="size-4" />
 						</DropdownMenuTrigger>
@@ -238,13 +257,17 @@ function PeerCard(props: PeerCardProps) {
 			<Show when={hasAny()}>
 				<div class="border-t border-border" />
 				<div class="space-y-3 p-3.5">
-					<For each={slots()}>
-						{(slot) => (
-							<TransferRow
-								slot={slot}
-								onAbort={() => props.onAbortTransfer?.(slot.id)}
-								onDismiss={() => props.onDismissTransfer?.(slot.id)}
-							/>
+					<For each={slots().map((slot) => slot.id)}>
+						{(id) => (
+							<Show when={slots().find((slot) => slot.id === id)}>
+								{(slot) => (
+									<TransferRow
+										slot={slot()}
+										onAbort={() => props.onAbortTransfer?.(id)}
+										onDismiss={() => props.onDismissTransfer?.(id)}
+									/>
+								)}
+							</Show>
 						)}
 					</For>
 				</div>
@@ -255,7 +278,7 @@ function PeerCard(props: PeerCardProps) {
 			<Show when={props.dropHighlight}>
 				<div class="pointer-events-none absolute inset-0 flex items-center justify-center bg-blue-50/60 dark:bg-blue-950/40">
 					<div class="rounded-lg bg-blue-500 px-4 py-2 text-xs font-medium text-white shadow-lg">
-						Drop files to send
+						{t("dropFilesToSend")}
 					</div>
 				</div>
 			</Show>

@@ -24,6 +24,8 @@ pub struct Settings {
     pub destination_dir: String,
     #[serde(default)]
     pub theme: ThemeMode,
+    #[serde(default)]
+    pub peer_order: Vec<String>,
 }
 
 impl Default for Settings {
@@ -35,6 +37,7 @@ impl Default for Settings {
         Self {
             destination_dir: default_dir.to_string_lossy().to_string(),
             theme: ThemeMode::default(),
+            peer_order: Vec::new(),
         }
     }
 }
@@ -82,12 +85,14 @@ mod tests {
         let settings = Settings {
             destination_dir: "/tmp/my-downloads".into(),
             theme: ThemeMode::Dark,
+            peer_order: vec!["linux".into(), "mac".into()],
         };
 
         settings.save(&dir).unwrap();
         let loaded = Settings::load(&dir);
         assert_eq!(loaded.destination_dir, "/tmp/my-downloads");
         assert_eq!(loaded.theme, ThemeMode::Dark);
+        assert_eq!(loaded.peer_order, vec!["linux", "mac"]);
 
         std::fs::remove_dir_all(&dir).ok();
     }
@@ -104,6 +109,7 @@ mod tests {
         std::fs::write(dir.join(SETTINGS_FILE), r#"{"destination_dir":"/tmp"}"#).unwrap();
         let loaded = Settings::load(&dir);
         assert_eq!(loaded.theme, ThemeMode::System);
+        assert!(loaded.peer_order.is_empty());
         std::fs::remove_dir_all(&dir).ok();
     }
 

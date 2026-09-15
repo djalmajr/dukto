@@ -3,6 +3,8 @@ use std::sync::Arc;
 
 use tokio::sync::{watch, Mutex};
 
+use crate::crypto::noise::close_for_transfer_cancellation;
+
 /// Owns cancellation state for active outgoing and incoming transfers.
 #[derive(Default)]
 pub struct TransferRegistry {
@@ -101,7 +103,7 @@ impl TransferCancellation {
     pub async fn attach_connection(&self, connection: quinn::Connection) -> bool {
         let mut current = self.connection.lock().await;
         if self.is_cancelled() {
-            connection.close(0u32.into(), b"transfer cancelled");
+            close_for_transfer_cancellation(&connection);
             false
         } else {
             *current = Some(connection);
@@ -114,16 +116,17 @@ impl TransferCancellation {
         if self.cancelled.send_replace(true) {
             return false;
         }
-        if let Some(connection) = self.connection.lock().await.as_ref() {
-            connection.close(0u32.into(), b"transfer cancelled");
-        }
         true
     }
 
     /// Close and release a connection after normal completion or failure.
     pub async fn close_connection(&self) {
         if let Some(connection) = self.connection.lock().await.take() {
-            connection.close(0u32.into(), b"transfer finished");
+            if self.is_cancelled() {
+                close_for_transfer_cancellation(&connection);
+            } else {
+                connection.close(0u32.into(), b"transfer finished");
+            }
         }
     }
 }
@@ -201,7 +204,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn cancelling_one_quic_transfer_keeps_the_other_connection_usable() {
-        // Mutation captured: closing a shared endpoint or cancelling all IDs breaks the second stream.
+        // Mutation captured: closing on registry cancel also disconnects the unrelated peer.
         let server_endpoint =
             create_endpoint("127.0.0.1:0".parse::<SocketAddr>().unwrap()).unwrap();
         let server_address = server_endpoint.local_addr().unwrap();
@@ -234,12 +237,12 @@ mod tests {
         assert!(second.attach_connection(second_connection.clone()).await);
 
         assert!(registry.cancel("send-a").await);
-        tokio::time::timeout(
-            std::time::Duration::from_secs(3),
+        assert!(tokio::time::timeout(
+            std::time::Duration::from_millis(100),
             peer_connections[0].closed(),
         )
         .await
-        .expect("the canceled peer connection should close");
+        .is_err());
         assert!(!second.is_cancelled());
 
         let (mut sender, _) = second_connection.open_bi().await.unwrap();

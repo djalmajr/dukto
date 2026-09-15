@@ -14,7 +14,7 @@ function PeerSelector(props: PeerSelectorProps) {
 	return (
 		<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
 			<div class="w-full max-w-xs rounded-lg bg-card p-4 shadow-xl">
-				<h3 class="text-sm font-semibold">Select recipient</h3>
+				<h3 class="text-sm font-semibold">{t("selectRecipient")}</h3>
 				<Show
 					when={peerList().length > 0}
 					fallback={<p class="py-4 text-center text-xs text-muted-foreground">{t("noDevices")}</p>}

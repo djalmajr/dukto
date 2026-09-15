@@ -1,43 +1,33 @@
-# Validação de transferências simultâneas
+# Concurrent Transfer Testing
 
-Executada em 14/09/2026 (America/Maceio; logs UTC de 15/09), com CLI real, QUIC e Noise. Nenhum mock de transporte ou alteração artificial de velocidade.
+This guide describes how to verify overlap between real transfers. Starting two processes at nearly the same time or seeing two progress bars is not enough: the second transfer must make progress before the first one finishes.
 
-## Problema reproduzido e correções
+## CLI regression
 
-O receptor CLI aguardava uma transferência terminar antes de atender outra. Com 512 MiB, a primeira concluiu em 6,653 s; o segundo arquivo só progrediu em 7,834 s e o pequeno só concluiu em 6,833 s. A integridade estava correta, mas os recebimentos eram serializados.
+Build the CLI with release optimizations, then run the concurrency test from the repository root:
 
-Agora há uma tarefa por conexão. Aprovações interativas mantêm cada resposta associada ao respectivo ID. Arquivos de mesmo nome são reservados atomicamente, sem truncar outro recebimento. O desktop mantém uma fila de solicitações, registra o envio antes dos eventos de progresso e cancela a conexão da transferência selecionada. Eventos tardios não recriam uma transferência cancelada nem revertem estados terminais.
+~~~sh
+cargo build --manifest-path src-tauri/Cargo.toml --no-default-features --features cli --bin dukto-cli --release
+DUKTO_CLI=src-tauri/target/release/dukto-cli DUKTO_TEST_REPORT=.cache/concurrency-test/report.json node scripts/test-cli-concurrency.mjs
+~~~
 
-## LAN Mac/Windows
+On Windows, point DUKTO_CLI to the compiled .exe using the shell's environment-variable syntax. The test creates synthetic large files, waits for actual progress before adding more transfers, checks overlapping progress and a later small transfer, exercises both directions, compares receiver acknowledgments and SHA-256 values, and interrupts one sender while another continues. The test removes its synthetic files after completion. DUKTO_TEST_MIB can increase the file size when transfers finish too quickly to observe overlap.
 
-Duas rodadas, invertendo o iniciador. Cada rodada enviou dois arquivos de 512 MiB e um de 65.537 bytes para o mesmo receptor, além de outro arquivo de 512 MiB no sentido inverso. Os envios adicionais começaram somente após progresso real acima de zero e abaixo de 100%.
+## What to verify
 
-| Rodada | Segundo envio progride | Pequeno conclui | Recebimento inverso progride | Primeiro envio conclui |
-| --- | --- | --- | --- | --- |
-| Mac inicia → Windows | 2.049 s | 1.139 s | 2.080 s | 14.222 s |
-| Windows inicia → Mac | 2.181 s | 1.353 s | 2.522 s | 21.167 s |
+- Start a large transfer and wait until progress is above zero and below 100 percent.
+- Start a second large transfer to the same receiver while the first is active.
+- Start a small transfer and confirm it can finish before the large transfers.
+- Exercise a receive in the reverse direction while sends remain active.
+- Confirm each result is associated with its own transfer ID and each successful send has a matching receiver acknowledgment.
+- Compare hashes for every completed file.
+- Cancel one sender and confirm other transfers and the receiver remain usable.
+- Repeat with identical filenames and different contents to check collision handling.
 
-Tempos relativos ao início do harness no iniciador de cada rodada; não dependem da sincronização dos relógios entre máquinas. Os reports dos receptores também confirmam sobreposição. Oito transferências concluídas com recibos e SHA-256 idênticos aos manifestos de origem.
+Record elapsed times relative to each test process; do not compare cross-host wall clocks unless they are synchronized.
 
-## Outras verificações
+## Desktop UI
 
-- Regressão local com arquivos de 512 MiB: segundo recebimento progride em 3,787 s, pequeno conclui em 2,788 s e fluxo inverso progride em 3,800 s, antes da primeira conclusão em 8,491 s.
-- Interromper um remetente durante progresso não interrompe outro envio, preserva o arquivo concluído e mantém o receptor disponível.
-- Terminal interativo real: dois pedidos pendentes; aceitar o primeiro e rejeitar o segundo grava somente o arquivo aprovado, sem confundir respostas.
-- Duas conexões QUIC reais no teste de cancelamento desktop: cancelar uma mantém a outra utilizável.
-- Reserva simultânea do mesmo nome preserva os dois conteúdos. Mutações que truncavam o mesmo caminho ou cancelavam todas as transferências fizeram os testes falhar; implementações corretas restauradas e testes aprovados.
-- Rust sem desktop: 54 testes aprovados. Cancelamento desktop: 2 testes focados aprovados. Bun: 29 testes, 101 asserções. TypeScript e Biome dos arquivos alterados aprovados.
-- Regressão CLI de arquivo único, múltiplos arquivos, pasta, múltiplas pastas e entradas inválidas aprovada. Build CLI release e bundle desktop macOS aprovados.
-- O lint global continua com erros preexistentes em arquivos fora deste lote; o check direcionado passou.
+CLI results do not prove native UI behavior. Follow the [manual UI test guide](manual-ui-tests.md#concurrent-transfers) to verify multiple progress rows, per-transfer cancel actions, and simultaneous send and receive in the desktop app.
 
-## Evidências e reprodução
-
-Execute `scripts/test-cli-concurrency.mjs` conforme [guia CLI](cli.md). O script gera e remove seus próprios arquivos temporários; `DUKTO_TEST_REPORT` conserva a linha do tempo em JSON.
-
-Nesta execução, `.cache/concurrency-test/` guarda os reports locais `before.json` e `after.json`, manifestos Mac/Windows, logs de aprovação, reports `mac-wave1/report.json`, `mac-wave2/report.json`, `windows-wave1-result.json` e `windows-wave2-result.json`. Arquivos grandes sintéticos são removidos após a validação, mantendo logs e manifestos.
-
-## Limites desta rodada
-
-A concorrência foi validada via CLI em ambas as máquinas. As correções do desktop foram compiladas e seus contratos testados; a reprodução manual das transferências na UI permanece pendente, conforme a sequência CLI primeiro. O roteiro está em [testes manuais de UI](manual-ui-tests.md#11-transferências-simultâneas). A sessão gráfica aberta não foi reiniciada nesta rodada. A rodada nativa posterior está registrada em [validação da UI](ui-progress-validation.md).
-
-Cancelar ou interromper um recebimento pode deixar um arquivo parcial no destino; não há retomada automática. Pastas com a mesma raiz podem compartilhar o diretório, com conflitos de arquivos resolvidos individualmente. No CLI, cada processo de envio pode ser interrompido separadamente; interromper um receptor contínuo encerra todas as conexões dele.
+Use a dedicated destination for each run. Remove only the synthetic fixtures created by the test, and retain concise manifests or test reports when needed for a regression.

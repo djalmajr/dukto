@@ -1,12 +1,14 @@
 import { Outlet, createRootRoute, useNavigate, useSearch } from "@tanstack/solid-router";
+import { type UnlistenFn, listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Show, createEffect, onMount } from "solid-js";
+import { sendNotification } from "@tauri-apps/plugin-notification";
+import { Show, createEffect, onCleanup, onMount } from "solid-js";
 import { Button } from "~/components/ui/button";
 import WindowControls from "~/components/window-controls";
 import { changeLanguage, language, t } from "~/helpers/i18n";
 import SettingsModal from "~/routes/-components/settings/settings-modal";
 import UpdateAvailableDialog from "~/routes/-components/settings/update-available-dialog";
-import { incomingRequest } from "~/routes/-stores/transfers";
+import { type IncomingRequest, incomingRequest } from "~/routes/-stores/transfers";
 import { appUpdates } from "~/stores/app-updates";
 import { device } from "~/stores/device";
 import { resolvedTheme, setDestinationDir, setTheme, settings, theme } from "~/stores/settings";
@@ -23,8 +25,31 @@ function RootLayout() {
 	const search = useSearch({ strict: false });
 	const showSettings = () => (search() as { settings?: boolean }).settings === true;
 
-	onMount(() => {
+	let stopNotifications: UnlistenFn | undefined;
+	let disposed = false;
+	onMount(async () => {
 		void appUpdates.startupCheck();
+		const stop = await listen<IncomingRequest>("transfer:incoming", ({ payload }) => {
+			if (disposed) return;
+			const sender = payload.sender;
+			const name = sender
+				? [sender.display_name, sender.hostname].filter(Boolean).join("@")
+				: t("anotherDevice");
+			try {
+				sendNotification({
+					title: t("incoming"),
+					body: t("incomingNotification", { count: payload.item_count, sender: name }),
+				});
+			} catch (error) {
+				console.error("Could not show incoming notification", error);
+			}
+		});
+		if (disposed) stop();
+		else stopNotifications = stop;
+	});
+	onCleanup(() => {
+		disposed = true;
+		stopNotifications?.();
 	});
 
 	createEffect(() => {
