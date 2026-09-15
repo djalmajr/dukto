@@ -54,3 +54,9 @@ Show a preview of the host card under the pointer and reorder the list as the pr
 Settings has an overlay and closes through its close control or a click on the overlay. Incoming transfer requests require an explicit accept or reject action and do not dismiss through the overlay.
 
 Use native file selection and drag and drop while keeping all actions accessible by keyboard.
+
+## Website header
+
+Use a compact 32-pixel logo and 24-pixel wordmark. On compact layouts, show only the logo and download icon, retaining accessible names. Keep navigation links visible after compacting the controls; use the menu button only at narrow widths where the links and controls no longer fit. Keep light and dark themes consistent.
+
+The website mobile navigation is a compact dropdown aligned with its menu button. Size it to its links with modest padding; do not stretch it across the viewport or repeat the download action inside it.
