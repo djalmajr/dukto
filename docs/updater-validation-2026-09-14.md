@@ -37,3 +37,7 @@ The macOS DMG passed `hdiutil verify`, and the updater archive signature was ind
 The connected Windows session built isolated NSIS installers for 0.1.0 and 0.1.1 with updater signatures. Its frontend checks and four release-mode transfer/update exclusion tests passed. Native Windows interaction remains pending because the session is locked (black capture and activation failure). Installer execution, update installation/relaunch, and UI behavior on Windows are not recorded as passed.
 
 The manual workflow builds five platform targets and verifies every updater signature before assembling `latest.json`. Evaluation artifacts do not constitute a public release. Apple notarization remains pending the six Apple signing secrets; the updater signature is separate and does not replace Apple code signing/notarization.
+
+## Hosted installer evaluation
+
+The first main-branch evaluation run (`34926352630`) exposed an environment dependency before packaging: both hosted macOS runners failed four multicast discovery tests, including resolving their own raw mDNS announcement. Only IPv6 interfaces appeared in that diagnostic. The macOS installer job now excludes the five LAN-dependent discovery tests (including the negative self-discovery test, which cannot be meaningful without working discovery). It still runs the remaining core/CLI/end-to-end tests. Full discovery coverage remains required on Linux/Windows in the matrix and passed in the local macOS lab. No production discovery code or test assertions were weakened.
