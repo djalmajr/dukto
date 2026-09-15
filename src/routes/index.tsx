@@ -1,6 +1,8 @@
 import { createFileRoute } from "@tanstack/solid-router";
 import { Show, createEffect, createMemo, createSignal, untrack } from "solid-js";
 import ErrorDisplay from "~/components/error-display";
+import { t } from "~/helpers/i18n";
+import { nativeErrorKey } from "~/helpers/native-error";
 import { resolveFileMetadata, sendToPeer } from "~/helpers/tauri";
 import PeerList from "~/routes/-components/peers/peer-list";
 import DropZone from "~/routes/-components/transfers/drop-zone";
@@ -92,7 +94,12 @@ function HomePage() {
 			{(dropTargetId) => (
 				<div class="flex w-full flex-1 flex-col space-y-3">
 					<Show when={error()}>
-						{(message) => <ErrorDisplay message={message()} onDismiss={() => setError(null)} />}
+						{(message) => (
+							<ErrorDisplay
+								message={t(nativeErrorKey(message()))}
+								onDismiss={() => setError(null)}
+							/>
+						)}
 					</Show>
 					<PeerList
 						actionsDisabled={picking()}

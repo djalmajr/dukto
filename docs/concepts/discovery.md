@@ -1,52 +1,32 @@
 # Discovery
 
-Dukto uses mDNS (multicast DNS) to find peers on the local network. No server, no manual IP entry, no pairing step.
+Dukto uses multicast DNS (mDNS) to find peers on the local network. No account or manual address entry is needed when multicast is available.
 
 ## How It Works
 
-On startup, the app registers itself as a `_dukto._tcp.local.` mDNS service and begins browsing for other instances of the same service. When another device is found, its information (name, hostname, platform, QUIC endpoint) is extracted from the mDNS TXT records and pushed to the frontend as an event.
+Each running instance advertises a `_dukto._tcp.local.` DNS-SD service and browses for other Dukto instances. The advertisement includes the device ID, display name, host name, platform, protocol version, and the UDP port used for QUIC. The resolved mDNS record supplies network addresses.
 
-Discovery is **push-based and continuous**. The frontend never polls — it subscribes to events and the UI updates reactively. Peers appear within a few seconds of coming online and disappear shortly after going offline.
+The app continuously updates the host list as devices appear and disappear. An instance filters its own advertisement so it does not show itself as a peer.
 
-## Self-Filtering
+## Network Requirements
 
-Each device includes its own `device_id` in the mDNS advertisement. When the browser finds a service, it checks the device_id and skips itself. This prevents the device from appearing in its own peer list.
+- Devices must be able to exchange mDNS multicast traffic on UDP port 5353.
+- Firewalls must allow UDP traffic to the receiver's advertised QUIC port (4242 by default).
+- Guest Wi-Fi, client isolation, VPN configuration, and virtual-machine networking can block discovery or direct transfers.
+- mDNS does not cross routers by default. Dukto's current transfer flow is for devices on a local network.
 
-## Why mDNS and Not Something Else
+If discovery is unavailable, the CLI can connect to a receiver by address. A direct-address transfer does not validate that mDNS discovery is working.
 
-**Bonjour/Avahi/mDNS** is the only viable option for true zero-configuration LAN discovery:
+## Identity and Advertised Information
 
-- **UDP broadcast** would work but doesn't carry structured metadata (TXT records) and has scalability issues on large networks
-- **SSDP/UPnP** is more complex, designed for service discovery rather than peer-to-peer, and has inconsistent implementations
-- **Manual IP entry** defeats the purpose of zero configuration
-- **Server-assisted discovery** requires infrastructure we don't want for the LAN case
+The device ID is generated and stored locally to distinguish Dukto instances between sessions. Display names and host names help people recognize peers, but they can change and are not verified identity credentials. A peer can advertise arbitrary labels.
 
-mDNS is supported natively on macOS (Bonjour), and via Avahi on Linux. On Windows, the `mdns-sd` crate handles it without system dependencies.
+The receiver address and UDP port are resolved through the service record. The service type identifies Dukto on the network; it does not authenticate the device.
 
-## Advertised Metadata
+## Troubleshooting
 
-Each device broadcasts a set of TXT properties alongside its mDNS service:
-
-- **Protocol version** — allows future protocol changes without breaking discovery
-- **Device ID** — stable UUID, generated once and persisted. Used for peer identification across sessions
-- **Display name** — OS username, human-readable but not stable
-- **Hostname** — machine hostname, also not stable
-- **Platform** — "macos", "windows", or "linux". Used for platform-specific icons in the UI
-
-The QUIC endpoint (IP addresses + port) comes from the mDNS service resolution, not from TXT records. mDNS automatically resolves the host to its network addresses.
-
-## Event Channel
-
-Discovery events are broadcast via a Tokio broadcast channel (capacity 64). The Tauri setup loop forwards these events to the frontend:
-
-- **PeerFound** — upserts the peer in the shared state and emits `peer:found` to the frontend
-- **PeerRemoved** — removes the peer from shared state and emits `peer:removed`
-
-The broadcast channel means multiple consumers can subscribe (e.g., both the Tauri event forwarder and future background tasks).
-
-## Limitations
-
-- **Requires multicast support** — corporate networks that block multicast will prevent discovery
-- **LAN only** — mDNS doesn't cross network boundaries. Internet discovery will need a signaling server (planned for a future phase)
-- **Discovery latency** — peers typically appear within 2-5 seconds, but mDNS has no guaranteed SLA on timing
-- **Network changes** — if the device changes networks (e.g., switches WiFi), the mDNS daemon re-advertises but peers on the old network may linger briefly
+- Keep Dukto open on both computers and use compatible protocol versions.
+- Confirm both devices can use the same non-isolated local network.
+- Allow mDNS on UDP 5353 and the receiver's advertised UDP port in the firewall.
+- Try a direct CLI address to distinguish discovery problems from connection problems.
+- When using WSL or a virtual machine, check its network mode and host firewall rules for multicast and UDP access.

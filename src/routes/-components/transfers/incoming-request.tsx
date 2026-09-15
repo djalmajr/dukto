@@ -9,6 +9,7 @@ import {
 	DialogTitle,
 } from "~/components/ui/dialog";
 import { t } from "~/helpers/i18n";
+import { nativeErrorKey } from "~/helpers/native-error";
 import { formatBytes } from "~/utils/format";
 
 export interface IncomingRequestData {
@@ -56,14 +57,13 @@ function IncomingRequestDialog(props: IncomingRequestProps) {
 						<DialogHeader>
 							<DialogTitle>{t("incoming")}</DialogTitle>
 							<DialogDescription>
-								{req().item_count} {req().item_count === 1 ? "item" : "items"} &middot;{" "}
-								{formatBytes(req().total_size)}
+								{t("items", { count: req().item_count })} &middot; {formatBytes(req().total_size)}
 								<br />
-								From: <span class="break-all">{req().sender_name}</span>
+								{t("senderLabel")} <span class="break-all">{req().sender_name}</span>
 							</DialogDescription>
 						</DialogHeader>
 						<Show when={responseError()}>
-							{(message) => <p class="text-sm text-destructive">{message()}</p>}
+							{(message) => <p class="text-sm text-destructive">{t(nativeErrorKey(message()))}</p>}
 						</Show>
 						<DialogFooter class="flex-row gap-2">
 							<Button class="flex-1" disabled={busy()} onClick={() => void respond(props.onAccept)}>

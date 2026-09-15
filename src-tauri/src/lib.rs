@@ -42,6 +42,7 @@ mod desktop {
                 commands::get_peers,
                 commands::get_settings,
                 commands::set_destination_dir,
+                commands::set_peer_order,
                 commands::resolve_file_metadata,
                 commands::send_to_peer,
                 commands::cancel_transfer,

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { mkdir, mkdtemp, open, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, open, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
@@ -213,13 +213,48 @@ try {
 	const survived = await survivor.done;
 	assert.equal(survived.code, 0, JSON.stringify(survived));
 	await waitFor(receiverB, (e) => e.event === "received" && e.data.transfer_id === survivorId);
-	await waitFor(receiverB, (e) => e.event === "receive_error" && e.data.transfer_id === canceledId);
+	const canceledReceive = await waitFor(
+		receiverB,
+		(e) => e.event === "receive_error" && e.data.transfer_id === canceledId,
+	);
+	// Windows child.kill force-terminates; POSIX SIGINT exercises the CLI's graceful shutdown.
+	if (process.platform !== "win32") {
+		assert.equal(canceledReceive.data.message, "Transfer cancelled by the remote peer");
+	}
+	const remainingFiles = await readdir(join(root, "received-b"));
+	assert.ok(!remainingFiles.some((name) => name.startsWith(".dukto-partial-")));
+	assert.ok(!remainingFiles.includes("second-large (1).bin"));
 	assert.equal(await hashFile(join(root, "received-b", "first-large (1).bin")), first.sha256);
 	assert.equal(await hashFile(join(root, "received-b", first.name)), first.sha256);
 	outcome.cancellationIsolated = true;
 	console.log(
 		"PASS cancel one active sender; other transfer finishes with matching SHA-256 and receiver stays alive",
 	);
+	if (process.platform !== "win32") {
+		const interruptedReceive = send("send-receiver-canceled", "host-a", readyB.data.port, first);
+		const receiveStart = await waitFor(interruptedReceive, (e) => e.event === "connecting");
+		await waitFor(
+			receiverB,
+			(e) =>
+				e.event === "progress" &&
+				e.data.transfer_id === receiveStart.data.transfer_id &&
+				e.data.percent < 100,
+		);
+		receiverB.child.kill("SIGINT");
+		assert.notEqual((await receiverB.done).code, 0);
+		assert.notEqual((await interruptedReceive.done).code, 0);
+		assert.ok(
+			interruptedReceive.records.some(
+				(e) => e.event === "error" && e.data.message === "Transfer cancelled by the remote peer",
+			),
+		);
+		assert.ok(
+			!(await readdir(join(root, "received-b"))).some((name) => name.startsWith(".dukto-partial-")),
+		);
+		assert.equal(await hashFile(join(root, "received-b", first.name)), first.sha256);
+		outcome.receiverCancellationCleanedUp = true;
+		console.log("PASS receiver Ctrl+C notifies sender and removes its incomplete file");
+	}
 } finally {
 	for (const child of children) child.kill("SIGTERM");
 	await Promise.allSettled(completions);

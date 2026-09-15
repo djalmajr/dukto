@@ -135,12 +135,13 @@ function Footer() {
 		</footer>
 	);
 }
-function CopyCode(props: { code: string; label?: string }) {
+function CopyCode(props: { code: string; label?: string; localized?: boolean }) {
 	const { t } = useLocale();
 	const [status, setStatus] = createSignal("Copiar");
+	const code = () => (props.localized === false ? props.code : t(props.code));
 	async function copy() {
 		try {
-			await navigator.clipboard.writeText(t(props.code));
+			await navigator.clipboard.writeText(code());
 			setStatus("Copiado");
 		} catch {
 			setStatus("Selecione o texto");
@@ -164,7 +165,7 @@ function CopyCode(props: { code: string; label?: string }) {
 				</Button>
 			</div>
 			<pre>
-				<code>{t(props.code)}</code>
+				<code>{code()}</code>
 			</pre>
 			<span class="sr-only" aria-live="polite">
 				{t(status())}
@@ -268,7 +269,7 @@ function Home() {
 					</div>
 					<TransferScene />
 				</section>
-				<section class="platform-strip wrap" aria-label={t("Disponibilidade")}>
+				<section class="platform-strip wrap" aria-label={t("Plataformas disponíveis")}>
 					<span>
 						{t("COMPUTADORES DIFERENTES.")}
 						<br />
@@ -481,7 +482,7 @@ function Docs(props: { guide: Guide }) {
 			cancelAnimationFrame(frame);
 		});
 	});
-	const groups = [...new Set(guides.filter((g) => g.group !== "PROJETO").map((g) => g.group))];
+	const groups = [...new Set(guides.map((g) => g.navGroup))];
 	return (
 		<>
 			<main class="docs-layout wrap">
@@ -491,13 +492,13 @@ function Docs(props: { guide: Guide }) {
 						{(group) => (
 							<div class="nav-group">
 								<span>{t(group)}</span>
-								<For each={guides.filter((g) => g.group === group)}>
+								<For each={guides.filter((g) => g.navGroup === group)}>
 									{(g) => (
 										<a
 											href={localPath(`/docs/${g.slug}/`)}
 											aria-current={props.guide.slug === g.slug ? "page" : undefined}
 										>
-											{t(g.title)}
+											{t(g.navTitle)}
 										</a>
 									)}
 								</For>
@@ -505,10 +506,10 @@ function Docs(props: { guide: Guide }) {
 						)}
 					</For>
 				</aside>
-				<article class="doc-article">
-					<span class="eyebrow">{t(props.guide.group)}</span>
-					<h1>{t(props.guide.title)}</h1>
-					<p class="doc-summary">{t(props.guide.summary)}</p>
+				<article class="doc-article" lang="en-US">
+					<span class="eyebrow">{props.guide.group}</span>
+					<h1>{props.guide.title}</h1>
+					<p class="doc-summary">{props.guide.summary}</p>
 					<div class="doc-rule" />
 					<For each={props.guide.sections}>
 						{(s, i) => (
@@ -516,19 +517,19 @@ function Docs(props: { guide: Guide }) {
 								ref={(el) => {
 									sections[i()] = el;
 								}}
-								id={`secao-${i()}`}
+								id={`section-${i()}`}
 							>
-								<h2>{t(s.title)}</h2>
-								<Show when={t(s.text || "")}>
-									<p>{t(s.text || "")}</p>
+								<h2>{s.title}</h2>
+								<Show when={s.text}>
+									<p>{s.text}</p>
 								</Show>
 								<Show when={s.items}>
 									<ul>
-										<For each={s.items}>{(item) => <li>{t(item)}</li>}</For>
+										<For each={s.items}>{(item) => <li>{item}</li>}</For>
 									</ul>
 								</Show>
 								<Show when={s.code}>
-									<CopyCode code={s.code || ""} />
+									<CopyCode code={s.code || ""} localized={false} />
 								</Show>
 							</section>
 						)}
@@ -550,7 +551,7 @@ function Docs(props: { guide: Guide }) {
 						<span class="next-guide-title">
 							{t(
 								guides[(guides.findIndex((g) => g.slug === props.guide.slug) + 1) % guides.length]
-									.title,
+									.navTitle,
 							)}{" "}
 							<ArrowRight class="arrow-icon" aria-hidden="true" />
 						</span>
@@ -561,10 +562,10 @@ function Docs(props: { guide: Guide }) {
 					<For each={props.guide.sections}>
 						{(s, i) => (
 							<a
-								href={`#secao-${i()}`}
+								href={`#section-${i()}`}
 								aria-current={activeSection() === i() ? "location" : undefined}
 							>
-								{t(s.title).replace(/^\d+\. /, "")}
+								{s.title.replace(/^\d+\. /, "")}
 							</a>
 						)}
 					</For>

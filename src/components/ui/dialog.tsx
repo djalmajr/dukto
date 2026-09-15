@@ -2,6 +2,8 @@ import * as DialogPrimitive from "@kobalte/core/dialog";
 import type { PolymorphicProps } from "@kobalte/core/polymorphic";
 import type { Component, ComponentProps, JSX, ValidComponent } from "solid-js";
 import { Show, splitProps } from "solid-js";
+import { Button } from "~/components/ui/button";
+import { t } from "~/helpers/i18n";
 import { cn } from "~/utils/cn";
 
 const Dialog = DialogPrimitive.Root;
@@ -86,7 +88,13 @@ const DialogContent = <T extends ValidComponent = "div">(
 				>
 					{local.children}
 					<Show when={local.showCloseButton ?? true}>
-						<DialogPrimitive.CloseButton class="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-expanded:bg-accent data-expanded:text-muted-foreground">
+						<DialogPrimitive.CloseButton
+							aria-label={t("close")}
+							as={Button}
+							variant="ghost"
+							size="icon-sm"
+							class="absolute right-3 top-3 text-muted-foreground"
+						>
 							<svg
 								xmlns="http://www.w3.org/2000/svg"
 								viewBox="0 0 24 24"
@@ -101,7 +109,7 @@ const DialogContent = <T extends ValidComponent = "div">(
 								<path d="M18 6l-12 12" />
 								<path d="M6 6l12 12" />
 							</svg>
-							<span class="sr-only">Close</span>
+							<span class="sr-only">{t("close")}</span>
 						</DialogPrimitive.CloseButton>
 					</Show>
 				</DialogPrimitive.Content>

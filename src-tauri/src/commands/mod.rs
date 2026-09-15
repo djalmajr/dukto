@@ -12,7 +12,7 @@ use crate::state::app_state::AppState;
 use crate::state::device::DeviceIdentity;
 use crate::state::settings::Settings;
 use crate::transfer::quic::create_endpoint;
-use crate::transfer::sender::send_transfer;
+use crate::transfer::sender::{send_transfer_with_cancellation, CancellableSendCallbacks};
 use crate::transfer::server::TransferServer;
 
 #[tauri::command]
@@ -40,6 +40,18 @@ pub fn set_destination_dir(state: State<'_, AppState>, path: String) -> Result<(
         .update_settings(|s| {
             s.destination_dir = path;
         })
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn set_peer_order(state: State<'_, AppState>, order: Vec<String>) -> Result<(), String> {
+    let mut seen = std::collections::HashSet::new();
+    let order = order
+        .into_iter()
+        .filter(|id| !id.is_empty() && seen.insert(id.clone()))
+        .collect();
+    state
+        .update_settings(|s| s.peer_order = order)
         .map_err(|e| e.to_string())
 }
 
@@ -114,7 +126,7 @@ pub async fn send_to_peer(
         let result = async {
             let endpoint = create_endpoint("0.0.0.0:0".parse().unwrap())
                 .map_err(|e| format!("Endpoint creation failed: {}", e))?;
-            let result = tokio::select! {
+            let setup = tokio::select! {
                 biased;
                 _ = control.cancelled() => Err("Transfer cancelled".to_string()),
                 result = async {
@@ -132,31 +144,47 @@ pub async fn send_to_peer(
                         .await
                         .map_err(|e| format!("Open bi failed: {}", e))?;
 
-                    let mut noise = handshake_initiator(&mut send, &mut recv)
+                    let noise = handshake_initiator(&mut send, &mut recv)
                         .await
                         .map_err(|e| format!("Noise handshake failed: {}", e))?;
 
                     tracing::info!(transfer_id = %tid, "Noise handshake done, sending files");
-
+                    Ok::<_, String>((send, recv, noise))
+                } => result,
+            };
+            let result = match setup {
+                Ok((mut send, mut recv, mut noise)) => {
                     let handle_progress = handle.clone();
-                    let bytes = send_transfer(
+                    send_transfer_with_cancellation(
                         &mut send,
                         &mut recv,
                         &mut noise,
                         &input_paths,
                         &tid,
                         &sender,
-                        move |progress| {
-                            let _ = handle_progress.emit("transfer:progress", progress);
+                        CancellableSendCallbacks {
+                            cancelled: control.cancelled(),
+                            on_progress:
+                                move |progress: &crate::protocol::types::TransferProgress| {
+                                    let _ = handle_progress.emit("transfer:progress", progress);
+                                },
                         },
                     )
                     .await
-                    .map_err(|e| format!("Transfer failed: {}", e))?;
-
-                    Ok::<u64, String>(bytes)
-                } => result,
+                    .map_err(|e| format!("Transfer failed: {}", e))
+                }
+                Err(error) => Err(error),
             };
-            endpoint.close(0u32.into(), b"transfer finished");
+            if control.is_cancelled() {
+                endpoint.close(
+                    crate::protocol::types::TRANSFER_CANCEL_CLOSE_CODE.into(),
+                    crate::protocol::types::TRANSFER_CANCEL_CLOSE_REASON,
+                );
+            } else {
+                endpoint.close(0u32.into(), b"transfer finished");
+            }
+            let _ =
+                tokio::time::timeout(std::time::Duration::from_secs(5), endpoint.wait_idle()).await;
             result
         }
         .await;

@@ -1,32 +1,29 @@
 # Overview
 
-Dukto transfers files between devices on the same local network. No server, no accounts, no configuration — run it on two machines and they find each other.
+Dukto transfers files between computers on the same local network. There is no account or cloud transfer service: run it on two computers and let local discovery find the receiver.
 
 ## How It Works
 
-On startup, the app advertises itself via mDNS and starts listening for peers. Other devices appear in the UI within seconds. The user drags files onto a peer or picks them via dialog. The receiver gets a dialog to accept or reject. If accepted, files stream over QUIC with Noise encryption, with real-time progress tracking.
+On startup, the app advertises itself through mDNS and listens for peers. Nearby devices appear in the host list. Choose a host and select files or folders to send. The receiver reviews the sender and items, then accepts or rejects the request. Accepted files are sent directly over an encrypted QUIC connection, with progress reported in both directions.
 
 ## Architecture
 
-The app has two layers connected by Tauri:
+The desktop app has two layers connected by Tauri:
 
-- **Frontend** — pure presentation in SolidJS. Renders peers, transfers, settings. Contains zero networking, zero filesystem access, zero crypto. Communicates with Rust exclusively through commands (request/response) and events (push from Rust).
+- **Frontend** — SolidJS presentation for hosts, transfers, and settings. It communicates with the backend through commands and events.
+- **Rust backend** — owns networking, discovery, transfer state, filesystem access, and settings persistence.
 
-- **Rust backend** — owns all side effects. mDNS discovery, QUIC connections, Noise handshakes, file reading/writing, settings persistence.
-
-The separation is strict: the frontend doesn't even resolve file metadata on its own — it sends paths to Rust and gets back names, sizes, and types.
+The CLI uses the same Rust transfer implementation as the desktop app. It can discover devices, receive with an interactive approval prompt, or explicitly accept transfers for a scripted run.
 
 ## Why These Choices
 
-**Why mDNS?** Zero configuration. Devices find each other automatically on the local network without any server. The trade-off is it only works where multicast is available (most home/office networks).
+**Why mDNS?** It allows devices to find each other on a local network without a server or manual configuration. Multicast must be available on the network.
 
-**Why QUIC over TCP?** Built-in encryption (TLS 1.3), multiplexing, faster connection establishment, no head-of-line blocking. Runs over UDP.
+**Why QUIC?** QUIC runs over UDP and provides reliable streams, multiplexing, and encrypted transport through TLS 1.3.
 
-**Why Noise on top of QUIC?** Both sides use self-signed certificates (no CA for LAN apps), so we skip TLS certificate verification intentionally. Noise_XX provides mutual authentication with ephemeral keys per session — no certificate management needed.
+**Why Noise with QUIC?** Dukto establishes a Noise session for application data in addition to QUIC's TLS transport. Session encryption does not verify a peer's real-world identity; review each incoming request and its sender details.
 
-**Why SolidJS?** Fine-grained reactivity. Peer status, transfer progress, and theme changes update exactly the DOM nodes that changed. No virtual DOM diffing.
-
-**Why TanStack Router?** File-based routing with colocated components. Currently one route, but the convention scales when the app grows.
+**Why SolidJS?** Fine-grained reactivity keeps updates such as transfer progress focused on the UI elements that changed.
 
 ## Transfer Flow
 
@@ -39,16 +36,16 @@ sequenceDiagram
   participant Rust
   participant Peer as Receiver
 
-  User->>UI: Drag files onto peer
+  User->>UI: Select a host and files
   UI->>Rust: send_to_peer(device_id, paths)
-  Rust->>Peer: QUIC + Noise handshake
-  Rust->>Peer: TransferHeader (item_count, total_size)
+  Rust->>Peer: QUIC connection and Noise session
+  Rust->>Peer: TransferHeader (item count, total size)
   Peer-->>Rust: Accept / Reject
   loop For each file
-    Rust->>Peer: Metadata + data chunks (32 KB)
-    Rust-->>UI: progress event
+    Rust->>Peer: Metadata + data chunks
+    Rust-->>UI: Progress event
   end
-  Rust-->>UI: complete event
+  Rust-->>UI: Completion after receiver receipt
 ```
 
 ### Receiving
@@ -60,28 +57,23 @@ sequenceDiagram
   participant UI as Frontend
   actor User
 
-  Sender->>Rust: QUIC + Noise handshake
+  Sender->>Rust: QUIC connection and Noise session
   Sender->>Rust: TransferHeader
-  Rust-->>UI: incoming event
+  Rust-->>UI: Incoming request
   User->>UI: Accept
   UI->>Rust: respond_transfer(id, true)
   loop For each file
     Sender->>Rust: Metadata + data chunks
-    Rust->>Rust: Write to destination dir
+    Rust->>Rust: Stage and validate file
   end
-  Rust-->>UI: complete event
+  Rust-->>Sender: Completion receipt
+  Rust-->>UI: Complete event
 ```
 
-## Key Decisions
+## Key Behavior
 
-**Every transfer requires explicit acceptance.** No auto-accept, no trusted device list. The receiver always decides. File transfer tools that silently accept are a security risk.
-
-**Device identity is a UUID, not a display name.** The display name comes from the OS and can change. The UUID is generated once and persisted. This matters for future trusted device management — you trust a device_id, not a name.
-
-**Path validation is aggressive.** Received files go through traversal checks, name sanitization (Windows reserved names, control characters), and conflict resolution ("file (1)", "file (2)" etc.). A malicious sender cannot write outside the destination directory.
-
-**Transfers are atomic per batch.** Accept or reject the entire transfer, not individual files. The sender sends a header with item count and total size upfront.
-
-**60-second acceptance timeout.** If the receiver doesn't respond, the transfer is automatically rejected. Prevents connections from hanging.
-
-**32 KB chunk size.** Chosen to fit within the Noise protocol's max message size (65535 bytes) with room for encryption overhead. Each chunk is individually encrypted.
+- Each incoming transfer requires explicit approval unless the CLI is run with `--accept`.
+- A transfer request covers all of its listed items, but each received file is published only after that file is complete.
+- Received paths are validated and names are adjusted for cross-platform compatibility.
+- If a transfer is canceled or interrupted, incomplete staged data is removed. Files already completed remain available.
+- The receiver times out an unanswered request after 60 seconds.

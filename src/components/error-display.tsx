@@ -1,3 +1,5 @@
+import { Button } from "~/components/ui/button";
+import { t } from "~/helpers/i18n";
 interface ErrorDisplayProps {
 	message: string;
 	onDismiss?: () => void;
@@ -24,8 +26,10 @@ function ErrorDisplay(props: ErrorDisplayProps) {
 				<p class="text-xs text-error-foreground">{props.message}</p>
 			</div>
 			{props.onDismiss && (
-				<button
-					type="button"
+				<Button
+					variant="ghost"
+					size="icon-sm"
+					aria-label={t("dismissError")}
 					class="shrink-0 rounded p-0.5 text-error-foreground/60 transition-colors hover:text-error-foreground"
 					onClick={props.onDismiss}
 				>
@@ -39,7 +43,7 @@ function ErrorDisplay(props: ErrorDisplayProps) {
 					>
 						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
 					</svg>
-				</button>
+				</Button>
 			)}
 		</div>
 	);

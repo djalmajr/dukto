@@ -3,6 +3,7 @@ import { Button } from "~/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "~/components/ui/dialog";
 import { getUpdateDownloadLabelKey } from "~/helpers/app-update-controller";
 import { t } from "~/helpers/i18n";
+import { nativeErrorKey } from "~/helpers/native-error";
 import { appUpdates } from "~/stores/app-updates";
 import { formatBytes } from "~/utils/format";
 
@@ -13,10 +14,14 @@ function UpdateAvailableDialog() {
 	const errorMessage = () => {
 		if (state.errorCode === "transferGate") return t("updateWaitingForTransfers");
 		if (state.errorCode === "download") {
-			return t("updateDownloadFailedWithDetails", { message: state.errorMessage ?? "" });
+			return t("updateDownloadFailedWithDetails", {
+				message: t(nativeErrorKey(state.errorMessage)),
+			});
 		}
 		if (state.errorCode === "install") {
-			return t("updateInstallFailedWithDetails", { message: state.errorMessage ?? "" });
+			return t("updateInstallFailedWithDetails", {
+				message: t(nativeErrorKey(state.errorMessage)),
+			});
 		}
 		if (state.errorCode === "restart") return t("updateRestartManually");
 		return null;

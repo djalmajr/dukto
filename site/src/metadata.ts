@@ -1,14 +1,14 @@
 import { guides } from "./guides";
 import { routeLocale, stripLocale, translate } from "./i18n";
 export function pageMetadata(path: string) {
-	const locale = routeLocale(path);
+	const routeLanguage = routeLocale(path);
 	const clean = stripLocale(path).replace(/\/+$/, "") || "/";
 	const guide = guides.find((g) => clean === `/docs/${g.slug}`);
-	const t = (text: string) => translate(locale, text);
+	const t = (text: string) => translate(routeLanguage, text);
 	return {
-		locale,
+		locale: guide ? "en-US" : routeLanguage,
 		title: guide
-			? `${t(guide.title)} — Dukto Docs`
+			? `${guide.title} — Dukto Docs`
 			: clean === "/downloads"
 				? `${t("Downloads")} — Dukto`
 				: clean === "/docs"
@@ -16,8 +16,7 @@ export function pageMetadata(path: string) {
 					: clean === "/"
 						? t("Dukto — Seus arquivos, logo ali.")
 						: t("Página não encontrada — Dukto"),
-		description: t(
-			guide?.summary || "Arquivos e pastas entre Mac, Windows e Linux, direto pela rede local.",
-		),
+		description:
+			guide?.summary || t("Arquivos e pastas entre Mac, Windows e Linux, direto pela rede local."),
 	};
 }

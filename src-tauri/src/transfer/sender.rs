@@ -1,8 +1,15 @@
 use snow::TransportState;
-use std::path::{Path, PathBuf};
+use std::{
+    future::Future,
+    path::{Path, PathBuf},
+};
 use tokio::io::AsyncReadExt;
 
-use crate::crypto::noise::{recv_framed, send_framed};
+use crate::crypto::noise::{
+    is_remote_transfer_cancellation, recv_framed, reset_transfer_send_stream, send_framed,
+    stop_transfer_receive_stream, wait_for_transfer_cancel_ack, RemoteTransferCancelled,
+    TransferCancelled,
+};
 use crate::protocol::framing::decode_packet_header;
 use crate::protocol::types::*;
 use crate::state::device::DeviceIdentity;
@@ -10,6 +17,12 @@ use crate::transfer::fs::{walk_directory, WalkItem};
 
 // Noise max message is 65535. Keep chunks under the limit with overhead.
 const CHUNK_SIZE: usize = 32 * 1024; // 32 KB
+
+/// Local cancellation and progress callbacks for one sender operation.
+pub struct CancellableSendCallbacks<C, F> {
+    pub cancelled: C,
+    pub on_progress: F,
+}
 
 /// Send one or more files/folders over an established Noise-encrypted QUIC session.
 /// `inputs` can be files or directories; directories are walked recursively.
@@ -140,6 +153,83 @@ where
     }
 
     Ok(total_sent)
+}
+
+/// Send a transfer while handling both local cancellation and the peer's reliable
+/// QUIC stream cancellation signal. The reverse stream carries the acknowledgement
+/// when this side initiated the cancellation.
+pub async fn send_transfer_with_cancellation<F, C>(
+    send: &mut quinn::SendStream,
+    recv: &mut quinn::RecvStream,
+    noise: &mut TransportState,
+    inputs: &[PathBuf],
+    transfer_id: &str,
+    sender: &DeviceIdentity,
+    callbacks: CancellableSendCallbacks<C, F>,
+) -> Result<u64, Box<dyn std::error::Error + Send + Sync>>
+where
+    F: FnMut(&TransferProgress),
+    C: Future<Output = ()>,
+{
+    let CancellableSendCallbacks {
+        cancelled,
+        on_progress,
+    } = callbacks;
+
+    enum Outcome<T> {
+        Complete(T),
+        LocalCancellation,
+        PeerStopped(quinn::VarInt),
+    }
+
+    let outcome = {
+        let peer_stopped = send.stopped();
+        tokio::pin!(peer_stopped);
+        let transfer = send_transfer(send, recv, noise, inputs, transfer_id, sender, on_progress);
+        tokio::pin!(transfer);
+        tokio::pin!(cancelled);
+        let mut watch_peer_stop = true;
+
+        loop {
+            tokio::select! {
+                biased;
+                result = &mut transfer => break Outcome::Complete(result),
+                stopped = &mut peer_stopped, if watch_peer_stop => {
+                    match stopped {
+                        Ok(Some(code)) => break Outcome::PeerStopped(code),
+                        Ok(None) | Err(_) => watch_peer_stop = false,
+                    }
+                },
+                _ = &mut cancelled => break Outcome::LocalCancellation,
+            }
+        }
+    };
+
+    match outcome {
+        Outcome::Complete(Ok(bytes)) => Ok(bytes),
+        Outcome::Complete(Err(error)) if is_remote_transfer_cancellation(error.as_ref()) => {
+            // The peer reset the inbound stream or stopped this outbound stream.
+            // Send both available stream signals so either case is acknowledged.
+            reset_transfer_send_stream(send);
+            stop_transfer_receive_stream(recv);
+            Err(Box::new(RemoteTransferCancelled))
+        }
+        Outcome::Complete(Err(error)) => Err(error),
+        Outcome::PeerStopped(code)
+            if code == crate::protocol::types::TRANSFER_CANCEL_CLOSE_CODE.into() =>
+        {
+            stop_transfer_receive_stream(recv);
+            Err(Box::new(RemoteTransferCancelled))
+        }
+        Outcome::PeerStopped(code) => {
+            Err(format!("Peer stopped the transfer stream ({code})").into())
+        }
+        Outcome::LocalCancellation => {
+            reset_transfer_send_stream(send);
+            let _ = wait_for_transfer_cancel_ack(recv).await;
+            Err(Box::new(TransferCancelled))
+        }
+    }
 }
 
 /// Convenience wrapper for sending a single file (backward compatible).

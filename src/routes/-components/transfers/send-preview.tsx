@@ -32,7 +32,7 @@ interface SendPreviewProps {
 function SendPreview(props: SendPreviewProps) {
 	const sorted = () => sortFileItems(props.files);
 	const totalSize = () => sorted().reduce((sum, f) => sum + f.size, 0);
-	const itemLabel = () => (sorted().length === 1 ? "1 item" : `${sorted().length} items`);
+	const itemLabel = () => t("items", { count: sorted().length });
 
 	return (
 		<div
@@ -48,13 +48,15 @@ function SendPreview(props: SendPreviewProps) {
 						<PlatformIcon platform={props.peer.platform} class="h-5 w-5" />
 					</span>
 					<div class="min-w-0 flex-1">
-						<p class="text-sm font-semibold leading-tight">Send to {props.peer.display_name}</p>
+						<p class="text-sm font-semibold leading-tight">
+							{t("sendTo", { name: props.peer.display_name })}
+						</p>
 						<p class="text-xs text-muted-foreground">{props.peer.hostname}</p>
 					</div>
 					<Button
 						variant="ghost"
-						size="icon"
-						class="h-6 w-6 shrink-0 text-muted-foreground"
+						size="icon-sm"
+						class="shrink-0 text-muted-foreground"
 						aria-label={t("cancel")}
 						onClick={props.onCancel}
 					>
@@ -86,11 +88,11 @@ function SendPreview(props: SendPreviewProps) {
 							{props.onRemoveFile && (
 								<Button
 									variant="ghost"
-									size="icon"
-									class="h-5 w-5 shrink-0 rounded text-muted-foreground/40 opacity-0 hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100 focus-visible:text-foreground [&_svg]:size-3"
+									size="icon-sm"
+									class="shrink-0 text-muted-foreground/40 opacity-0 hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100 focus-visible:text-foreground [&_svg]:size-3"
 									onClick={() => props.onRemoveFile?.(file.path)}
-									title="Remove"
-									aria-label={`Remove ${file.name}`}
+									title={t("remove")}
+									aria-label={t("removeFile", { name: file.name })}
 								>
 									<LucideX width={12} height={12} />
 								</Button>

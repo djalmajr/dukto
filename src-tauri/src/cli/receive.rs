@@ -9,12 +9,12 @@ use dukto_lib::discovery::types::PROTOCOL_VERSION;
 use dukto_lib::protocol::types::TransferHeader;
 use dukto_lib::state::device::DeviceIdentity;
 use dukto_lib::transfer::quic::create_endpoint;
-use dukto_lib::transfer::receiver::receive_transfer_with_accept;
+use dukto_lib::transfer::receiver::receive_transfer_with_cancellation;
 use serde_json::json;
-use tokio::sync::oneshot;
+use tokio::sync::{oneshot, watch};
 use tokio::task::JoinSet;
 
-use super::{emit, Error};
+use super::{emit, Error, Shutdown};
 
 pub struct ReceiveOptions {
     pub accept: bool,
@@ -80,6 +80,7 @@ struct Receiver {
     destination: PathBuf,
     json: bool,
     timeout: Duration,
+    cancellation: watch::Receiver<bool>,
 }
 
 impl Receiver {
@@ -91,12 +92,12 @@ impl Receiver {
             let (mut send, mut recv) = conn.accept_bi().await?;
             let mut noise = handshake_responder(&mut send, &mut recv).await?;
             let mut last_progress = Instant::now();
-            let result = receive_transfer_with_accept(
+            let result = receive_transfer_with_cancellation(
                 &mut send,
                 &mut recv,
                 &mut noise,
                 &self.destination,
-                |header| {
+                |header, peer_cancelled| {
                     transfer_id = Some(header.transfer_id.clone());
                     emit(self.json, "incoming", json!(header));
                     let approval = self.approval.clone();
@@ -110,6 +111,7 @@ impl Receiver {
                             return false;
                         }
                         tokio::select! {
+                            _ = super::wait_for_cancel(peer_cancelled) => false,
                             accepted = decision => accepted.unwrap_or(false),
                             _ = approval_connection.closed() => false,
                         }
@@ -121,6 +123,7 @@ impl Receiver {
                         last_progress = Instant::now();
                     }
                 },
+                super::wait_for_cancel(self.cancellation.clone()),
             )
             .await;
             conn.close(0u32.into(), b"done");
@@ -149,7 +152,11 @@ impl Receiver {
     }
 }
 
-pub async fn run(options: ReceiveOptions, device: &DeviceIdentity) -> Result<(), Error> {
+pub async fn run(
+    options: ReceiveOptions,
+    device: &DeviceIdentity,
+    shutdown: &Shutdown,
+) -> Result<(), Error> {
     if !options.accept && !std::io::stdin().is_terminal() {
         return Err("Interactive approval requires a terminal; use --accept explicitly for automated receiving".into());
     }
@@ -157,6 +164,7 @@ pub async fn run(options: ReceiveOptions, device: &DeviceIdentity) -> Result<(),
     let destination = std::fs::canonicalize(&options.destination)?;
     let endpoint =
         create_endpoint(format!("0.0.0.0:{}", options.port).parse()?).map_err(|e| e.to_string())?;
+    shutdown.register(&endpoint);
     let (discovery, _) =
         MdnsDiscovery::new(device, endpoint.local_addr()?.port()).map_err(|e| e.to_string())?;
     let _discovery = DiscoveryHandle::new(discovery);
@@ -179,10 +187,32 @@ pub async fn run(options: ReceiveOptions, device: &DeviceIdentity) -> Result<(),
         destination,
         json: options.json,
         timeout: options.timeout,
+        cancellation: shutdown.cancellation_receiver(),
     };
     let mut transfers = JoinSet::new();
+    let cancellation = shutdown.cancellation_receiver();
     loop {
         tokio::select! {
+            biased;
+            _ = super::wait_for_cancel(cancellation.clone()) => {
+                let drain_deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+                while !transfers.is_empty() {
+                    tokio::select! {
+                        result = transfers.join_next() => {
+                            if let Some(Err(error)) = result {
+                                emit(options.json, "receive_error", json!({"message": error.to_string()}));
+                            }
+                        }
+                        _ = tokio::time::sleep_until(drain_deadline) => break,
+                    }
+                }
+                endpoint.close(
+                    dukto_lib::protocol::types::TRANSFER_CANCEL_CLOSE_CODE.into(),
+                    dukto_lib::protocol::types::TRANSFER_CANCEL_CLOSE_REASON,
+                );
+                let _ = tokio::time::timeout(Duration::from_secs(1), endpoint.wait_idle()).await;
+                return Err("Transfer cancelled".into());
+            }
             incoming = endpoint.accept() => {
                 let incoming = incoming.ok_or("Listener closed")?;
                 if options.once {

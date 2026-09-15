@@ -2,6 +2,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::state::device::DeviceIdentity;
 
+/// Application close code and marker for a deliberate transfer cancellation.
+pub const TRANSFER_CANCEL_CLOSE_CODE: u32 = 0xD0170;
+pub const TRANSFER_CANCEL_CLOSE_REASON: &[u8] = b"dukto:transfer-cancelled:v1";
+
 /// Packet type identifiers for the transfer protocol.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]

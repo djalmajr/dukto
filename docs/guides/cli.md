@@ -88,8 +88,7 @@ dukto send --address 192.168.0.16:4242 -- ./file.txt
 ```
 
 Use IPv4 endpoints (matching the desktop listener). Both machines must permit LAN
-traffic: mDNS uses UDP 5353; QUIC uses the receiver's advertised UDP port. Remote
-control of Codex does not establish LAN reachability for Dukto.
+traffic: mDNS uses UDP 5353; QUIC uses the receiver's advertised UDP port.
 
 ## Automation and completion
 
@@ -104,12 +103,13 @@ Continuous receivers report individual failures as `receive_error` and continue.
 limits each active connection, not idle listening. `--data-dir` isolates identities
 for tests, and `--name` sets the advertised display name for this invocation.
 
-Protocol **0.2** requires a receiver receipt matching the transfer ID, item count
+Protocol **0.2** requires a receiver receipt matching the transfer ID, item count,
 and bytes after writes are flushed. Update both CLI and desktop builds together:
-old 0.1 apps cannot reliably interoperate with this completion handshake.
-Partial files can remain after failed or interrupted transfers; resuming is not
-implemented. The CLI uses the same ephemeral Noise identity behavior as the UI;
-it does not add persistent trusted-device pairing.
+old 0.1 apps cannot reliably interoperate with this completion handshake. An
+incomplete staged file is removed after cancellation or failure. Files completed
+before a multi-file transfer stops remain available; transfers cannot be resumed.
+The CLI uses the same Noise session behavior as the desktop app and does not add
+persistent trusted-device pairing.
 
 ## Verify
 

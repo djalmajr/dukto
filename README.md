@@ -1,80 +1,50 @@
 # Dukto
 
-Cross-platform desktop file transfer for local networks. Zero configuration, end-to-end encrypted, peer-to-peer.
+Dukto transfers files and folders between macOS, Windows, and Linux computers on the same local network. Devices discover one another automatically; transfers move directly between peers without an account or cloud storage service.
 
-## Table of Contents
+The desktop app and the command-line interface use the same transfer protocol.
 
-- [Concepts](#concepts)
-  - [Overview](docs/concepts/overview.md)
-  - [Discovery](docs/concepts/discovery.md)
-  - [Transfer Protocol](docs/concepts/transfer-protocol.md)
-  - [Security](docs/concepts/security.md)
-- [Guides](#guides)
-  - [Development Setup](docs/guides/development.md)
-  - [Prototyping](docs/guides/prototyping.md)
-  - [Project Structure](docs/guides/project-structure.md)
+## Features
 
-## Concepts
+- Local discovery through mDNS.
+- Encrypted QUIC transfer sessions using Noise.
+- Explicit receiver approval for incoming transfers.
+- Files, folders, mixed selections, and concurrent transfers.
+- Progress, transfer rates, receipts, and transfer-specific cancellation.
+- A CLI for terminal workflows and automation.
 
-### Overview
+Dukto does not currently provide internet relay, persistent trusted-device pairing, or transfer resumption. Display names and hostnames are self-reported; approve requests only from devices you expect.
 
-Dukto discovers nearby devices via mDNS and transfers files directly over QUIC with Noise encryption. No server, no cloud, no accounts. See [Overview](docs/concepts/overview.md).
+## Documentation
 
-### Discovery
+All documentation body content is maintained in US English. The website may localize its navigation and other interface text.
 
-Devices advertise themselves on the local network using multicast DNS. Peers appear and disappear in real-time. See [Discovery](docs/concepts/discovery.md).
+- [Product scope](docs/PRD.md)
+- [Architecture overview](docs/concepts/overview.md)
+- [LAN discovery](docs/concepts/discovery.md)
+- [Transfer protocol](docs/concepts/transfer-protocol.md)
+- [Security model](docs/concepts/security.md)
+- [CLI guide](docs/guides/cli.md)
+- [Development setup](docs/guides/development.md)
+- [Project structure](docs/guides/project-structure.md)
+- [Prototyping](docs/guides/prototyping.md)
+- [Manual UI testing](docs/guides/manual-ui-tests.md)
+- [Concurrent transfer testing](docs/guides/concurrency-validation.md)
+- [Website and release builds](docs/guides/website-and-releases.md)
+- [macOS signing and notarization](docs/guides/macos-notarization.md)
+- [Release notes](docs/releases/RELEASE-NOTES.md)
 
-### Transfer Protocol
+## Quick start for contributors
 
-Framed, versioned packets over QUIC with explicit acceptance, progress tracking, and structured error handling. See [Transfer Protocol](docs/concepts/transfer-protocol.md).
+Install Bun, Rust, and the Tauri platform prerequisites, then run these commands from the repository root:
 
-### Security
-
-End-to-end encryption via Noise handshake over QUIC. Every transfer requires explicit user approval. See [Security](docs/concepts/security.md).
-
-## Guides
-
-### Development Setup
-
-Local development with Tauri, SolidJS, and Rust. See [Development Setup](docs/guides/development.md).
-
-### Prototyping
-
-Standalone UI prototyping with the `<z-proto>` web component. See [Prototyping](docs/guides/prototyping.md).
-
-### Project Structure
-
-Module classification, colocation conventions, and architecture decisions. See [Project Structure](docs/guides/project-structure.md).
-
-## Quick Start
-
-For headless transfers and automation, see the [CLI guide](docs/guides/cli.md).
-
-```bash
-# Install dependencies
+~~~sh
 bun install
-
-# Development mode (Tauri + frontend)
 bun run dev
+~~~
 
-# Run UI prototype (no Rust needed)
-bun run proto:dev
-```
-
-## Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| Desktop framework | Tauri v2 |
-| Frontend | SolidJS + TypeScript + Tailwind CSS v4 |
-| Backend | Rust (Tokio, Quinn, Snow, mdns-sd) |
-| Build | Bun + Vite + Biome |
-| Routing | TanStack Router |
-
-## Website and installers
-
-Run `bun run site:dev` to review the landing page, downloads and documentation locally. Generate production HTML with `bun run site:build`. See [website and release operations](docs/guides/website-and-releases.md) for the installer workflow and publication steps.
+For the CLI and website, see their guides linked above.
 
 ## License
 
-Private.
+No license has been published. Do not assume permission to redistribute or reuse the code.

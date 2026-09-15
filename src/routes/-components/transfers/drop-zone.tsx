@@ -1,6 +1,7 @@
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { type Accessor, type JSX, createSignal, onCleanup, onMount } from "solid-js";
+import { fileDropPosition } from "~/routes/-helpers/file-drop-position";
 
 interface DropZoneProps {
 	children: (hostId: Accessor<string | undefined>) => JSX.Element;
@@ -19,7 +20,11 @@ function DropZone(props: DropZoneProps) {
 				setTargetId(undefined);
 				return;
 			}
-			const position = payload.position.toLogical(window.devicePixelRatio);
+			const position = fileDropPosition(
+				payload.position,
+				navigator.platform,
+				window.devicePixelRatio,
+			);
 			const hostId =
 				document
 					.elementFromPoint(position.x, position.y)
