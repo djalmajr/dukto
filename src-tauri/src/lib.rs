@@ -28,11 +28,15 @@ mod desktop {
             )
             .init();
 
+        let _ = rustls::crypto::ring::default_provider().install_default();
+
         tauri::Builder::default()
             .plugin(tauri_plugin_dialog::init())
             .plugin(tauri_plugin_notification::init())
             .plugin(tauri_plugin_os::init())
             .plugin(tauri_plugin_shell::init())
+            .plugin(tauri_plugin_updater::Builder::new().build())
+            .plugin(tauri_plugin_process::init())
             .invoke_handler(tauri::generate_handler![
                 commands::get_device_info,
                 commands::get_peers,
@@ -42,6 +46,8 @@ mod desktop {
                 commands::send_to_peer,
                 commands::cancel_transfer,
                 commands::respond_transfer,
+                commands::updater::download_app_update,
+                commands::updater::install_app_update,
             ])
             .setup(|app| {
                 #[cfg(target_os = "windows")]

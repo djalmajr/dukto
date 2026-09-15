@@ -13,7 +13,20 @@ on:
 permissions:
   contents: read
 jobs:
+  validate-release-request:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require main for a stable release draft
+        if: inputs.create_release_draft
+        env:
+          RELEASE_REF: ${{ github.ref }}
+        run: |
+          if [[ "$RELEASE_REF" != "refs/heads/main" ]]; then
+            echo "::error::Release drafts may only be created from refs/heads/main"
+            exit 1
+          fi
   build:
+    needs: validate-release-request
     strategy:
       fail-fast: false
       matrix:
@@ -23,10 +36,10 @@ jobs:
             bundles: nsis
           - runner: macos-latest
             target: aarch64-apple-darwin
-            bundles: dmg
+            bundles: app,dmg
           - runner: macos-latest
             target: x86_64-apple-darwin
-            bundles: dmg
+            bundles: app,dmg
           - runner: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
             bundles: deb,appimage
@@ -46,6 +59,19 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf libfuse2
       - run: bun install --frozen-lockfile
+      - name: Require the updater signing key when updater artifacts are enabled
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          node <<'NODE'
+          const fs = require("node:fs");
+          const config = JSON.parse(fs.readFileSync("src-tauri/tauri.conf.json", "utf8"));
+          if (config.bundle?.createUpdaterArtifacts && !process.env.TAURI_SIGNING_PRIVATE_KEY) {
+            console.error("::error::TAURI_SIGNING_PRIVATE_KEY is required when createUpdaterArtifacts is enabled");
+            process.exit(1);
+          }
+          NODE
       - run: bun run site:check
       - run: cargo test --manifest-path src-tauri/Cargo.toml --no-default-features --locked
       - run: bun test
@@ -78,6 +104,8 @@ jobs:
       - name: Build signed and notarized macOS app
         if: runner.os == 'macOS' && inputs.notarize_macos
         env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
@@ -104,6 +132,50 @@ jobs:
         run: bun run build -- --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} --no-sign
         env:
           APPIMAGE_EXTRACT_AND_RUN: "1"
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      - name: Sign updater bundle when --no-sign skipped its signature
+        shell: bash
+        env:
+          RUST_TARGET: ${{ matrix.target }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          bundle_root="src-tauri/target/$RUST_TARGET/release/bundle"
+          case "$RUST_TARGET" in
+            *-apple-darwin) pattern='*.app.tar.gz' ;;
+            *-pc-windows-msvc) pattern='*-setup.exe' ;;
+            *-unknown-linux-gnu) pattern='*.AppImage' ;;
+            *) echo "::error::Unsupported release target: $RUST_TARGET"; exit 1 ;;
+          esac
+          bundles=()
+          while IFS= read -r -d '' bundle; do
+            bundles+=("$bundle")
+          done < <(find "$bundle_root" -type f -iname "$pattern" -print0)
+          if [[ "${#bundles[@]}" -ne 1 ]]; then
+            echo "::error::Expected one updater bundle matching $pattern, found ${#bundles[@]}"
+            exit 1
+          fi
+          asset="${bundles[0]}"
+          if [[ ! -s "$asset.sig" ]]; then
+            if [[ -z "$TAURI_SIGNING_PRIVATE_KEY" ]]; then
+              echo "::error::TAURI_SIGNING_PRIVATE_KEY is required to sign $asset"
+              exit 1
+            fi
+            umask 077
+            key_file="$(mktemp)"
+            trap 'rm -f "$key_file"' EXIT
+            printf '%s' "$TAURI_SIGNING_PRIVATE_KEY" > "$key_file"
+            bunx tauri signer sign \
+              --private-key-path "$key_file" \
+              --password "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" \
+              "$asset"
+          fi
+          if [[ ! -s "$asset.sig" ]]; then
+            echo "::error::Updater signature was not produced for $asset"
+            exit 1
+          fi
       - name: Build CLI
         run: cargo build --manifest-path src-tauri/Cargo.toml --no-default-features --bin dukto-cli --release --locked --target ${{ matrix.target }}
       - name: Collect and checksum
@@ -112,18 +184,47 @@ jobs:
         with:
           name: dukto-${{ matrix.target }}
           path: |
-            .cache/release/${{ matrix.target }}/*.exe
-            .cache/release/${{ matrix.target }}/*.dmg
-            .cache/release/${{ matrix.target }}/*.deb
-            .cache/release/${{ matrix.target }}/*.AppImage
-            .cache/release/${{ matrix.target }}/*.zip
-            .cache/release/${{ matrix.target }}/*.tar.gz
+            .cache/release/${{ matrix.target }}/dukto_*
+            .cache/release/${{ matrix.target }}/dukto-cli_*
             .cache/release/${{ matrix.target }}/SHA256SUMS-*.txt
+          if-no-files-found: error
+          include-hidden-files: true
+  assemble-updater-feed:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dukto-*
+          path: artifacts
+          merge-multiple: true
+      - name: Install Minisign verifier
+        run: sudo apt-get update && sudo apt-get install --yes minisign
+      - name: Test updater signature validation
+        run: bun test scripts/generate-updater-manifest.test.mjs
+      - name: Generate a complete updater feed for this build run
+        run: |
+          set -euo pipefail
+          VERSION="$(node -p 'JSON.parse(require("node:fs").readFileSync("package.json", "utf8")).version')"
+          node scripts/generate-updater-manifest.mjs \
+            --artifacts-dir artifacts \
+            --output artifacts/latest.json \
+            --repo "$GITHUB_REPOSITORY" \
+            --tag "v$VERSION" \
+            --notes-file docs/releases/RELEASE-NOTES.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: updater-feed
+          path: artifacts/latest.json
           if-no-files-found: error
           include-hidden-files: true
   draft:
     if: inputs.create_release_draft
-    needs: build
+    needs: [build, assemble-updater-feed]
     runs-on: ubuntu-latest
     environment: release
     permissions:
@@ -135,6 +236,12 @@ jobs:
           pattern: dukto-*
           path: artifacts
           merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: updater-feed
+          path: updater-feed
+      - name: Include the already validated updater feed
+        run: cp updater-feed/latest.json artifacts/latest.json
       - name: Create reviewable draft only
         env:
           GH_TOKEN: ${{ github.token }}

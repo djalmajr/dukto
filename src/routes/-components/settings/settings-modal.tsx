@@ -3,6 +3,7 @@ import { Button } from "~/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "~/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { TextField, TextFieldInput } from "~/components/ui/text-field";
+import type { AppUpdateErrorCode, AppUpdateStatus } from "~/helpers/app-update-controller";
 import { t } from "~/helpers/i18n";
 
 export type ThemeMode = "light" | "dark" | "system";
@@ -12,13 +13,64 @@ interface SettingsModalProps {
 	destinationDir: string;
 	theme: ThemeMode;
 	language?: string;
+	currentVersion: string | null;
+	availableVersion: string | null;
+	updateBusy: boolean;
+	updateErrorCode: AppUpdateErrorCode;
+	updateErrorMessage: string | null;
+	updateStatus: AppUpdateStatus;
 	onChangeDestination: () => void;
 	onChangeTheme: (theme: ThemeMode) => void;
 	onChangeLanguage?: (lang: string) => void;
+	onCheckForUpdates: () => void;
 	onClose: () => void;
 }
 
 function SettingsModal(props: SettingsModalProps) {
+	const statusMessage = () => {
+		switch (props.updateStatus) {
+			case "checking":
+				return t("checkingForUpdates");
+			case "upToDate":
+				return t("upToDate");
+			case "available":
+			case "downloadError":
+				return t("updateAvailableVersion", { version: props.availableVersion ?? "" });
+			case "downloading":
+				return t("updateDownloading");
+			case "downloaded":
+				return t("updateDownloaded");
+			case "preparingInstall":
+				return t("updatePreparingInstall");
+			case "waitingForTransfers":
+				return t("updateWaitingForTransfers");
+			case "installing":
+				return t("updateInstalling");
+			case "installError":
+				return t("updateInstallFailed");
+			case "restarting":
+				return t("updateRestarting");
+			case "restartFailed":
+				return t("updateRestartManually");
+			default:
+				return t("updateNotChecked");
+		}
+	};
+
+	const errorMessage = () => {
+		if (props.updateErrorCode === "feedUnavailable") return t("updateFeedUnavailable");
+		if (props.updateErrorCode === "check") {
+			return t("updateCheckFailedWithDetails", { message: props.updateErrorMessage ?? "" });
+		}
+		if (props.updateErrorCode === "download") {
+			return t("updateDownloadFailedWithDetails", { message: props.updateErrorMessage ?? "" });
+		}
+		if (props.updateErrorCode === "install") {
+			return t("updateInstallFailedWithDetails", { message: props.updateErrorMessage ?? "" });
+		}
+		return null;
+	};
+
 	return (
 		<Dialog open={props.open} onOpenChange={(open) => !open && props.onClose()}>
 			<DialogContent
@@ -70,6 +122,31 @@ function SettingsModal(props: SettingsModalProps) {
 							</Tabs>
 						</div>
 					</Show>
+					<div class="space-y-1">
+						<p class="text-xs font-medium text-muted-foreground">{t("appUpdates")}</p>
+						<div class="flex items-center justify-between gap-2">
+							<div class="min-w-0 space-y-0.5">
+								<p class="text-xs">
+									{t("currentVersion", { version: props.currentVersion ?? "..." })}
+								</p>
+								<p class="text-xs text-muted-foreground">{statusMessage()}</p>
+							</div>
+							<Button
+								variant="outline"
+								disabled={props.updateBusy}
+								onClick={props.onCheckForUpdates}
+							>
+								{props.updateStatus === "checking"
+									? t("checkingForUpdates")
+									: props.availableVersion
+										? t("viewUpdate")
+										: t("checkForUpdates")}
+							</Button>
+						</div>
+						<Show when={errorMessage()}>
+							{(message) => <p class="text-xs text-destructive">{message()}</p>}
+						</Show>
+					</div>
 				</div>
 			</DialogContent>
 		</Dialog>

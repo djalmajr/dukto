@@ -22,6 +22,8 @@ jobs:
         with:
           bun-version: 1.4.0
       - uses: dtolnay/rust-toolchain@stable
+      - name: Install updater signature verifier
+        run: sudo apt-get update && sudo apt-get install -y minisign
       - run: bun install --frozen-lockfile
       - name: Build frontend and generate route types
         run: bun run vite:build
@@ -34,3 +36,16 @@ jobs:
       - run: cargo test --manifest-path src-tauri/Cargo.toml --no-default-features --locked
       - run: cargo build --manifest-path src-tauri/Cargo.toml --no-default-features --bin dukto-cli --locked
       - run: node scripts/test-cli.mjs
+
+  desktop-update-guard:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+      - uses: dtolnay/rust-toolchain@stable
+      - run: bun install --frozen-lockfile
+      - run: bun run vite:build
+      - name: Verify update installation and transfer exclusion
+        run: cargo test --manifest-path src-tauri/Cargo.toml --locked --lib transfer::cancellation::tests

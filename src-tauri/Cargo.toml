@@ -24,6 +24,8 @@ tauri-plugin-dialog = { version = "2", optional = true }
 tauri-plugin-notification = { version = "2", optional = true }
 tauri-plugin-os = { version = "2", optional = true }
 tauri-plugin-shell = { version = "2", optional = true }
+tauri-plugin-updater = { version = "2.11", optional = true }
+tauri-plugin-process = { version = "2.3", optional = true }
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -46,5 +48,5 @@ tauri-build = { version = "2", features = [], optional = true }
 
 [features]
 default = ["desktop", "custom-protocol"]
-desktop = ["dep:tauri", "dep:tauri-build", "dep:tauri-plugin-dialog", "dep:tauri-plugin-notification", "dep:tauri-plugin-os", "dep:tauri-plugin-shell"]
+desktop = ["dep:tauri", "dep:tauri-build", "dep:tauri-plugin-dialog", "dep:tauri-plugin-notification", "dep:tauri-plugin-os", "dep:tauri-plugin-shell", "dep:tauri-plugin-updater", "dep:tauri-plugin-process"]
 custom-protocol = ["desktop", "tauri/custom-protocol"]
