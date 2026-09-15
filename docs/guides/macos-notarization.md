@@ -32,3 +32,5 @@ The separate CLI archives are not signed or notarized by this desktop flow. Wind
 The workflow structure, shell syntax and missing-secret failure path were checked locally. The six Apple secrets were absent from Dukto when inspected, so no signed build or Apple acceptance has been claimed. After provisioning the secrets, run the manual workflow and require both macOS verification steps to pass before distributing the artifacts as notarized.
 
 Reference: [Tauri macOS signing and notarization](https://v2.tauri.app/distribute/sign/macos/).
+
+Signing secrets belong to the `release` environment, configured with a selected deployment branch policy allowing only `main`. Do not duplicate them as repository secrets: a workflow on another branch could otherwise access them. The build job uses this environment, so the policy also covers signing when no release draft is requested.
