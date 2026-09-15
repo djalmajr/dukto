@@ -11,6 +11,8 @@
 		"dialog:default",
 		"notification:default",
 		"os:default",
-		"shell:default"
+		"shell:default",
+		"updater:allow-check",
+		"process:allow-restart"
 	]
 }

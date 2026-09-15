@@ -6,7 +6,13 @@ use tokio::sync::{watch, Mutex};
 /// Owns cancellation state for active outgoing and incoming transfers.
 #[derive(Default)]
 pub struct TransferRegistry {
-    active: Mutex<HashMap<String, Arc<TransferCancellation>>>,
+    state: Mutex<RegistryState>,
+}
+
+#[derive(Default)]
+struct RegistryState {
+    active: HashMap<String, Arc<TransferCancellation>>,
+    installing_update: bool,
 }
 
 /// Per-transfer cancellation signal and its QUIC connection, when established.
@@ -16,10 +22,32 @@ pub struct TransferCancellation {
 }
 
 impl TransferRegistry {
+    /// Reserve an idle app for installation atomically with transfer registration.
+    pub async fn begin_update(&self) -> Result<(), String> {
+        let mut state = self.state.lock().await;
+        if state.installing_update {
+            return Err("An update is already being installed.".into());
+        }
+        if !state.active.is_empty() {
+            return Err(
+                "Wait for active transfers and incoming requests to finish before updating.".into(),
+            );
+        }
+        state.installing_update = true;
+        Ok(())
+    }
+
+    pub async fn end_update(&self) {
+        self.state.lock().await.installing_update = false;
+    }
+
     /// Reserve an ID before work starts so cancellation cannot race task startup.
     pub async fn register(&self, transfer_id: String) -> Result<Arc<TransferCancellation>, String> {
-        let mut active = self.active.lock().await;
-        if active.contains_key(&transfer_id) {
+        let mut state = self.state.lock().await;
+        if state.installing_update {
+            return Err("Dukto is installing an update. Try again after restart.".into());
+        }
+        if state.active.contains_key(&transfer_id) {
             return Err(format!("Transfer {transfer_id} is already active"));
         }
 
@@ -28,14 +56,14 @@ impl TransferRegistry {
             cancelled,
             connection: Mutex::new(None),
         });
-        active.insert(transfer_id, control.clone());
+        state.active.insert(transfer_id, control.clone());
         Ok(control)
     }
 
     /// Cancel only the transfer identified by `transfer_id`.
     pub async fn cancel(&self, transfer_id: &str) -> bool {
-        let active = self.active.lock().await;
-        match active.get(transfer_id) {
+        let state = self.state.lock().await;
+        match state.active.get(transfer_id) {
             Some(control) => control.cancel().await,
             None => false,
         }
@@ -43,12 +71,13 @@ impl TransferRegistry {
 
     /// Release a reservation only when it still belongs to this task.
     pub async fn remove(&self, transfer_id: &str, control: &Arc<TransferCancellation>) {
-        let mut active = self.active.lock().await;
-        if active
+        let mut state = self.state.lock().await;
+        if state
+            .active
             .get(transfer_id)
             .is_some_and(|current| Arc::ptr_eq(current, control))
         {
-            active.remove(transfer_id);
+            state.active.remove(transfer_id);
         }
     }
 }
@@ -104,6 +133,42 @@ mod tests {
     use super::*;
     use crate::transfer::quic::create_endpoint;
     use std::net::SocketAddr;
+
+    #[tokio::test]
+    async fn update_waits_for_transfers_then_blocks_new_work_until_released() {
+        // Verified mutation: removing the installation guard from register fails this test.
+        let registry = TransferRegistry::default();
+        let transfer = registry.register("incoming-approval".into()).await.unwrap();
+        assert!(registry.begin_update().await.is_err());
+        assert!(!transfer.is_cancelled());
+        registry.remove("incoming-approval", &transfer).await;
+        registry.begin_update().await.unwrap();
+        assert!(registry.begin_update().await.is_err());
+        assert!(registry.register("outgoing".into()).await.is_err());
+        registry.end_update().await;
+        assert!(registry.register("outgoing".into()).await.is_ok());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn update_and_transfer_registration_cannot_both_win() {
+        // Verified mutation: allowing register during installation lets both competitors win.
+        for _ in 0..64 {
+            let registry = Arc::new(TransferRegistry::default());
+            let barrier = Arc::new(tokio::sync::Barrier::new(2));
+            let updating = tokio::spawn({
+                let registry = registry.clone();
+                let barrier = barrier.clone();
+                async move {
+                    barrier.wait().await;
+                    registry.begin_update().await
+                }
+            });
+            barrier.wait().await;
+            let transfer = registry.register("new-transfer".into()).await;
+            let update = updating.await.unwrap();
+            assert_ne!(update.is_ok(), transfer.is_ok());
+        }
+    }
 
     #[tokio::test]
     async fn cancellation_is_scoped_and_wakes_only_the_named_transfer() {

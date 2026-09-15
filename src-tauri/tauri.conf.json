@@ -41,6 +41,16 @@
 			"icons/128x128@2x.png",
 			"icons/icon.icns",
 			"icons/icon.ico"
-		]
+		],
+		"createUpdaterArtifacts": true
+	},
+	"plugins": {
+		"updater": {
+			"endpoints": ["https://github.com/djalmajr/dukto/releases/latest/download/latest.json"],
+			"pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEU2RUQ3OUMwM0M4NDBGMDUKUldRRkQ0UTh3SG50NWdVWGMySVRXQWdoOVJmK3JRRkUwS2g1cjJJMzVtbzRRKytwTlFGTEkxTGcK",
+			"windows": {
+				"installMode": "passive"
+			}
+		}
 	}
 }

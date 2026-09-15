@@ -1,10 +1,13 @@
 import { Outlet, createRootRoute, useNavigate, useSearch } from "@tanstack/solid-router";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Show, createEffect } from "solid-js";
+import { Show, createEffect, onMount } from "solid-js";
 import { Button } from "~/components/ui/button";
 import WindowControls from "~/components/window-controls";
 import { changeLanguage, language, t } from "~/helpers/i18n";
 import SettingsModal from "~/routes/-components/settings/settings-modal";
+import UpdateAvailableDialog from "~/routes/-components/settings/update-available-dialog";
+import { incomingRequest } from "~/routes/-stores/transfers";
+import { appUpdates } from "~/stores/app-updates";
 import { device } from "~/stores/device";
 import { resolvedTheme, setDestinationDir, setTheme, settings, theme } from "~/stores/settings";
 import LucideSettings from "~icons/lucide/settings";
@@ -20,10 +23,21 @@ function RootLayout() {
 	const search = useSearch({ strict: false });
 	const showSettings = () => (search() as { settings?: boolean }).settings === true;
 
+	onMount(() => {
+		void appUpdates.startupCheck();
+	});
+
 	createEffect(() => {
 		const dark = resolvedTheme() === "dark";
 		document.documentElement.classList.toggle("dark", dark);
 		document.documentElement.setAttribute("data-kb-theme", dark ? "dark" : "light");
+	});
+
+	createEffect(() => {
+		const pendingRequest = incomingRequest.current;
+		const availableVersion = appUpdates.state.availableVersion;
+		appUpdates.setIncomingRequestActive(Boolean(pendingRequest));
+		if (!pendingRequest && availableVersion) appUpdates.presentDeferredUpdate();
 	});
 
 	function handleWindowDrag(e: MouseEvent) {
@@ -83,11 +97,19 @@ function RootLayout() {
 				destinationDir={settings()?.destination_dir ?? "..."}
 				theme={theme()}
 				language={language()}
+				currentVersion={appUpdates.state.currentVersion}
+				availableVersion={appUpdates.state.availableVersion}
+				updateBusy={appUpdates.isBusy()}
+				updateErrorCode={appUpdates.state.errorCode}
+				updateErrorMessage={appUpdates.state.errorMessage}
+				updateStatus={appUpdates.state.status}
 				onChangeDestination={handleChangeDestination}
 				onChangeTheme={setTheme}
 				onChangeLanguage={changeLanguage}
+				onCheckForUpdates={() => void appUpdates.checkForUpdates(false)}
 				onClose={() => navigate({ to: "/", search: { settings: undefined } })}
 			/>
+			<UpdateAvailableDialog />
 		</div>
 	);
 }
