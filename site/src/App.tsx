@@ -1,10 +1,10 @@
 import { For, type JSX, Show, createSignal, onCleanup, onMount } from "solid-js";
 import IconWindows from "~icons/bi/windows";
-import ArrowDown from "~icons/lucide/arrow-down";
 import ArrowLeftRight from "~icons/lucide/arrow-left-right";
 import ArrowRight from "~icons/lucide/arrow-right";
 import ArrowUpRight from "~icons/lucide/arrow-up-right";
 import IconCheck from "~icons/lucide/check";
+import CloudDownload from "~icons/lucide/cloud-download";
 import IconCopy from "~icons/lucide/copy";
 import IconExternalLink from "~icons/lucide/external-link";
 import IconFolder from "~icons/lucide/folder";
@@ -47,10 +47,12 @@ function LinkButton(props: { href: string; children: JSX.Element; secondary?: bo
 }
 function AssetLink(props: { href: string; ariaLabel: string; children: JSX.Element }) {
 	return (
-		<a class="asset-link" href={props.href} aria-label={props.ariaLabel}>
+		<div class="asset-row">
 			<span>{props.children}</span>
-			<ArrowDown class="arrow-icon" aria-hidden="true" />
-		</a>
+			<a class="asset-link" href={props.href} aria-label={props.ariaLabel} title={props.ariaLabel}>
+				<CloudDownload class="arrow-icon" aria-hidden="true" />
+			</a>
+		</div>
 	);
 }
 function Header(props: { path: string }) {
@@ -74,6 +76,12 @@ function Header(props: { path: string }) {
 				>
 					{t("Documentação")}
 				</a>
+				<a
+					href={localPath("/downloads/")}
+					aria-current={props.path.replace(/\/$/, "") === "/downloads" ? "page" : undefined}
+				>
+					{t("Downloads")}
+				</a>
 			</nav>
 			<div class="header-actions">
 				<Preferences />
@@ -90,19 +98,6 @@ function Header(props: { path: string }) {
 				>
 					<IconGithub aria-hidden="true" />
 				</Button>
-				<div class="header-download">
-					<Button
-						as="a"
-						href={localPath("/downloads/")}
-						aria-label={t("Obter o Dukto")}
-						title={t("Obter o Dukto")}
-						class="action"
-						size="lg"
-					>
-						<span class="download-label">{t("Obter o Dukto")}</span>
-						<ArrowDown class="arrow-icon" aria-hidden="true" />
-					</Button>
-				</div>
 			</div>
 			<Button
 				class="mobile-menu"
@@ -264,7 +259,7 @@ function Home() {
 						<div class="hero-actions">
 							<LinkButton href={localPath("/downloads/")}>
 								{t("Obter o Dukto")}
-								<ArrowDown class="arrow-icon" aria-hidden="true" />
+								<CloudDownload class="arrow-icon" aria-hidden="true" />
 							</LinkButton>
 							<a class="text-link" href={localPath("/docs/primeiros-passos/")}>
 								{t("Comece em poucos passos")}
@@ -447,7 +442,7 @@ function Home() {
 					<div>
 						<LinkButton href={localPath("/downloads/")}>
 							{t("Encontre sua versão")}
-							<ArrowDown class="arrow-icon" aria-hidden="true" />
+							<CloudDownload class="arrow-icon" aria-hidden="true" />
 						</LinkButton>
 						<a href={localPath("/docs/primeiros-passos/")}>
 							{t("Ou leia o guia de primeiros passos")}{" "}
@@ -733,10 +728,10 @@ function Downloads() {
 										)}
 									</For>
 								</div>
-								<LinkButton href={localPath("/docs/instalacao/")} secondary>
+								<a class="installation-link" href={localPath("/docs/instalacao/")}>
 									{t("Guia de instalação")}
 									<Arrow />
-								</LinkButton>
+								</a>
 							</article>
 						)}
 					</For>
