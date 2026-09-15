@@ -75,13 +75,13 @@ jobs:
       - run: bun run site:check
       - name: Test core including network discovery
         if: runner.os != 'macOS'
-        run: cargo test --manifest-path src-tauri/Cargo.toml --no-default-features --locked
+        run: cargo test --manifest-path src-tauri/Cargo.toml --no-default-features --features cli --locked
       - name: Test macOS core without hosted-runner multicast discovery
         if: runner.os == 'macOS'
         # Hosted macOS cannot resolve even its own mDNS announcement. These LAN
         # integration tests still run on Linux/Windows and on the local macOS lab.
         run: >-
-          cargo test --manifest-path src-tauri/Cargo.toml --no-default-features --locked --
+          cargo test --manifest-path src-tauri/Cargo.toml --no-default-features --features cli --locked --
           --skip discovery::mdns::tests::raw_mdns_register_and_browse
           --skip discovery::mdns::tests::register_and_browse_finds_peer
           --skip discovery::mdns::tests::explicit_shutdown_announces_peer_removal
@@ -189,8 +189,22 @@ jobs:
             echo "::error::Updater signature was not produced for $asset"
             exit 1
           fi
+      - name: Verify macOS desktop bundle excludes the standalone CLI
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          RUST_TARGET: ${{ matrix.target }}
+        run: |
+          python3 - <<'PYBUNDLE'
+          import os, pathlib, tarfile
+          root = pathlib.Path("src-tauri/target") / os.environ["RUST_TARGET"] / "release/bundle/macos"
+          binaries = sorted(path.name for path in (root / "Dukto.app/Contents/MacOS").iterdir())
+          assert binaries == ["dukto"], f"Unexpected app binaries: {binaries}"
+          with tarfile.open(root / "Dukto.app.tar.gz") as archive:
+              assert not any(member.name.endswith("/dukto-cli") for member in archive.getmembers())
+          PYBUNDLE
       - name: Build CLI
-        run: cargo build --manifest-path src-tauri/Cargo.toml --no-default-features --bin dukto-cli --release --locked --target ${{ matrix.target }}
+        run: cargo build --manifest-path src-tauri/Cargo.toml --no-default-features --features cli --bin dukto-cli --release --locked --target ${{ matrix.target }}
       - name: Collect and checksum
         run: bun run release:collect ${{ matrix.target }}
       - uses: actions/upload-artifact@v4

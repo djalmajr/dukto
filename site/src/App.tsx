@@ -668,7 +668,7 @@ function Downloads() {
 							{t("Comandos e exemplos")} <ArrowRight class="arrow-icon" aria-hidden="true" />
 						</a>
 					</div>
-					<CopyCode code="cargo build --manifest-path src-tauri/Cargo.toml --no-default-features --bin dukto-cli --release" />
+					<CopyCode code="cargo build --manifest-path src-tauri/Cargo.toml --no-default-features --features cli --bin dukto-cli --release" />
 				</section>
 				<div class="download-footnote">
 					{t("Use a mesma versão nos dois computadores. Consulte as")}{" "}

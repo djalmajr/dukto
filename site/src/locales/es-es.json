@@ -180,7 +180,7 @@
 	"Idioma": "Idioma",
 	"# Encontre seus dispositivos\ndukto peers\n\n# Arquivos e pastas, em uma viagem\ndukto send --peer ID -- ./foto.jpg ./projeto": "# Encuentra tus dispositivos\ndukto peers\n\n# Archivos y carpetas en un solo envío\ndukto send --peer ID -- ./foto.jpg ./projeto",
 	"# No computador que vai receber\ndukto receive --destination ./recebidos\n\n# No computador que vai enviar\ndukto peers\ndukto send --peer ID_DO_DESTINO -- ./foto.jpg": "# En el ordenador que va a recibir\ndukto receive --destination ./recebidos\n\n# En el ordenador que va a enviar\ndukto peers\ndukto send --peer ID_DO_DESTINO -- ./foto.jpg",
-	"cargo build --manifest-path src-tauri/Cargo.toml --no-default-features --bin dukto-cli --release\n\n# O binário estará em src-tauri/target/release/": "cargo build --manifest-path src-tauri/Cargo.toml --no-default-features --bin dukto-cli --release\n\n# El binario estará en src-tauri/target/release/",
+	"cargo build --manifest-path src-tauri/Cargo.toml --no-default-features --features cli --bin dukto-cli --release\n\n# O binário estará em src-tauri/target/release/": "cargo build --manifest-path src-tauri/Cargo.toml --no-default-features --features cli --bin dukto-cli --release\n\n# El binario estará en src-tauri/target/release/",
 	"dukto send --peer ID_DO_DESTINO -- ./pasta\n\n# Se a descoberta estiver indisponível\ndukto send --address 192.168.0.16:4243 -- ./pasta": "dukto send --peer ID_DO_DESTINO -- ./pasta\n\n# Si el descubrimiento no está disponible\ndukto send --address 192.168.0.16:4243 -- ./pasta",
 	"Downloads": "Descargas",
 	"Ou leia o guia de primeiros passos": "O lee la guía de primeros pasos",

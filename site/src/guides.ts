@@ -62,7 +62,7 @@ export const guides: Guide[] = [
 			{
 				title: "Compilar a CLI",
 				text: "Se você tem acesso ao repositório, instale Rust e as ferramentas de compilação da sua plataforma. Execute na raiz do repositório. A CLI não precisa de WebView.",
-				code: "cargo build --manifest-path src-tauri/Cargo.toml --no-default-features --bin dukto-cli --release\n\n# O binário estará em src-tauri/target/release/",
+				code: "cargo build --manifest-path src-tauri/Cargo.toml --no-default-features --features cli --bin dukto-cli --release\n\n# O binário estará em src-tauri/target/release/",
 			},
 		],
 	},
