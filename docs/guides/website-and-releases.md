@@ -15,6 +15,8 @@ bun run site:preview
 
 These commands build or preview local files; they do not publish the site. Keep documentation links valid across the generated routes and verify the prerendered pages after editing the guide source.
 
+Publish from `main` with the manual **Deploy website** GitHub Actions workflow (`.github/workflows/deploy-site.yml`). It builds and verifies the static pages before deploying the `dukto-site` Worker and its custom domain. Configure `CLOUDFLARE_API_TOKEN` as a secret and `CLOUDFLARE_ACCOUNT_ID` as a variable in the `website` environment, restricted to `main`. The production site is [dukto.djalmajr.dev](https://dukto.djalmajr.dev/).
+
 ## Installer workflow
 
 The manual GitHub Actions workflow under .github/workflows builds desktop packages and CLI archives for Windows, macOS, and Linux targets. It creates per-target checksums and verifies updater signatures before producing the update feed.

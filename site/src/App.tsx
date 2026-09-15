@@ -23,6 +23,9 @@ import { type Guide, guides } from "./guides";
 import { LocaleContext, localeValue, routeLocale, stripLocale, useLocale } from "./i18n";
 
 const github = "https://github.com/djalmajr/dukto";
+const releaseDownloads = `${github}/releases/download/v0.1.0`;
+const releaseNotes = `${github}/releases/tag/v0.1.0`;
+const releaseAsset = (filename: string) => `${releaseDownloads}/${filename}`;
 function Mark() {
 	return <img class="brand-mark" src={logoUrl} alt="" width="44" height="44" />;
 }
@@ -40,6 +43,14 @@ function LinkButton(props: { href: string; children: JSX.Element; secondary?: bo
 		>
 			{props.children}
 		</Button>
+	);
+}
+function AssetLink(props: { href: string; ariaLabel: string; children: JSX.Element }) {
+	return (
+		<a class="asset-link" href={props.href} aria-label={props.ariaLabel}>
+			<span>{props.children}</span>
+			<ArrowDown class="arrow-icon" aria-hidden="true" />
+		</a>
 	);
 }
 function Header(props: { path: string }) {
@@ -577,6 +588,89 @@ function Docs(props: { guide: Guide }) {
 }
 function Downloads() {
 	const { t, localPath } = useLocale();
+	const platforms = [
+		{
+			name: "macOS",
+			icon: IconApple,
+			format: "DMG",
+			text: t("Abra a imagem e leve o Dukto para Aplicativos."),
+			architectures: [
+				{
+					label: t("Apple Silicon · ARM64"),
+					packages: [{ label: t("Baixar DMG"), filename: "dukto_0.1.0_macos_arm64.dmg" }],
+				},
+				{
+					label: t("Intel · x64"),
+					packages: [{ label: t("Baixar DMG"), filename: "dukto_0.1.0_macos_x64.dmg" }],
+				},
+			],
+		},
+		{
+			name: "Windows",
+			icon: IconWindows,
+			format: "EXE",
+			text: t("Um instalador para colocar tudo no lugar."),
+			architectures: [
+				{
+					label: t("Windows · x64"),
+					packages: [
+						{
+							label: t("Baixar instalador EXE"),
+							filename: "dukto_0.1.0_windows_x64-setup.exe",
+						},
+					],
+				},
+			],
+		},
+		{
+			name: "Linux",
+			icon: IconLinux,
+			format: "DEB · AppImage",
+			text: t("Instale o pacote ou execute a versão portátil."),
+			architectures: [
+				{
+					label: t("Linux · x64"),
+					packages: [
+						{ label: t("Baixar DEB"), filename: "dukto_0.1.0_linux_x64.deb" },
+						{ label: t("Baixar AppImage"), filename: "dukto_0.1.0_linux_x64.AppImage" },
+					],
+				},
+				{
+					label: t("Linux · ARM64"),
+					packages: [
+						{ label: t("Baixar DEB"), filename: "dukto_0.1.0_linux_arm64.deb" },
+						{ label: t("Baixar AppImage"), filename: "dukto_0.1.0_linux_arm64.AppImage" },
+					],
+				},
+			],
+		},
+	];
+	const cliPlatforms = [
+		{
+			name: "macOS",
+			architectures: [
+				{
+					label: t("Apple Silicon · ARM64"),
+					filename: "dukto-cli_0.1.0_macos_arm64.tar.gz",
+				},
+				{ label: t("Intel · x64"), filename: "dukto-cli_0.1.0_macos_x64.tar.gz" },
+			],
+			format: t("Baixar TAR.GZ"),
+		},
+		{
+			name: "Windows",
+			architectures: [{ label: t("Windows · x64"), filename: "dukto-cli_0.1.0_windows_x64.zip" }],
+			format: t("Baixar ZIP"),
+		},
+		{
+			name: "Linux",
+			architectures: [
+				{ label: t("Linux · x64"), filename: "dukto-cli_0.1.0_linux_x64.tar.gz" },
+				{ label: t("Linux · ARM64"), filename: "dukto-cli_0.1.0_linux_arm64.tar.gz" },
+			],
+			format: t("Baixar TAR.GZ"),
+		},
+	];
 	return (
 		<>
 			<main class="wrap downloads">
@@ -598,55 +692,47 @@ function Downloads() {
 						<Arrow />
 					</span>
 					<div>
-						<strong>{t("A primeira release está a caminho.")}</strong>
-						<p>
-							{t(
-								"Os instaladores estão em preparação. Quando publicados, os downloads oficiais estarão no GitHub Releases.",
-							)}
-						</p>
+						<strong>{t("Dukto 0.1.0 já está disponível.")}</strong>
+						<p>{t("Baixe o aplicativo ou a CLI para seu sistema e arquitetura.")}</p>
 					</div>
-					<a href={`${github}/releases`} target="_blank" rel="noopener noreferrer">
-						{t("Acompanhar releases")}
+					<a href={releaseNotes} target="_blank" rel="noopener noreferrer">
+						{t("Ver release 0.1.0")}
 						<IconExternalLink class="arrow-icon" aria-hidden="true" />
 					</a>
 				</div>
 				<div class="download-grid">
-					<For
-						each={[
-							{
-								name: "macOS",
-								icon: IconApple,
-								format: "DMG",
-								arch: t("Apple Silicon e Intel"),
-								text: t("Abra a imagem e leve o Dukto para Aplicativos."),
-							},
-							{
-								name: "Windows",
-								icon: IconWindows,
-								format: "EXE",
-								arch: t("Windows 10/11 · x64"),
-								text: t("Um instalador para colocar tudo no lugar."),
-							},
-							{
-								name: "Linux",
-								icon: IconLinux,
-								format: "DEB / AppImage",
-								arch: t("Arquiteturas indicadas na release"),
-								text: t("Instale o pacote ou execute a versão portátil."),
-							},
-						]}
-					>
+					<For each={platforms}>
 						{(p) => (
 							<article class="download-card">
 								<span class="download-os">
 									<p.icon aria-hidden="true" />
 								</span>
 								<h2>{p.name}</h2>
-								<span>{p.arch}</span>
 								<p>{p.text}</p>
 								<div class="format-row">
 									<span>{p.format}</span>
-									<small>{t("Em preparação")}</small>
+									<small>v0.1.0</small>
+								</div>
+								<div class="download-architectures">
+									<For each={p.architectures}>
+										{(architecture) => (
+											<div class="download-architecture">
+												<strong>{architecture.label}</strong>
+												<div class="download-links">
+													<For each={architecture.packages}>
+														{(pkg) => (
+															<AssetLink
+																href={releaseAsset(pkg.filename)}
+																ariaLabel={`${architecture.label}: ${pkg.label}`}
+															>
+																{pkg.label}
+															</AssetLink>
+														)}
+													</For>
+												</div>
+											</div>
+										)}
+									</For>
 								</div>
 								<LinkButton href={localPath("/docs/instalacao/")} secondary>
 									{t("Guia de instalação")}
@@ -660,16 +746,33 @@ function Downloads() {
 					<div>
 						<span class="eyebrow">{t("PREFERE O TERMINAL?")}</span>
 						<h2>{t("Uma CLI. Os mesmos caminhos.")}</h2>
-						<p>
-							{t(
-								"Os binários da CLI terão downloads próprios nas releases. Até lá, você pode compilar a partir do código.",
-							)}
-						</p>
+						<p>{t("Baixe a CLI 0.1.0 para automatizar envios e recebimentos no terminal.")}</p>
 						<a class="text-link" href={localPath("/docs/cli/")}>
 							{t("Comandos e exemplos")} <ArrowRight class="arrow-icon" aria-hidden="true" />
 						</a>
 					</div>
-					<CopyCode code="cargo build --manifest-path src-tauri/Cargo.toml --no-default-features --features cli --bin dukto-cli --release" />
+					<div class="cli-assets">
+						<For each={cliPlatforms}>
+							{(platform) => (
+								<section class="cli-platform">
+									<h3>{platform.name}</h3>
+									<For each={platform.architectures}>
+										{(architecture) => (
+											<div class="cli-asset">
+												<span>{architecture.label}</span>
+												<AssetLink
+													href={releaseAsset(architecture.filename)}
+													ariaLabel={`${platform.name}, ${architecture.label}: ${platform.format}`}
+												>
+													{platform.format}
+												</AssetLink>
+											</div>
+										)}
+									</For>
+								</section>
+							)}
+						</For>
+					</div>
 				</section>
 				<div class="download-footnote">
 					{t("Use a mesma versão nos dois computadores. Consulte as")}{" "}
