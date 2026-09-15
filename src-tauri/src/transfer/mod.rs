@@ -1,6 +1,9 @@
+#[cfg(feature = "desktop")]
+pub mod cancellation;
 pub mod fs;
 pub mod quic;
 pub mod receiver;
 pub mod sender;
+#[cfg(feature = "desktop")]
 pub mod server;
 pub mod session;

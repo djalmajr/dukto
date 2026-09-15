@@ -1,16 +1,21 @@
 import { Outlet, createRootRoute, useNavigate, useSearch } from "@tanstack/solid-router";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { createEffect } from "solid-js";
-import LucideSettings from "~icons/lucide/settings";
-import { changeLanguage, language } from "~/helpers/i18n";
+import { Show, createEffect } from "solid-js";
+import { Button } from "~/components/ui/button";
+import WindowControls from "~/components/window-controls";
+import { changeLanguage, language, t } from "~/helpers/i18n";
 import SettingsModal from "~/routes/-components/settings/settings-modal";
+import { device } from "~/stores/device";
 import { resolvedTheme, setDestinationDir, setTheme, settings, theme } from "~/stores/settings";
+import LucideSettings from "~icons/lucide/settings";
 
 function isInteractiveTarget(target: HTMLElement) {
 	return target.closest("button,[role='button'],a,input,select,textarea,[data-no-window-drag]");
 }
 
 function RootLayout() {
+	const isWindows = navigator.platform.startsWith("Win");
+	const isMac = navigator.platform.startsWith("Mac");
 	const navigate = useNavigate();
 	const search = useSearch({ strict: false });
 	const showSettings = () => (search() as { settings?: boolean }).settings === true;
@@ -24,7 +29,9 @@ function RootLayout() {
 	function handleWindowDrag(e: MouseEvent) {
 		if (e.button !== 0 || e.detail > 1) return;
 		if (isInteractiveTarget(e.target as HTMLElement)) return;
-		getCurrentWindow().startDragging().catch(() => {});
+		getCurrentWindow()
+			.startDragging()
+			.catch(() => {});
 	}
 
 	async function handleChangeDestination() {
@@ -42,25 +49,33 @@ function RootLayout() {
 	return (
 		<div class="flex h-screen w-full flex-col overflow-hidden bg-background text-foreground">
 			<header
-				class="app-drag-region flex shrink-0 items-center justify-end px-2 py-1"
-				style={{ "padding-left": "78px", "min-height": "28px" }}
+				class="app-drag-region relative flex h-[45px] shrink-0 items-center border-b border-border bg-muted"
+				classList={{ "justify-end pr-3 pl-[78px]": isMac, "pl-3": !isMac }}
 				onMouseDown={handleWindowDrag}
 			>
-				<button
-					type="button"
-					class="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+				<p class="pointer-events-none absolute inset-x-[140px] truncate text-center text-xs font-medium text-muted-foreground">
+					{device() ? `${device()?.display_name} · ${device()?.hostname}` : "Dukto"}
+				</p>
+				<Button
+					variant="ghost"
+					size="icon"
+					class="h-6 w-6 text-muted-foreground"
 					onClick={() =>
 						navigate({
 							to: "/",
 							search: { settings: showSettings() ? undefined : true },
 						})
 					}
-					title="Settings"
+					title={t("settings")}
+					aria-label={t("settings")}
 				>
 					<LucideSettings width={16} height={16} />
-				</button>
+				</Button>
+				<Show when={isWindows}>
+					<WindowControls />
+				</Show>
 			</header>
-			<div class="mx-auto flex w-full max-w-[480px] flex-1 flex-col overflow-y-auto overflow-x-hidden px-4 pb-6">
+			<div class="flex min-h-0 w-full flex-1 flex-col overflow-y-auto overflow-x-hidden px-4 py-6">
 				<Outlet />
 			</div>
 			<SettingsModal

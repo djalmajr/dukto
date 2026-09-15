@@ -1,11 +1,12 @@
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use super::device::DeviceIdentity;
 use super::settings::Settings;
 use crate::discovery::types::PeerInfo;
+use crate::transfer::cancellation::TransferRegistry;
 
 /// Info about an active or completed transfer.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -20,6 +21,7 @@ pub struct AppState {
     pub transfers: DashMap<String, TransferInfo>,
     pub settings: Mutex<Settings>,
     pub data_dir: PathBuf,
+    pub transfer_registry: Arc<TransferRegistry>,
 }
 
 impl AppState {
@@ -31,6 +33,7 @@ impl AppState {
             transfers: DashMap::new(),
             settings: Mutex::new(settings),
             data_dir,
+            transfer_registry: Arc::new(TransferRegistry::default()),
         }
     }
 

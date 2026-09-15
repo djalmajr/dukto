@@ -1,0 +1,88 @@
+name: Build installers (manual)
+on:
+  workflow_dispatch:
+    inputs:
+      create_release_draft:
+        description: Create a GitHub release draft after all builds (only after review)
+        type: boolean
+        default: false
+permissions:
+  contents: read
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            target: x86_64-pc-windows-msvc
+            bundles: nsis
+          - runner: macos-latest
+            target: aarch64-apple-darwin
+            bundles: dmg
+          - runner: macos-latest
+            target: x86_64-apple-darwin
+            bundles: dmg
+          - runner: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            bundles: deb,appimage
+          - runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            bundles: deb,appimage
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Linux dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf libfuse2
+      - run: bun install --frozen-lockfile
+      - run: bun run site:check
+      - run: cargo test --manifest-path src-tauri/Cargo.toml --no-default-features --locked
+      - run: bun test
+      - name: Build desktop installer
+        run: bun run build -- --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} --no-sign
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+      - name: Build CLI
+        run: cargo build --manifest-path src-tauri/Cargo.toml --no-default-features --bin dukto-cli --release --locked --target ${{ matrix.target }}
+      - name: Collect and checksum
+        run: bun run release:collect ${{ matrix.target }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dukto-${{ matrix.target }}
+          path: |
+            .cache/release/${{ matrix.target }}/*.exe
+            .cache/release/${{ matrix.target }}/*.dmg
+            .cache/release/${{ matrix.target }}/*.deb
+            .cache/release/${{ matrix.target }}/*.AppImage
+            .cache/release/${{ matrix.target }}/*.zip
+            .cache/release/${{ matrix.target }}/*.tar.gz
+            .cache/release/${{ matrix.target }}/SHA256SUMS-*.txt
+          if-no-files-found: error
+          include-hidden-files: true
+  draft:
+    if: inputs.create_release_draft
+    needs: build
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dukto-*
+          path: artifacts
+          merge-multiple: true
+      - name: Create reviewable draft only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(node -p 'require("./package.json").version')
+          gh release create "v$VERSION" artifacts/* --draft --target "$GITHUB_SHA" --title "Dukto $VERSION" --notes-file docs/releases/RELEASE-NOTES.md

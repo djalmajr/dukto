@@ -12,7 +12,9 @@ pub async fn handshake_initiator(
 ) -> Result<TransportState, Box<dyn std::error::Error + Send + Sync>> {
     let builder = Builder::new(NOISE_PATTERN.parse()?);
     let keypair = builder.generate_keypair()?;
-    let mut noise = builder.local_private_key(&keypair.private).build_initiator()?;
+    let mut noise = builder
+        .local_private_key(&keypair.private)
+        .build_initiator()?;
 
     let mut buf = vec![0u8; MAX_MSG_LEN];
 
@@ -39,7 +41,9 @@ pub async fn handshake_responder(
 ) -> Result<TransportState, Box<dyn std::error::Error + Send + Sync>> {
     let builder = Builder::new(NOISE_PATTERN.parse()?);
     let keypair = builder.generate_keypair()?;
-    let mut noise = builder.local_private_key(&keypair.private).build_responder()?;
+    let mut noise = builder
+        .local_private_key(&keypair.private)
+        .build_responder()?;
 
     let mut buf = vec![0u8; MAX_MSG_LEN];
 

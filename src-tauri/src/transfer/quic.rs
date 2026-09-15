@@ -9,13 +9,18 @@ pub fn create_endpoint(
 ) -> Result<quinn::Endpoint, Box<dyn std::error::Error>> {
     let (server_tls, client_tls) = generate_self_signed_config()?;
 
-    let server_config = quinn::ServerConfig::with_crypto(Arc::new(
+    let mut transport = quinn::TransportConfig::default();
+    transport.keep_alive_interval(Some(std::time::Duration::from_secs(5)));
+    let transport = Arc::new(transport);
+    let mut server_config = quinn::ServerConfig::with_crypto(Arc::new(
         quinn::crypto::rustls::QuicServerConfig::try_from(server_tls)?,
     ));
 
-    let client_config = quinn::ClientConfig::new(Arc::new(
+    server_config.transport_config(transport.clone());
+    let mut client_config = quinn::ClientConfig::new(Arc::new(
         quinn::crypto::rustls::QuicClientConfig::try_from(client_tls)?,
     ));
+    client_config.transport_config(transport);
 
     let mut endpoint = quinn::Endpoint::server(server_config, bind_addr)?;
     endpoint.set_default_client_config(client_config);

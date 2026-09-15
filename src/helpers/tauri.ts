@@ -1,4 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { PeerInfo } from "~/stores/peers";
+
+export async function getPeers(): Promise<PeerInfo[]> {
+	return invoke<PeerInfo[]>("get_peers");
+}
 
 export interface DeviceIdentity {
 	device_id: string;
@@ -33,4 +38,8 @@ export async function sendToPeer(
 
 export async function respondTransfer(transferId: string, accepted: boolean): Promise<void> {
 	return invoke<void>("respond_transfer", { transferId, accepted });
+}
+
+export async function cancelTransfer(transferId: string): Promise<void> {
+	return invoke<void>("cancel_transfer", { transferId });
 }

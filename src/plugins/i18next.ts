@@ -50,10 +50,9 @@ function generateModule(entries: TranslationEntry[]): string {
 	const namespaces = new Map<string, Map<string, string>>();
 
 	for (const entry of entries) {
-		if (!namespaces.has(entry.namespace)) {
-			namespaces.set(entry.namespace, new Map());
-		}
-		namespaces.get(entry.namespace)!.set(entry.lang, entry.path);
+		const languages = namespaces.get(entry.namespace) ?? new Map<string, string>();
+		languages.set(entry.lang, entry.path);
+		namespaces.set(entry.namespace, languages);
 	}
 
 	const imports: string[] = [];

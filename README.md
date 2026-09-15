@@ -48,6 +48,8 @@ Module classification, colocation conventions, and architecture decisions. See [
 
 ## Quick Start
 
+For headless transfers and automation, see the [CLI guide](docs/guides/cli.md).
+
 ```bash
 # Install dependencies
 bun install
@@ -68,6 +70,10 @@ bun run proto:dev
 | Backend | Rust (Tokio, Quinn, Snow, mdns-sd) |
 | Build | Bun + Vite + Biome |
 | Routing | TanStack Router |
+
+## Website and installers
+
+Run `bun run site:dev` to review the landing page, downloads and documentation locally. Generate production HTML with `bun run site:build`. See [website and release operations](docs/guides/website-and-releases.md) for the installer workflow and publication steps.
 
 ## License
 

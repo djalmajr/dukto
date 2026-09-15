@@ -1,9 +1,20 @@
 import { For, type JSX, Show, createEffect, createSignal, onCleanup } from "solid-js";
-import LucideBan from "~icons/lucide/ban";
-import LucideX from "~icons/lucide/x";
 import PlatformIcon from "~/components/platform-icon";
+import { Button } from "~/components/ui/button";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuPortal,
+	DropdownMenuTrigger,
+} from "~/components/ui/dropdown-menu";
 import { t } from "~/helpers/i18n";
 import { formatBytes } from "~/utils/format";
+import LucideBan from "~icons/lucide/ban";
+import LucideEllipsisVertical from "~icons/lucide/ellipsis-vertical";
+import LucideFilePlus from "~icons/lucide/file-plus";
+import LucideFolderPlus from "~icons/lucide/folder-plus";
+import LucideX from "~icons/lucide/x";
 
 export interface TransferSlot {
 	id: string;
@@ -27,12 +38,29 @@ export interface PeerCardProps {
 	transfers?: TransferSlot[];
 	expandedContent?: JSX.Element;
 	dropHighlight?: boolean;
+	dropTargetEnabled?: boolean;
+	actionsDisabled?: boolean;
+	onAddItems?: (directory: boolean) => void;
 	onClick?: () => void;
 	onAbortTransfer?: (transferId: string) => void;
 	onDismissTransfer?: (transferId: string) => void;
 }
 
 const AUTO_DISMISS_SECS = 3;
+
+function PeerIdentity(props: { peer: PeerCardProps["peer"] }) {
+	return (
+		<>
+			<span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+				<PlatformIcon platform={props.peer.platform} class="h-[22px] w-[22px]" />
+			</span>
+			<div class="min-w-0 flex-1">
+				<p class="truncate text-sm font-semibold tracking-[-0.15px]">{props.peer.display_name}</p>
+				<p class="truncate text-xs text-muted-foreground">{props.peer.hostname}</p>
+			</div>
+		</>
+	);
+}
 
 function TransferRow(props: {
 	slot: TransferSlot;
@@ -144,36 +172,69 @@ function PeerCard(props: PeerCardProps) {
 	const hasActive = () => slots().some((s) => s.status === "active");
 	const hasError = () => slots().some((s) => s.status === "error");
 	const hasAny = () => slots().length > 0;
-	const hasExpanded = () => !!props.expandedContent;
 
 	return (
 		<div
-			class="relative overflow-hidden rounded-xl border bg-card shadow-[0_1px_6px_0_rgba(0,0,0,0.05)] transition-colors"
+			data-peer-id={props.dropTargetEnabled === false ? undefined : props.peer.device_id}
+			class="relative shrink-0 overflow-hidden rounded-xl border bg-card shadow-[0_1px_6px_0_rgba(0,0,0,0.05)] transition-colors"
 			classList={{
-				"border-blue-500 ring-2 ring-blue-500 ring-inset bg-blue-50/50 dark:bg-blue-950/20": !!props.dropHighlight,
+				"border-blue-500 ring-2 ring-blue-500 ring-inset bg-blue-50/50 dark:bg-blue-950/20":
+					!!props.dropHighlight,
 				"border-primary/30": !props.dropHighlight && hasActive() && !hasError(),
 				"border-destructive/30": !props.dropHighlight && hasError(),
-				"border-primary/40": !props.dropHighlight && hasExpanded() && !hasAny() && !hasError(),
-				"border-border": !props.dropHighlight && !hasActive() && !hasError() && !(hasExpanded() && !hasAny()),
+				"border-border": !props.dropHighlight && !hasActive() && !hasError(),
 			}}
 		>
-			<button
-				type="button"
-				class="flex w-full items-center gap-3 p-3.5 text-left transition-colors"
-				classList={{
-					"hover:bg-accent/50": !hasExpanded(),
-					"pointer-events-none": hasExpanded(),
-				}}
-				onClick={props.onClick}
-			>
-				<span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-					<PlatformIcon platform={props.peer.platform} class="h-[22px] w-[22px]" />
-				</span>
-				<div class="min-w-0 flex-1">
-					<p class="truncate text-sm font-semibold">{props.peer.display_name}</p>
-					<p class="truncate text-xs text-muted-foreground">{props.peer.hostname}</p>
-				</div>
-			</button>
+			<div class="flex w-full items-center gap-3 px-3.5 py-3.5">
+				<Show
+					when={props.onClick}
+					fallback={
+						<div class="flex min-w-0 flex-1 items-center gap-3">
+							<PeerIdentity peer={props.peer} />
+						</div>
+					}
+				>
+					<Button
+						variant="ghost"
+						class="h-auto min-w-0 flex-1 justify-start gap-3 rounded-none p-0 text-left text-foreground transition-colors hover:bg-accent/50"
+						onClick={props.onClick}
+					>
+						<PeerIdentity peer={props.peer} />
+					</Button>
+				</Show>
+				<Show when={props.onAddItems}>
+					<DropdownMenu placement="bottom-end">
+						<DropdownMenuTrigger
+							as={Button}
+							variant="ghost"
+							size="icon"
+							disabled={props.actionsDisabled}
+							class="size-8 shrink-0 text-muted-foreground"
+							aria-label={`Actions for ${props.peer.display_name} (${props.peer.hostname})`}
+						>
+							<LucideEllipsisVertical class="size-4" />
+						</DropdownMenuTrigger>
+						<DropdownMenuPortal>
+							<DropdownMenuContent>
+								<DropdownMenuItem
+									disabled={props.actionsDisabled}
+									onSelect={() => props.onAddItems?.(false)}
+								>
+									<LucideFilePlus class="size-4" />
+									{t("addFiles")}
+								</DropdownMenuItem>
+								<DropdownMenuItem
+									disabled={props.actionsDisabled}
+									onSelect={() => props.onAddItems?.(true)}
+								>
+									<LucideFolderPlus class="size-4" />
+									{t("addFolders")}
+								</DropdownMenuItem>
+							</DropdownMenuContent>
+						</DropdownMenuPortal>
+					</DropdownMenu>
+				</Show>
+			</div>
 			<Show when={hasAny()}>
 				<div class="border-t border-border" />
 				<div class="space-y-3 p-3.5">

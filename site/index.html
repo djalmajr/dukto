@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="pt-BR">
+ <head>
+  <meta charset="UTF-8" />
+  <script>
+   (() => {
+    let theme;
+    try { theme = localStorage.getItem("dukto-site-theme"); } catch {}
+    document.documentElement.dataset.theme = theme === "dark" || theme === "light" ? theme : matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+   document.documentElement.dataset.kbTheme = document.documentElement.dataset.theme;
+   })();
+  </script>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#ffffff" />
+  <meta name="description" content="Arquivos e pastas entre Mac, Windows e Linux, direto pela rede local. Conheça o Dukto, explore a documentação e a CLI." />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="canonical" href="https://dukto.djalmajr.dev/" />
+  <title>Dukto — Seus arquivos, logo ali.</title>
+ </head>
+ <body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body>
+</html>

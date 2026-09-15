@@ -1,46 +1,47 @@
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { type Accessor, type JSX, createSignal, onCleanup, onMount } from "solid-js";
-import { type FileMetadataInfo, resolveFileMetadata } from "~/helpers/tauri";
 
 interface DropZoneProps {
-	children: (isDragOver: Accessor<boolean>) => JSX.Element;
-	onFilesDropped: (files: FileMetadataInfo[]) => void;
+	children: (hostId: Accessor<string | undefined>) => JSX.Element;
+	onFilesDropped: (hostId: string, paths: string[]) => void;
 }
 
 function DropZone(props: DropZoneProps) {
-	const [isDragOver, setIsDragOver] = createSignal(false);
-	let unlistenDrop: UnlistenFn | undefined;
-	let unlistenHover: UnlistenFn | undefined;
-	let unlistenLeave: UnlistenFn | undefined;
+	const [targetId, setTargetId] = createSignal<string>();
+	let unlisten: UnlistenFn | undefined;
+	let disposed = false;
 
 	onMount(async () => {
-		const appWindow = getCurrentWebviewWindow();
-
-		unlistenHover = await appWindow.onDragDropEvent((event) => {
-			if (event.payload.type === "over") {
-				setIsDragOver(true);
-			} else if (event.payload.type === "drop") {
-				setIsDragOver(false);
-				const paths = event.payload.paths;
-				if (paths.length > 0) {
-					resolveFileMetadata(paths).then((files) => {
-						props.onFilesDropped(files);
-					});
-				}
-			} else if (event.payload.type === "leave") {
-				setIsDragOver(false);
+		const stop = await getCurrentWebviewWindow().onDragDropEvent(({ payload }) => {
+			if (disposed) return;
+			if (payload.type === "leave") {
+				setTargetId(undefined);
+				return;
+			}
+			const position = payload.position.toLogical(window.devicePixelRatio);
+			const hostId =
+				document
+					.elementFromPoint(position.x, position.y)
+					?.closest("[data-peer-id]")
+					?.getAttribute("data-peer-id") ?? undefined;
+			if (payload.type === "drop") {
+				setTargetId(undefined);
+				if (hostId && payload.paths.length > 0) props.onFilesDropped(hostId, payload.paths);
+			} else {
+				setTargetId(hostId);
 			}
 		});
+		if (disposed) stop();
+		else unlisten = stop;
 	});
 
 	onCleanup(() => {
-		unlistenDrop?.();
-		unlistenHover?.();
-		unlistenLeave?.();
+		disposed = true;
+		unlisten?.();
 	});
 
-	return <>{props.children(isDragOver)}</>;
+	return <>{props.children(targetId)}</>;
 }
 
 export default DropZone;

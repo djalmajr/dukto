@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::state::device::DeviceIdentity;
+
 /// Packet type identifiers for the transfer protocol.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
@@ -33,8 +35,36 @@ impl TryFrom<u8> for PacketType {
 pub struct TransferHeader {
     pub transfer_id: String,
     pub sender_device_id: String,
+    /// Full sender identity for direct-address transfers that bypass mDNS.
+    /// Optional so receivers can continue accepting headers from older 0.2 peers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sender: Option<DeviceIdentity>,
     pub item_count: u32,
     pub total_size: u64,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::TransferHeader;
+
+    #[test]
+    fn older_transfer_headers_without_sender_identity_remain_compatible() {
+        let header: TransferHeader = serde_json::from_str(
+            r#"{"transfer_id":"legacy","sender_device_id":"peer","item_count":1,"total_size":4}"#,
+        )
+        .unwrap();
+
+        assert_eq!(header.sender_device_id, "peer");
+        assert!(header.sender.is_none());
+    }
+}
+
+/// Receiver acknowledgement, emitted only after every advertised item is written.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TransferReceipt {
+    pub transfer_id: String,
+    pub items_received: u32,
+    pub bytes_received: u64,
 }
 
 /// Metadata for a single item in the transfer.

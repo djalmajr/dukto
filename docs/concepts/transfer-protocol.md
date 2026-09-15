@@ -22,6 +22,8 @@ sequenceDiagram
   end
 
   S->>R: Success packet
+  R-->>S: Success receipt (transfer ID, item count, bytes written)
+  Note over S,R: Sender reports completion only after validating the receipt
 ```
 
 ### Why This Order Matters
@@ -55,12 +57,13 @@ The 32 KB chunk size was chosen to fit within Noise's max message size (65535 by
 
 ## Why QUIC Uses Self-Signed Certificates
 
-Both sides generate ephemeral self-signed TLS certificates. The receiver's QUIC endpoint has a `SkipServerVerification` verifier that accepts any certificate. This sounds dangerous but is safe because:
+Both sides generate ephemeral self-signed TLS certificates. The QUIC client accepts these certificates; Noise_XX then encrypts the application session. The current implementation generates ephemeral Noise keys and does not persist or verify a trusted peer key, so this does not authenticate a person's identity or prevent an active intermediary by itself. User and host names are sender-provided labels, not verified credentials. Persistent trusted-device pairing is not implemented.
 
-1. TLS is only the transport layer here — it provides basic encryption for the QUIC handshake
-2. The actual authentication happens at the Noise layer, which does a full Noise_XX key exchange
-3. Neither side has a CA to verify certificates against — these are ephemeral LAN connections
-4. The Noise handshake provides stronger mutual authentication than TLS certificate pinning would
+## Sender Identity
+
+Protocol 0.2 headers retain `sender_device_id` and can include an optional `sender` object with `device_id`, `display_name`, `hostname` and `platform`. The receiver rejects a supplied identity whose device ID differs from `sender_device_id`. Older 0.2 headers without the object remain accepted; older receivers ignore the additional JSON field.
+
+This lets direct-address CLI senders identify themselves without announcing an mDNS service. The desktop shows `user@host` in the approval modal and a transfer-bound card for an undiscovered sender. That card does not advertise a send endpoint or allow file selection; it disappears when its transfers are dismissed. Identity travels inside the encrypted header but remains self-reported.
 
 ## Path Safety
 
@@ -72,7 +75,7 @@ Received file paths go through multiple validation steps:
 - **Name sanitization** — characters invalid on any platform (`< > : " | ? *`, control chars) are replaced with `_`. Windows reserved names (CON, PRN, AUX, NUL, COM1-9, LPT1-9) are prefixed with `_`
 - **Conflict resolution** — if a file already exists at the destination, the app appends " (1)", " (2)", etc. up to 999, then falls back to a UUID suffix
 
-This means a malicious sender cannot write outside the destination directory or overwrite system files.
+These checks reject unsafe path syntax and reserve new file names without overwriting an existing file. They do not establish trust in the sender.
 
 ## Error Handling
 
@@ -91,6 +94,12 @@ When the receiver gets a TransferHeader, the server creates a pending entry and 
 
 ## Progress Tracking
 
+Protocol 0.2 adds a receiver receipt after file writes are flushed and advertised
+item/byte counts match. A sender must validate this receipt before closing QUIC
+or reporting success. CLI and desktop use this same pipeline; update both builds
+together when upgrading from 0.1. Progress reaching 100% only means all bytes
+have been queued locally, not that the receiver has confirmed completion.
+
 The sender emits a progress event after every 32 KB chunk. The event includes bytes_sent, bytes_total, speed_bps (calculated from elapsed time since transfer start), and percent. The frontend uses these to render progress bars and speed indicators on the peer card.
 
-Speed is calculated as total bytes sent divided by elapsed seconds — a simple average, not a sliding window. This is good enough for LAN transfers where speed is relatively stable.
+Both directions report throughput as cumulative transferred bytes divided by elapsed seconds, independently for each session. Receive timing begins after acceptance.

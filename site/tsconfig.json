@@ -1,0 +1,6 @@
+{
+	"extends": "../tsconfig.json",
+	"include": ["src", "vite.config.ts"],
+	"exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"],
+	"compilerOptions": { "types": ["vite/client", "node", "unplugin-icons/types/solid"] }
+}

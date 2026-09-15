@@ -1,11 +1,15 @@
 import { listen } from "@tauri-apps/api/event";
 import { createStore, produce } from "solid-js/store";
+import { getPeers } from "~/helpers/tauri";
 
-export interface PeerInfo {
+export interface PeerIdentity {
 	device_id: string;
 	display_name: string;
 	hostname: string;
 	platform: string;
+}
+
+export interface PeerInfo extends PeerIdentity {
 	addresses: string[];
 	port: number;
 	protocol_version: string;
@@ -16,8 +20,8 @@ const REMOVAL_GRACE_MS = 60_000;
 const [peers, setPeers] = createStore<Record<string, PeerInfo>>({});
 const removalTimers = new Map<string, number>();
 
-listen<PeerInfo>("peer:found", (event) => {
-	const id = event.payload.device_id;
+function peerFound(peer: PeerInfo) {
+	const id = peer.device_id;
 
 	// Cancel pending removal if peer re-appeared
 	const timer = removalTimers.get(id);
@@ -26,11 +30,10 @@ listen<PeerInfo>("peer:found", (event) => {
 		removalTimers.delete(id);
 	}
 
-	setPeers(id, event.payload);
-});
+	setPeers(id, peer);
+}
 
-listen<string>("peer:removed", (event) => {
-	const fullname = event.payload;
+function peerRemoved(fullname: string) {
 	for (const id of Object.keys(peers)) {
 		if (fullname.includes(id)) {
 			// Already scheduled? skip
@@ -38,12 +41,41 @@ listen<string>("peer:removed", (event) => {
 
 			const timer = window.setTimeout(() => {
 				removalTimers.delete(id);
-				setPeers(produce((state) => { delete state[id]; }));
+				setPeers(
+					produce((state) => {
+						delete state[id];
+					}),
+				);
 			}, REMOVAL_GRACE_MS);
 			removalTimers.set(id, timer);
 			break;
 		}
 	}
+}
+
+async function initializePeers() {
+	// Subscribe first; replay events received during the snapshot request so an
+	// older snapshot cannot overwrite an update or resurrect a removed peer.
+	let pending: Array<() => void> | undefined = [];
+	const apply = (update: () => void) => {
+		if (pending) pending.push(update);
+		else update();
+	};
+	await Promise.all([
+		listen<PeerInfo>("peer:found", ({ payload }) => apply(() => peerFound(payload))),
+		listen<string>("peer:removed", ({ payload }) => apply(() => peerRemoved(payload))),
+	]);
+	try {
+		for (const peer of await getPeers()) peerFound(peer);
+	} finally {
+		const updates = pending;
+		pending = undefined;
+		for (const update of updates) update();
+	}
+}
+
+export const peersReady = initializePeers().catch((error) => {
+	console.error("Failed to initialize peer discovery", error);
 });
 
 export { peers };
