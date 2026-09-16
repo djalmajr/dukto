@@ -40,6 +40,8 @@ fn platform_name() -> String {
         "macos" => "macos",
         "windows" => "windows",
         "linux" => "linux",
+        "ios" => "ios",
+        "android" => "android",
         other => other,
     }
     .to_string()

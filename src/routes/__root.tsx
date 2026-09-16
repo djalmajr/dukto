@@ -88,7 +88,7 @@ function RootLayout() {
 	return (
 		<div class="flex h-screen w-full flex-col overflow-hidden bg-background text-foreground">
 			<header
-				class="app-drag-region relative flex h-[45px] shrink-0 items-center border-b border-border bg-muted"
+				class="app-drag-region relative flex h-[calc(45px+env(safe-area-inset-top))] shrink-0 items-center border-b border-border bg-muted pt-[env(safe-area-inset-top)]"
 				classList={{ "justify-end pr-3 pl-[78px]": isMac, "pl-3": !isMac }}
 				onMouseDown={handleWindowDrag}
 			>
@@ -114,7 +114,7 @@ function RootLayout() {
 					<WindowControls />
 				</Show>
 			</header>
-			<div class="flex min-h-0 w-full flex-1 flex-col overflow-y-auto overflow-x-hidden px-4 py-6">
+			<div class="flex min-h-0 w-full flex-1 flex-col overflow-y-auto overflow-x-hidden px-4 pt-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
 				<Outlet />
 			</div>
 			<SettingsModal

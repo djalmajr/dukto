@@ -1,5 +1,6 @@
 import { getVersion } from "@tauri-apps/api/app";
 import { Channel, Resource, invoke } from "@tauri-apps/api/core";
+import { platform } from "@tauri-apps/plugin-os";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { type Update, check } from "@tauri-apps/plugin-updater";
 import {
@@ -47,8 +48,16 @@ function wrapUpdate(update: Update): AppUpdateHandle {
 
 export const appUpdates = createAppUpdateController({
 	check: async () => {
-		const update = await check({ timeout: 15_000 });
-		return update ? wrapUpdate(update) : null;
+		try {
+			const currentPlatform = platform();
+			if (currentPlatform === "ios" || currentPlatform === "android") {
+				return null;
+			}
+			const update = await check({ timeout: 15_000 });
+			return update ? wrapUpdate(update) : null;
+		} catch {
+			return null;
+		}
 	},
 	getVersion,
 	isDevelopment: import.meta.env.DEV,

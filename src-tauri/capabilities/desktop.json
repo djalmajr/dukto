@@ -1,0 +1,8 @@
+{
+	"$schema": "https://raw.githubusercontent.com/nicokosi/tauri-v2-schemas/main/capabilities.schema.json",
+	"identifier": "desktop",
+	"description": "Desktop-only capabilities for Dukto",
+	"platforms": ["macOS", "windows", "linux"],
+	"windows": ["main"],
+	"permissions": ["updater:allow-check"]
+}

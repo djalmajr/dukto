@@ -12,7 +12,6 @@
 		"notification:default",
 		"os:default",
 		"shell:default",
-		"updater:allow-check",
 		"process:allow-restart"
 	]
 }
