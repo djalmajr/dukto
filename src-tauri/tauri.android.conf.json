@@ -1,0 +1,6 @@
+{
+	"$schema": "https://raw.githubusercontent.com/nicokosi/tauri-v2-schemas/main/config.schema.json",
+	"build": {
+		"features": ["mobile"]
+	}
+}

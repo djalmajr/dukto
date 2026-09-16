@@ -35,7 +35,12 @@ impl Default for Settings {
             .or_else(dirs::home_dir)
             .unwrap_or_else(|| PathBuf::from("."));
 
-        #[cfg(not(target_os = "ios"))]
+        #[cfg(target_os = "android")]
+        let default_dir = dirs::download_dir()
+            .or_else(|| Some(PathBuf::from("/storage/emulated/0/Download")))
+            .unwrap_or_else(|| PathBuf::from("."));
+
+        #[cfg(not(any(target_os = "ios", target_os = "android")))]
         let default_dir = dirs::download_dir()
             .or_else(dirs::home_dir)
             .unwrap_or_else(|| PathBuf::from("."));

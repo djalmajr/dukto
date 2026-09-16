@@ -2,6 +2,7 @@ import { Outlet, createRootRoute, useNavigate, useSearch } from "@tanstack/solid
 import { type UnlistenFn, listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { sendNotification } from "@tauri-apps/plugin-notification";
+import { platform } from "@tauri-apps/plugin-os";
 import { Show, createEffect, onCleanup, onMount } from "solid-js";
 import { Button } from "~/components/ui/button";
 import WindowControls from "~/components/window-controls";
@@ -19,8 +20,21 @@ function isInteractiveTarget(target: HTMLElement) {
 }
 
 function RootLayout() {
-	const isWindows = navigator.platform.startsWith("Win");
-	const isMac = navigator.platform.startsWith("Mac");
+	const currentPlatform = (() => {
+		try {
+			return platform();
+		} catch {
+			if (typeof navigator !== "undefined") {
+				if (navigator.platform.startsWith("Win")) return "windows";
+				if (navigator.platform.startsWith("Mac")) return "macos";
+				if (navigator.platform.startsWith("iPhone") || navigator.platform.startsWith("iPad"))
+					return "ios";
+			}
+			return "linux";
+		}
+	})();
+	const isWindows = currentPlatform === "windows";
+	const isMac = currentPlatform === "macos";
 	const navigate = useNavigate();
 	const search = useSearch({ strict: false });
 	const showSettings = () => (search() as { settings?: boolean }).settings === true;
@@ -89,7 +103,11 @@ function RootLayout() {
 		<div class="flex h-screen w-full flex-col overflow-hidden bg-background text-foreground">
 			<header
 				class="app-drag-region relative flex h-[calc(45px+env(safe-area-inset-top))] shrink-0 items-center border-b border-border bg-muted pt-[env(safe-area-inset-top)]"
-				classList={{ "justify-end pr-3 pl-[78px]": isMac, "pl-3": !isMac }}
+				classList={{
+					"justify-start pl-3": isWindows,
+					"justify-end pr-3 pl-[78px]": isMac,
+					"justify-end px-3": !isWindows && !isMac,
+				}}
 				onMouseDown={handleWindowDrag}
 			>
 				<p class="pointer-events-none absolute inset-x-[140px] truncate text-center text-xs font-medium text-muted-foreground">
