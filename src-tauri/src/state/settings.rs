@@ -30,6 +30,17 @@ pub struct Settings {
 
 impl Default for Settings {
     fn default() -> Self {
+        #[cfg(target_os = "ios")]
+        let default_dir = dirs::document_dir()
+            .or_else(dirs::home_dir)
+            .unwrap_or_else(|| PathBuf::from("."));
+
+        #[cfg(target_os = "android")]
+        let default_dir = dirs::download_dir()
+            .or_else(|| Some(PathBuf::from("/storage/emulated/0/Download")))
+            .unwrap_or_else(|| PathBuf::from("."));
+
+        #[cfg(not(any(target_os = "ios", target_os = "android")))]
         let default_dir = dirs::download_dir()
             .or_else(dirs::home_dir)
             .unwrap_or_else(|| PathBuf::from("."));

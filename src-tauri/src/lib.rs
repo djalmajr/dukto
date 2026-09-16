@@ -1,4 +1,4 @@
-#[cfg(feature = "desktop")]
+#[cfg(feature = "app-common")]
 pub mod commands;
 pub mod crypto;
 pub mod discovery;
@@ -7,8 +7,8 @@ pub mod protocol;
 pub mod state;
 pub mod transfer;
 
-#[cfg(feature = "desktop")]
-mod desktop {
+#[cfg(feature = "app-common")]
+mod app_runner {
     use tauri::{Emitter, Manager};
 
     use crate::commands;
@@ -30,13 +30,20 @@ mod desktop {
 
         let _ = rustls::crypto::ring::default_provider().install_default();
 
-        tauri::Builder::default()
+        #[allow(unused_mut)]
+        let mut builder = tauri::Builder::default()
             .plugin(tauri_plugin_dialog::init())
             .plugin(tauri_plugin_notification::init())
             .plugin(tauri_plugin_os::init())
             .plugin(tauri_plugin_shell::init())
-            .plugin(tauri_plugin_updater::Builder::new().build())
-            .plugin(tauri_plugin_process::init())
+            .plugin(tauri_plugin_process::init());
+
+        #[cfg(all(feature = "desktop", not(any(target_os = "ios", target_os = "android"))))]
+        {
+            builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+        }
+
+        builder
             .invoke_handler(tauri::generate_handler![
                 commands::get_device_info,
                 commands::get_peers,
@@ -72,22 +79,23 @@ mod desktop {
                     "Device identity loaded"
                 );
 
-                // Start mDNS discovery
+                let app_state = AppState::new(device.clone(), data_dir);
+                app.manage(app_state);
+
+                // Start QUIC listener for incoming transfers with fallback port
+                let transfer_registry = app.state::<AppState>().transfer_registry.clone();
+                let (transfer_server, bound_port) =
+                    TransferServer::start(app.handle().clone(), QUIC_PORT, transfer_registry)
+                        .expect("failed to start QUIC transfer server");
+                app.manage(transfer_server);
+
+                // Start mDNS discovery with actual bound port
                 let (mdns_discovery, mut event_rx) =
-                    MdnsDiscovery::new(&device, QUIC_PORT).expect("failed to start mDNS discovery");
+                    MdnsDiscovery::new(&device, bound_port).expect("failed to start mDNS discovery");
 
                 mdns_discovery
                     .start_browsing()
                     .expect("failed to start mDNS browsing");
-
-                let app_state = AppState::new(device, data_dir);
-                app.manage(app_state);
-
-                // Start QUIC listener for incoming transfers
-                let transfer_registry = app.state::<AppState>().transfer_registry.clone();
-                let transfer_server =
-                    TransferServer::start(app.handle().clone(), QUIC_PORT, transfer_registry);
-                app.manage(transfer_server);
 
                 // Forward discovery events to frontend AND update AppState
                 let handle = app.handle().clone();
@@ -133,5 +141,5 @@ mod desktop {
     }
 }
 
-#[cfg(feature = "desktop")]
-pub use desktop::run;
+#[cfg(feature = "app-common")]
+pub use app_runner::run;

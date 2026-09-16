@@ -50,5 +50,15 @@ tauri-build = { version = "2", features = [], optional = true }
 [features]
 cli = []
 default = ["desktop", "custom-protocol"]
-desktop = ["dep:tauri", "dep:tauri-build", "dep:tauri-plugin-dialog", "dep:tauri-plugin-notification", "dep:tauri-plugin-os", "dep:tauri-plugin-shell", "dep:tauri-plugin-updater", "dep:tauri-plugin-process"]
+app-common = [
+	"dep:tauri",
+	"dep:tauri-build",
+	"dep:tauri-plugin-dialog",
+	"dep:tauri-plugin-notification",
+	"dep:tauri-plugin-os",
+	"dep:tauri-plugin-shell",
+	"dep:tauri-plugin-process",
+]
+desktop = ["app-common", "dep:tauri-plugin-updater"]
+mobile = ["app-common"]
 custom-protocol = ["desktop", "tauri/custom-protocol"]

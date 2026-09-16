@@ -234,9 +234,32 @@ pub struct TransferServer {
 }
 
 impl TransferServer {
-    /// Start the QUIC listener on the given port and process incoming connections.
-    /// Must be called from a context where tauri::async_runtime is available.
-    pub fn start(app_handle: AppHandle, port: u16, registry: Arc<TransferRegistry>) -> Arc<Self> {
+    /// Start the QUIC listener on the given port (or fallback to ephemeral port if occupied)
+    /// and process incoming connections. Must be called from a context where tauri::async_runtime is available.
+    pub fn start(
+        app_handle: AppHandle,
+        port: u16,
+        registry: Arc<TransferRegistry>,
+    ) -> Result<(Arc<Self>, u16), Box<dyn std::error::Error>> {
+        let (endpoint, bound_port) = tauri::async_runtime::block_on(async {
+            let bind_addr: SocketAddr = format!("0.0.0.0:{}", port).parse().unwrap();
+            let endpoint = match create_endpoint(bind_addr) {
+                Ok(ep) => ep,
+                Err(e) => {
+                    tracing::warn!(
+                        port,
+                        %e,
+                        "Failed to bind preferred QUIC port, falling back to ephemeral port"
+                    );
+                    let fallback_addr: SocketAddr = "0.0.0.0:0".parse().unwrap();
+                    create_endpoint(fallback_addr)?
+                }
+            };
+            let bound_port = endpoint.local_addr()?.port();
+            Ok::<_, Box<dyn std::error::Error>>((endpoint, bound_port))
+        })?;
+        tracing::info!(bound_port, "QUIC listener started");
+
         let server = Arc::new(Self {
             pending: Arc::new(Mutex::new(std::collections::HashMap::new())),
             registry,
@@ -244,16 +267,6 @@ impl TransferServer {
 
         let server_ref = server.clone();
         tauri::async_runtime::spawn(async move {
-            let bind_addr: SocketAddr = format!("0.0.0.0:{}", port).parse().unwrap();
-            let endpoint = match create_endpoint(bind_addr) {
-                Ok(ep) => ep,
-                Err(e) => {
-                    tracing::error!("Failed to create QUIC endpoint: {}", e);
-                    return;
-                }
-            };
-            tracing::info!(port = port, "QUIC listener started");
-
             loop {
                 match endpoint.accept().await {
                     Some(incoming) => {
@@ -276,7 +289,7 @@ impl TransferServer {
             }
         });
 
-        server
+        Ok((server, bound_port))
     }
 
     /// Respond to a pending incoming transfer.
