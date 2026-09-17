@@ -262,6 +262,7 @@ async fn run(args: &Args, shutdown: &Shutdown) -> Result<(), Error> {
                 let (mut send, mut recv) = conn.open_bi().await?;
                 let mut noise = handshake_initiator(&mut send, &mut recv).await?;
                 let mut last_progress = Instant::now();
+                let accepted_transfer_id = transfer_id.clone();
                 let bytes = send_transfer_with_cancellation(
                     &mut send,
                     &mut recv,
@@ -276,6 +277,13 @@ async fn run(args: &Args, shutdown: &Shutdown) -> Result<(), Error> {
                                 emit(args.json, "progress", json!(p));
                                 last_progress = Instant::now();
                             }
+                        },
+                        on_accepted: move || {
+                            emit(
+                                args.json,
+                                "accepted",
+                                json!({"transfer_id": accepted_transfer_id}),
+                            );
                         },
                     },
                 )

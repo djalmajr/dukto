@@ -1,4 +1,4 @@
 fn main() {
-    #[cfg(feature = "desktop")]
+    #[cfg(feature = "app-common")]
     tauri_build::build();
 }

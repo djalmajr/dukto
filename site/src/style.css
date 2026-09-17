@@ -196,14 +196,8 @@ em {
 }
 .scene-bottom {
 	bottom: 22px;
-	justify-content: space-between;
+	justify-content: center;
 	color: var(--site-muted);
-}
-.scene-bottom > span:last-child {
-	display: flex;
-	align-items: center;
-	gap: 7px;
-	letter-spacing: 0;
 }
 .orbit {
 	position: absolute;
@@ -355,7 +349,9 @@ em {
 }
 .platform-strip > div {
 	display: flex;
-	gap: 65px;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 20px clamp(24px, 3vw, 54px);
 	font-size: var(--font-lead);
 	font-weight: 500;
 }
@@ -675,6 +671,30 @@ footer > div {
 	font-size: var(--font-body);
 	line-height: 1.85;
 	color: var(--site-muted);
+}
+.doc-article section p code,
+.doc-article li code {
+	border: 1px solid var(--line);
+	border-radius: 5px;
+	background: var(--soft);
+	color: var(--text);
+	font: .88em / 1.4 ui-monospace, SFMono-Regular, Consolas, monospace;
+	padding: .1em .35em;
+	white-space: nowrap;
+}
+.doc-inline-link {
+	color: var(--text);
+	font-weight: 600;
+	text-decoration: underline;
+	text-decoration-color: var(--line-strong);
+	text-underline-offset: 3px;
+}
+.doc-inline-link:hover {
+	text-decoration-color: currentColor;
+}
+.doc-inline-link > .arrow-icon:first-child {
+	margin-inline-start: .55em;
+	margin-inline-end: 0;
 }
 .doc-article ul {
 	list-style: disc;
@@ -1398,6 +1418,13 @@ a > .arrow-icon:first-child {
 	margin-inline-end: .35em;
 }
 .platform-flow {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex-wrap: wrap;
+	gap: .5em;
+}
+.platform-hop {
 	display: inline-flex;
 	align-items: center;
 	gap: .5em;
@@ -1475,9 +1502,6 @@ footer > div {
 	gap: 8px;
 }
 @media (max-width: 1100px) {
-	.scene-bottom .platform-flow {
-		display: none;
-	}
 	.device {
 		width: 120px;
 	}

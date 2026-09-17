@@ -1,5 +1,6 @@
 {
 	"abort": "Abort",
+	"about": "About Dukto",
 	"accept": "Accept",
 	"addFiles": "Add files",
 	"addFolders": "Add folders",
@@ -92,6 +93,7 @@
 	"incompatibleProtocol": "Incompatible versions. Update Dukto on both devices.",
 	"invalidTransfer": "The transfer data is invalid or incomplete.",
 	"operationFailed": "Could not complete the operation. Try again.",
+	"privacyPolicy": "Privacy",
 	"transferFailed": "Could not complete the transfer. Try again.",
 	"updateSignatureInvalid": "Could not verify the update signature.",
 	"updateInProgress": "Dukto is installing an update. Try again after restart.",

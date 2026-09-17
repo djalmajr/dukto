@@ -1,3 +1,4 @@
+import { open } from "@tauri-apps/plugin-shell";
 import { Show } from "solid-js";
 import { Button } from "~/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "~/components/ui/dialog";
@@ -6,7 +7,10 @@ import { TextField, TextFieldInput } from "~/components/ui/text-field";
 import type { AppUpdateErrorCode, AppUpdateStatus } from "~/helpers/app-update-controller";
 import { t } from "~/helpers/i18n";
 import { nativeErrorKey } from "~/helpers/native-error";
+import LucideExternalLink from "~icons/lucide/external-link";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
+
+const PRIVACY_POLICY_URL = "https://dukto.app/docs/privacidade/";
 
 export type ThemeMode = "light" | "dark" | "system";
 
@@ -21,6 +25,7 @@ interface SettingsModalProps {
 	updateErrorCode: AppUpdateErrorCode;
 	updateErrorMessage: string | null;
 	updateStatus: AppUpdateStatus;
+	showAppUpdates: boolean;
 	onChangeDestination: () => void;
 	onChangeTheme: (theme: ThemeMode) => void;
 	onChangeLanguage?: (lang: string) => void;
@@ -29,6 +34,12 @@ interface SettingsModalProps {
 }
 
 function SettingsModal(props: SettingsModalProps) {
+	const openPrivacyPolicy = () => {
+		void open(PRIVACY_POLICY_URL).catch((error) => {
+			console.error("Could not open privacy policy", error);
+		});
+	};
+
 	const statusMessage = () => {
 		switch (props.updateStatus) {
 			case "checking":
@@ -130,29 +141,42 @@ function SettingsModal(props: SettingsModalProps) {
 							</Tabs>
 						</div>
 					</Show>
-					<footer class="space-y-1.5 border-t border-border pt-3" aria-label={t("appUpdates")}>
+					<footer class="space-y-1.5 border-t border-border pt-3" aria-label={t("about")}>
 						<div class="flex items-center justify-between gap-2">
-							<span
-								class="shrink-0 text-xs text-muted-foreground"
-								aria-label={t("currentVersion", { version: props.currentVersion ?? "..." })}
-							>
-								v{props.currentVersion ?? "..."}
-							</span>
-							<Button
-								variant="ghost"
-								class="h-6 min-w-0 gap-1.5 px-1.5 text-xs font-normal text-muted-foreground hover:text-foreground [&_svg]:size-3"
-								disabled={props.updateBusy}
-								onClick={props.onCheckForUpdates}
-							>
-								<LucideRefreshCw
-									class="size-3 shrink-0"
-									classList={{ "motion-safe:animate-spin": props.updateStatus === "checking" }}
-								/>
-								{props.availableVersion ? t("viewUpdate") : t("checkForUpdates")}
-							</Button>
+							<div class="flex min-w-0 items-center gap-1">
+								<span
+									class="shrink-0 text-xs text-muted-foreground"
+									aria-label={t("currentVersion", { version: props.currentVersion ?? "..." })}
+								>
+									v{props.currentVersion ?? "..."}
+								</span>
+								<Button
+									variant="ghost"
+									class="h-6 min-w-0 gap-1 px-1.5 text-xs font-normal text-muted-foreground hover:text-foreground [&_svg]:size-3"
+									onClick={openPrivacyPolicy}
+								>
+									{t("privacyPolicy")}
+									<LucideExternalLink class="size-3 shrink-0" />
+								</Button>
+							</div>
+							<Show when={props.showAppUpdates}>
+								<Button
+									variant="ghost"
+									class="h-6 min-w-0 gap-1.5 px-1.5 text-xs font-normal text-muted-foreground hover:text-foreground [&_svg]:size-3"
+									disabled={props.updateBusy}
+									onClick={props.onCheckForUpdates}
+								>
+									<LucideRefreshCw
+										class="size-3 shrink-0"
+										classList={{ "motion-safe:animate-spin": props.updateStatus === "checking" }}
+									/>
+									{props.availableVersion ? t("viewUpdate") : t("checkForUpdates")}
+								</Button>
+							</Show>
 						</div>
 						<Show
 							when={
+								props.showAppUpdates &&
 								props.updateStatus !== "idle" &&
 								props.updateStatus !== "checking" &&
 								!errorMessage()
