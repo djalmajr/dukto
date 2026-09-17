@@ -17,6 +17,9 @@ export function pageMetadata(path: string) {
 						? t("Dukto — Seus arquivos, logo ali.")
 						: t("Página não encontrada — Dukto"),
 		description:
-			guide?.summary || t("Arquivos e pastas entre Mac, Windows e Linux, direto pela rede local."),
+			guide?.summary ||
+			t(
+				"Arquivos e pastas entre macOS, Windows, Linux, Android e iOS, direto entre seus dispositivos.",
+			),
 	};
 }

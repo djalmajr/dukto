@@ -35,6 +35,7 @@ function RootLayout() {
 	})();
 	const isWindows = currentPlatform === "windows";
 	const isMac = currentPlatform === "macos";
+	const isMobile = currentPlatform === "android" || currentPlatform === "ios";
 	const navigate = useNavigate();
 	const search = useSearch({ strict: false });
 	const showSettings = () => (search() as { settings?: boolean }).settings === true;
@@ -146,6 +147,7 @@ function RootLayout() {
 				updateErrorCode={appUpdates.state.errorCode}
 				updateErrorMessage={appUpdates.state.errorMessage}
 				updateStatus={appUpdates.state.status}
+				showAppUpdates={!isMobile}
 				onChangeDestination={handleChangeDestination}
 				onChangeTheme={setTheme}
 				onChangeLanguage={changeLanguage}

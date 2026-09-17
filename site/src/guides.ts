@@ -1,4 +1,10 @@
-export type Section = { title: string; text?: string; code?: string; items?: string[] };
+export type Section = {
+	title: string;
+	text?: string;
+	code?: string;
+	items?: string[];
+	link?: { label: string; href: string; external?: boolean };
+};
 export type Guide = {
 	slug: string;
 	navGroup: string;
@@ -15,24 +21,24 @@ export const guides: Guide[] = [
 		navTitle: "Primeiros passos",
 		group: "GETTING STARTED",
 		title: "Getting started",
-		summary: "Two computers. One network. Your files where they belong.",
+		summary: "Two devices. One direct connection. Your files where they belong.",
 		sections: [
 			{
-				title: "01. Open Dukto on both computers",
-				text: "Use the same version on both computers. Connect them to the same Wi-Fi or Ethernet network and keep Dukto open so they can discover each other.",
+				title: "01. Open Dukto on both devices",
+				text: "Use the same version on both devices and keep Dukto open so they can connect through the options available to them.",
 			},
 			{
 				title: "02. Choose where to send",
-				text: "Available devices appear through local discovery. Select a destination computer, then choose the files or folders you want to share.",
+				text: "Available devices appear through supported discovery or connection methods. Select a destination, then choose the files or folders you want to share.",
 			},
 			{
-				title: "03. Approve on the receiving computer",
+				title: "03. Approve on the receiving device",
 				text: "Review the sender and the items before accepting. A transfer completes after the destination confirms receipt. Files are saved in the destination folder configured in the app.",
 			},
 			{
 				title: "Prefer the terminal?",
-				text: "Start a receiver on one computer and discover its ID from the other. The CLI uses the same transfer protocol as the app.",
-				code: "# On the receiving computer\ndukto receive --destination ./received\n\n# On the sending computer\ndukto peers\ndukto send --peer DESTINATION_ID -- ./photo.jpg",
+				text: "Start a receiver on one device and discover its ID from the sender. The CLI uses the same transfer protocol as the app.",
+				code: "# On the receiving device\ndukto receive --destination ./received\n\n# On the sending device\ndukto peers\ndukto send --peer DESTINATION_ID -- ./photo.jpg",
 			},
 		],
 	},
@@ -46,7 +52,12 @@ export const guides: Guide[] = [
 		sections: [
 			{
 				title: "Availability",
-				text: "Check the GitHub Releases page for published installers and supported architectures. A download is available only when it appears in a release.",
+				text: "Check GitHub Releases for published installers and supported architectures. A download is available only when it appears in a release.",
+				link: {
+					label: "GitHub Releases",
+					href: "https://github.com/djalmajr/dukto/releases",
+					external: true,
+				},
 			},
 			{
 				title: "macOS",
@@ -60,6 +71,14 @@ export const guides: Guide[] = [
 				title: "Linux",
 				text: "Use the DEB package on compatible Debian or Ubuntu distributions. The AppImage is a portable alternative. After downloading it, make the file executable and launch it.",
 				code: "chmod +x Dukto*.AppImage\n./Dukto*.AppImage",
+			},
+			{
+				title: "Android",
+				text: "When an Android build is published, use the package and installation instructions listed in GitHub Releases. Android may ask you to approve installation from the download source.",
+			},
+			{
+				title: "iOS",
+				text: "When an iOS build is published, use the distribution method listed in GitHub Releases. Follow the release instructions for TestFlight or a signed build.",
 			},
 			{
 				title: "Use the dukto command",
@@ -101,7 +120,7 @@ export const guides: Guide[] = [
 		navTitle: "Referência da CLI",
 		group: "USING DUKTO",
 		title: "CLI reference",
-		summary: "Use the same local transfer engine with commands that fit your scripts.",
+		summary: "Use the same direct transfer engine with commands that fit your scripts.",
 		sections: [
 			{
 				title: "Discover devices",
@@ -136,10 +155,10 @@ export const guides: Guide[] = [
 		group: "UNDERSTAND THE FLOW",
 		title: "Network and discovery",
 		summary:
-			"Dukto finds nearby computers over the local network, with no account or transfer server.",
+			"Dukto connects devices directly, using local discovery when they share a network and an address when needed.",
 		sections: [
 			{
-				title: "On the same network",
+				title: "Connection and discovery",
 				text: "Discovery uses mDNS on UDP port 5353. Transfers use QUIC on the UDP port announced by the receiver (4242 by default). Guest networks, Wi-Fi isolation, VPNs, or firewalls may prevent devices from finding each other.",
 			},
 			{
@@ -153,7 +172,7 @@ export const guides: Guide[] = [
 			},
 			{
 				title: "Virtual machines and WSL",
-				text: "Virtual network adapters may block multicast or make a guest unreachable from the LAN. Configure the VM or WSL networking mode and firewall to allow mDNS and the receiver's UDP port. If discovery is unavailable, use the receiver address with the CLI.",
+				text: "Virtual network adapters may block multicast or make a guest unreachable from other devices. Configure the VM or WSL networking mode and firewall to allow mDNS and the receiver's UDP port. If discovery is unavailable, use the receiver address with the CLI.",
 			},
 			{
 				title: "Each environment has its own identity",
@@ -167,11 +186,11 @@ export const guides: Guide[] = [
 		navTitle: "Privacidade",
 		group: "UNDERSTAND THE FLOW",
 		title: "Privacy and security",
-		summary: "Files travel directly between computers. You decide what to receive.",
+		summary: "Files travel directly between devices. You decide what to receive.",
 		sections: [
 			{
 				title: "Direct, encrypted transfer",
-				text: "Content travels over QUIC with a Noise session. Dukto's LAN transfer flow does not send files to a cloud storage service.",
+				text: "Content travels over QUIC with a Noise session. Dukto's direct transfer flow does not send files to a cloud storage service.",
 			},
 			{
 				title: "Approval and trust",
@@ -195,7 +214,7 @@ export const guides: Guide[] = [
 			{
 				title: "Discovery and connection",
 				items: [
-					"Confirm both computers are connected to a network that allows local multicast.",
+					"Confirm both devices are connected to a network that allows local multicast.",
 					"Allow UDP 5353 for mDNS discovery and the receiver's announced UDP port for QUIC transfers.",
 					"Use the CLI --address option to test a transfer without relying on discovery.",
 				],

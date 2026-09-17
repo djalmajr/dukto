@@ -13,6 +13,7 @@ import IconMenu from "~icons/lucide/menu";
 import IconNetwork from "~icons/lucide/network";
 import IconShieldCheck from "~icons/lucide/shield-check";
 import IconClose from "~icons/lucide/x";
+import IconAndroid from "~icons/simple-icons/android";
 import IconApple from "~icons/simple-icons/apple";
 import IconGithub from "~icons/simple-icons/github";
 import IconLinux from "~icons/simple-icons/linux";
@@ -23,9 +24,54 @@ import { type Guide, guides } from "./guides";
 import { LocaleContext, localeValue, routeLocale, stripLocale, useLocale } from "./i18n";
 
 const github = "https://github.com/djalmajr/dukto";
-const releaseDownloads = `${github}/releases/download/v0.1.1`;
-const releaseNotes = `${github}/releases/tag/v0.1.1`;
+const releaseVersion = "0.2.0";
+const releaseDownloads = `${github}/releases/download/v${releaseVersion}`;
+const releaseNotes = `${github}/releases/tag/v${releaseVersion}`;
 const releaseAsset = (filename: string) => `${releaseDownloads}/${filename}`;
+const inlineCodePattern =
+	/(--[a-z0-9-]+|acknowledged:\s*true|receive_error|\bsent\b|\bdukto(?:\.exe|-cli)?\b|\bPATH\b|\bWebView\b)/g;
+const inlineCodeToken =
+	/^(?:--[a-z0-9-]+|acknowledged:\s*true|receive_error|sent|dukto(?:\.exe|-cli)?|PATH|WebView)$/;
+
+function escapePattern(value: string) {
+	return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function GuideText(props: {
+	text: string;
+	link?: { label: string; href: string; external?: boolean };
+}) {
+	const parts = () => {
+		const linkLabel = props.link?.label || "";
+		const pattern = linkLabel
+			? new RegExp(`(${escapePattern(linkLabel)}|${inlineCodePattern.source})`, "g")
+			: inlineCodePattern;
+		return props.text.split(pattern).filter(Boolean);
+	};
+	return (
+		<For each={parts()}>
+			{(part) =>
+				props.link && part === props.link.label ? (
+					<a
+						class="doc-inline-link"
+						href={props.link.href}
+						target={props.link.external ? "_blank" : undefined}
+						rel={props.link.external ? "noopener noreferrer" : undefined}
+					>
+						{part}
+						<Show when={props.link.external}>
+							<IconExternalLink class="arrow-icon" aria-hidden="true" />
+						</Show>
+					</a>
+				) : inlineCodeToken.test(part) ? (
+					<code>{part}</code>
+				) : (
+					part
+				)
+			}
+		</For>
+	);
+}
 function Mark() {
 	return <img class="brand-mark" src={logoUrl} alt="" width="44" height="44" />;
 }
@@ -122,7 +168,7 @@ function Footer() {
 			<a class="brand" href={localPath("/")} aria-label={t("Dukto, início")}>
 				<Mark />
 			</a>
-			<p>{t("Menos caminho. Mais conexão.")}</p>
+			<p>{t("Seus arquivos, logo ali.")}</p>
 			<div>
 				<a href={localPath("/docs/privacidade/")}>{t("Privacidade")}</a>
 				<a
@@ -185,11 +231,11 @@ function TransferScene() {
 			class="scene"
 			role="img"
 			aria-label={t(
-				"Ilustração: uma pasta Projeto enviada do MacBook para um computador Windows pela rede local",
+				"Ilustração: uma pasta Projeto enviada do MacBook para um dispositivo Windows por uma conexão direta",
 			)}
 		>
 			<div class="scene-top">
-				{t("A MESMA REDE. NOVAS POSSIBILIDADES.")}
+				{t("CONEXÃO DIRETA. NOVAS POSSIBILIDADES.")}
 				<span class="scene-index">01 — 02</span>
 			</div>
 			<div class="orbit orbit-one" />
@@ -199,7 +245,7 @@ function TransferScene() {
 					<IconApple aria-hidden="true" />
 				</div>
 				<strong>MacBook</strong>
-				<span>{t("Seu computador")}</span>
+				<span>{t("Seu dispositivo")}</span>
 			</div>
 			<div class="connection">
 				<i />
@@ -215,7 +261,7 @@ function TransferScene() {
 				<div class="device-icon">
 					<IconWindows aria-hidden="true" />
 				</div>
-				<strong>Desktop</strong>
+				<strong>Windows</strong>
 				<span>{t("Logo ali")}</span>
 			</div>
 			<div class="parcel">
@@ -230,10 +276,20 @@ function TransferScene() {
 			</div>
 			<div class="scene-bottom">
 				<span class="platform-flow">
-					MACOS <ArrowLeftRight class="arrow-icon" aria-hidden="true" /> WINDOWS{" "}
-					<ArrowLeftRight class="arrow-icon" aria-hidden="true" /> LINUX
+					<span>MACOS</span>
+					<span class="platform-hop">
+						<ArrowLeftRight class="arrow-icon" aria-hidden="true" /> WINDOWS
+					</span>
+					<span class="platform-hop">
+						<ArrowLeftRight class="arrow-icon" aria-hidden="true" /> LINUX
+					</span>
+					<span class="platform-hop">
+						<ArrowLeftRight class="arrow-icon" aria-hidden="true" /> ANDROID
+					</span>
+					<span class="platform-hop">
+						<ArrowLeftRight class="arrow-icon" aria-hidden="true" /> IOS
+					</span>
 				</span>
-				<span>{t("Conexão local")}</span>
 			</div>
 		</div>
 	);
@@ -247,13 +303,13 @@ function Home() {
 					<div class="hero-copy">
 						<div class="eyebrow">{t("SEUS ARQUIVOS, LOGO ALI")}</div>
 						<h1>
-							{t("De um computador.")}
+							{t("De um dispositivo.")}
 							<br />
 							<em>{t("Para o outro.")}</em>
 						</h1>
 						<p class="lead">
 							{t(
-								"Envie arquivos e pastas entre Mac, Windows e Linux. Direto pela sua rede, com a simplicidade que esse caminho merece.",
+								"Envie arquivos e pastas entre macOS, Windows, Linux, Android e iOS. Direto entre seus dispositivos, com a simplicidade que esse caminho merece.",
 							)}
 						</p>
 						<div class="hero-actions">
@@ -269,14 +325,13 @@ function Home() {
 						<div class="hero-note">
 							<span>{t("Sem conta.")}</span>
 							<span>{t("Sem upload para a nuvem.")}</span>
-							<span>{t("Pela rede local.")}</span>
 						</div>
 					</div>
 					<TransferScene />
 				</section>
 				<section class="platform-strip wrap" aria-label={t("Plataformas disponíveis")}>
 					<span>
-						{t("COMPUTADORES DIFERENTES.")}
+						{t("DISPOSITIVOS DIFERENTES.")}
 						<br />
 						<strong>{t("A mesma conversa.")}</strong>
 					</span>
@@ -289,6 +344,12 @@ function Home() {
 						</span>
 						<span>
 							<IconLinux aria-hidden="true" /> Linux
+						</span>
+						<span>
+							<IconAndroid aria-hidden="true" /> Android
+						</span>
+						<span>
+							<IconApple aria-hidden="true" /> iOS
 						</span>
 					</div>
 					<a href={localPath("/docs/cli/")}>
@@ -314,9 +375,9 @@ function Home() {
 								{
 									n: "01",
 									icon: <ArrowLeftRight class="arrow-icon" aria-hidden="true" />,
-									title: t("Encontre seu outro computador"),
+									title: t("Encontre seu outro dispositivo"),
 									text: t(
-										"Abra o Dukto nos dois dispositivos, conectados à mesma rede. Eles se encontram por descoberta local.",
+										"Abra o Dukto nos dois dispositivos. Eles se conectam pelas opções de conexão disponíveis.",
 									),
 								},
 								{
@@ -330,9 +391,9 @@ function Home() {
 								{
 									n: "03",
 									icon: <IconCheck aria-hidden="true" />,
-									title: t("Aceite. E pronto."),
+									title: t("Aceite... E pronto!"),
 									text: t(
-										"Confirme o recebimento no destino. A transferência acontece diretamente entre os computadores.",
+										"Confirme o recebimento no destino. A transferência acontece diretamente entre os dispositivos.",
 									),
 								},
 							]}
@@ -393,7 +454,7 @@ function Home() {
 								<h3>{t("De dispositivo para dispositivo")}</h3>
 								<p>
 									{t(
-										"O conteúdo vai pela rede local, sem um serviço de armazenamento intermediário.",
+										"O conteúdo vai diretamente de um dispositivo ao outro, sem um serviço de armazenamento intermediário.",
 									)}
 								</p>
 							</div>
@@ -434,7 +495,7 @@ function Home() {
 					<div>
 						<span class="eyebrow">{t("VAMOS ENCURTAR ESSE CAMINHO?")}</span>
 						<h2>
-							{t("Seu outro computador")}
+							{t("Seu outro dispositivo")}
 							<br />
 							{t("está logo ali.")}
 						</h2>
@@ -526,11 +587,19 @@ function Docs(props: { guide: Guide }) {
 							>
 								<h2>{s.title}</h2>
 								<Show when={s.text}>
-									<p>{s.text}</p>
+									<p>
+										<GuideText text={s.text || ""} link={s.link} />
+									</p>
 								</Show>
 								<Show when={s.items}>
 									<ul>
-										<For each={s.items}>{(item) => <li>{item}</li>}</For>
+										<For each={s.items}>
+											{(item) => (
+												<li>
+													<GuideText text={item} />
+												</li>
+											)}
+										</For>
 									</ul>
 								</Show>
 								<Show when={s.code}>
@@ -591,11 +660,11 @@ function Downloads() {
 			architectures: [
 				{
 					label: t("Apple Silicon · ARM64"),
-					packages: [{ label: t("Baixar DMG"), filename: "dukto_0.1.1_macos_arm64.dmg" }],
+					packages: [{ label: t("Baixar DMG"), filename: "dukto_0.2.0_macos_arm64.dmg" }],
 				},
 				{
 					label: t("Intel · x64"),
-					packages: [{ label: t("Baixar DMG"), filename: "dukto_0.1.1_macos_x64.dmg" }],
+					packages: [{ label: t("Baixar DMG"), filename: "dukto_0.2.0_macos_x64.dmg" }],
 				},
 			],
 		},
@@ -610,7 +679,7 @@ function Downloads() {
 					packages: [
 						{
 							label: t("Baixar instalador EXE"),
-							filename: "dukto_0.1.1_windows_x64-setup.exe",
+							filename: "dukto_0.2.0_windows_x64-setup.exe",
 						},
 					],
 				},
@@ -625,15 +694,15 @@ function Downloads() {
 				{
 					label: t("Linux · x64"),
 					packages: [
-						{ label: t("Baixar DEB"), filename: "dukto_0.1.1_linux_x64.deb" },
-						{ label: t("Baixar AppImage"), filename: "dukto_0.1.1_linux_x64.AppImage" },
+						{ label: t("Baixar DEB"), filename: "dukto_0.2.0_linux_x64.deb" },
+						{ label: t("Baixar AppImage"), filename: "dukto_0.2.0_linux_x64.AppImage" },
 					],
 				},
 				{
 					label: t("Linux · ARM64"),
 					packages: [
-						{ label: t("Baixar DEB"), filename: "dukto_0.1.1_linux_arm64.deb" },
-						{ label: t("Baixar AppImage"), filename: "dukto_0.1.1_linux_arm64.AppImage" },
+						{ label: t("Baixar DEB"), filename: "dukto_0.2.0_linux_arm64.deb" },
+						{ label: t("Baixar AppImage"), filename: "dukto_0.2.0_linux_arm64.AppImage" },
 					],
 				},
 			],
@@ -645,22 +714,22 @@ function Downloads() {
 			architectures: [
 				{
 					label: t("Apple Silicon · ARM64"),
-					filename: "dukto-cli_0.1.1_macos_arm64.tar.gz",
+					filename: "dukto-cli_0.2.0_macos_arm64.tar.gz",
 				},
-				{ label: t("Intel · x64"), filename: "dukto-cli_0.1.1_macos_x64.tar.gz" },
+				{ label: t("Intel · x64"), filename: "dukto-cli_0.2.0_macos_x64.tar.gz" },
 			],
 			format: t("Baixar TAR.GZ"),
 		},
 		{
 			name: "Windows",
-			architectures: [{ label: t("Windows · x64"), filename: "dukto-cli_0.1.1_windows_x64.zip" }],
+			architectures: [{ label: t("Windows · x64"), filename: "dukto-cli_0.2.0_windows_x64.zip" }],
 			format: t("Baixar ZIP"),
 		},
 		{
 			name: "Linux",
 			architectures: [
-				{ label: t("Linux · x64"), filename: "dukto-cli_0.1.1_linux_x64.tar.gz" },
-				{ label: t("Linux · ARM64"), filename: "dukto-cli_0.1.1_linux_arm64.tar.gz" },
+				{ label: t("Linux · x64"), filename: "dukto-cli_0.2.0_linux_x64.tar.gz" },
+				{ label: t("Linux · ARM64"), filename: "dukto-cli_0.2.0_linux_arm64.tar.gz" },
 			],
 			format: t("Baixar TAR.GZ"),
 		},
@@ -669,7 +738,7 @@ function Downloads() {
 		<>
 			<main class="wrap downloads">
 				<div class="download-intro">
-					<span class="eyebrow">{t("UM DUKTO PARA CADA COMPUTADOR")}</span>
+					<span class="eyebrow">{t("UM DUKTO PARA CADA DISPOSITIVO")}</span>
 					<h1>
 						{t("Escolha seu")}
 						<br />
@@ -678,7 +747,7 @@ function Downloads() {
 					<p class="lead">
 						{t("Aplicativo para o dia a dia. CLI para seus scripts.")}
 						<br />
-						{t("A mesma conexão local entre eles.")}
+						{t("A mesma conexão direta entre eles.")}
 					</p>
 				</div>
 				<div class="release-notice">
@@ -686,11 +755,11 @@ function Downloads() {
 						<Arrow />
 					</span>
 					<div>
-						<strong>{t("Dukto 0.1.1 já está disponível.")}</strong>
+						<strong>{t("Dukto 0.2.0 já está disponível.")}</strong>
 						<p>{t("Baixe o aplicativo ou a CLI para seu sistema e arquitetura.")}</p>
 					</div>
 					<a href={releaseNotes} target="_blank" rel="noopener noreferrer">
-						{t("Ver release 0.1.1")}
+						{t("Ver release 0.2.0")}
 						<IconExternalLink class="arrow-icon" aria-hidden="true" />
 					</a>
 				</div>
@@ -705,7 +774,7 @@ function Downloads() {
 								<p>{p.text}</p>
 								<div class="format-row">
 									<span>{p.format}</span>
-									<small>v0.1.1</small>
+									<small>v0.2.0</small>
 								</div>
 								<div class="download-architectures">
 									<For each={p.architectures}>
@@ -740,7 +809,7 @@ function Downloads() {
 					<div>
 						<span class="eyebrow">{t("PREFERE O TERMINAL?")}</span>
 						<h2>{t("Uma CLI. Os mesmos caminhos.")}</h2>
-						<p>{t("Baixe a CLI 0.1.1 para automatizar envios e recebimentos no terminal.")}</p>
+						<p>{t("Baixe a CLI 0.2.0 para automatizar envios e recebimentos no terminal.")}</p>
 						<a class="text-link" href={localPath("/docs/cli/")}>
 							{t("Comandos e exemplos")} <ArrowRight class="arrow-icon" aria-hidden="true" />
 						</a>
@@ -769,7 +838,7 @@ function Downloads() {
 					</div>
 				</section>
 				<div class="download-footnote">
-					{t("Use a mesma versão nos dois computadores. Consulte as")}{" "}
+					{t("Use a mesma versão nos dispositivos. Consulte as")}{" "}
 					<a href={localPath("/docs/rede-e-descoberta/")}>{t("orientações de rede")}</a> {t("e a")}{" "}
 					<a href={localPath("/docs/privacidade/")}>{t("documentação de segurança")}</a>.
 				</div>

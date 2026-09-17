@@ -19,7 +19,10 @@ mod app_runner {
 
     const QUIC_PORT: u16 = 4242;
 
-    #[cfg_attr(mobile, tauri::mobile_entry_point)]
+    #[cfg_attr(
+        any(target_os = "android", target_os = "ios"),
+        tauri::mobile_entry_point
+    )]
     pub fn run() {
         tracing_subscriber::fmt()
             .with_env_filter(
@@ -46,20 +49,35 @@ mod app_runner {
             builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
         }
 
+        #[cfg(feature = "desktop")]
+        let builder = builder.invoke_handler(tauri::generate_handler![
+            commands::get_device_info,
+            commands::get_peers,
+            commands::get_settings,
+            commands::set_destination_dir,
+            commands::set_peer_order,
+            commands::resolve_file_metadata,
+            commands::send_to_peer,
+            commands::cancel_transfer,
+            commands::respond_transfer,
+            commands::updater::download_app_update,
+            commands::updater::install_app_update,
+        ]);
+
+        #[cfg(not(feature = "desktop"))]
+        let builder = builder.invoke_handler(tauri::generate_handler![
+            commands::get_device_info,
+            commands::get_peers,
+            commands::get_settings,
+            commands::set_destination_dir,
+            commands::set_peer_order,
+            commands::resolve_file_metadata,
+            commands::send_to_peer,
+            commands::cancel_transfer,
+            commands::respond_transfer,
+        ]);
+
         builder
-            .invoke_handler(tauri::generate_handler![
-                commands::get_device_info,
-                commands::get_peers,
-                commands::get_settings,
-                commands::set_destination_dir,
-                commands::set_peer_order,
-                commands::resolve_file_metadata,
-                commands::send_to_peer,
-                commands::cancel_transfer,
-                commands::respond_transfer,
-                commands::updater::download_app_update,
-                commands::updater::install_app_update,
-            ])
             .setup(|app| {
                 #[cfg(target_os = "windows")]
                 if let Some(window) = app.get_webview_window("main") {

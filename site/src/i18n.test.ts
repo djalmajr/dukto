@@ -20,6 +20,7 @@ describe("website localization", () => {
 			"https://github.com/djalmajr/dukto",
 		);
 	});
+
 	test("navigation is localized while documentation content remains English", () => {
 		expect(Object.keys(en).sort()).toEqual(Object.keys(es).sort());
 		const navigation = new Set<string>();
@@ -31,10 +32,12 @@ describe("website localization", () => {
 			for (const section of guide.sections) {
 				documentContent.add(section.title);
 				if (section.text) documentContent.add(section.text);
-				for (const item of section.items || []) documentContent.add(item);
 				if (section.code) documentContent.add(section.code);
+				if (section.link) documentContent.add(section.link.label);
+				for (const item of section.items || []) documentContent.add(item);
 			}
 		}
+
 		const file = ts.createSourceFile(
 			"App.tsx",
 			readFileSync(`${import.meta.dir}/App.tsx`, "utf8"),
@@ -53,10 +56,12 @@ describe("website localization", () => {
 			ts.forEachChild(node, visit);
 		}
 		visit(file);
+
 		for (const message of navigation) {
 			expect((en as Record<string, string>)[message], `Missing English: ${message}`).toBeTruthy();
 			expect((es as Record<string, string>)[message], `Missing Spanish: ${message}`).toBeTruthy();
 		}
+
 		for (const message of documentContent) {
 			expect(
 				(en as Record<string, string>)[message],
@@ -68,6 +73,7 @@ describe("website localization", () => {
 			).toBeUndefined();
 		}
 	});
+
 	test("guide metadata and document language stay en-US on every route", () => {
 		for (const path of [
 			"/docs/primeiros-passos/",
@@ -78,7 +84,7 @@ describe("website localization", () => {
 			expect(metadata.locale).toBe("en-US");
 			expect(metadata.title).toBe("Getting started — Dukto Docs");
 			expect(metadata.description).toBe(
-				"Two computers. One network. Your files where they belong.",
+				"Two devices. One direct connection. Your files where they belong.",
 			);
 		}
 		expect(pageMetadata("/es-es/404.html").title).toBe("Página no encontrada — Dukto");

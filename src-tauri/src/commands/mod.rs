@@ -1,3 +1,4 @@
+#[cfg(feature = "desktop")]
 pub mod updater;
 
 use std::net::SocketAddr;
