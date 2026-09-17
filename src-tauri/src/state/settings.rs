@@ -4,18 +4,13 @@ use std::path::{Path, PathBuf};
 const SETTINGS_FILE: &str = "settings.json";
 
 /// Theme preference.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum ThemeMode {
     Light,
     Dark,
+    #[default]
     System,
-}
-
-impl Default for ThemeMode {
-    fn default() -> Self {
-        Self::System
-    }
 }
 
 /// Persisted user settings.

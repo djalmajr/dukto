@@ -41,6 +41,7 @@
 	"sent": "Sent",
 	"settings": "Settings",
 	"system": "system",
+	"waitingForApproval": "Waiting for confirmation...",
 	"updateAvailableTitle": "Dukto {{version}} is available",
 	"updateAvailableVersion": "Version {{version}} is available.",
 	"updateCheckFailedWithDetails": "Could not check for updates: {{message}}",

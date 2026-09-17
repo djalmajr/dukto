@@ -1,5 +1,5 @@
 use std::net::SocketAddr;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use dukto_lib::crypto::noise::{handshake_initiator, handshake_responder};
@@ -151,7 +151,7 @@ async fn transfer_header_delivers_sender_identity_over_quic() {
 /// Helper: run a transfer between two endpoints.
 async fn run_transfer(
     inputs: &[PathBuf],
-    dest_dir: &PathBuf,
+    dest_dir: &Path,
     transfer_id: &str,
     auto_accept: bool,
 ) -> Result<
@@ -163,7 +163,7 @@ async fn run_transfer(
     let server_addr = server_ep.local_addr().expect("server addr");
     let client_ep = create_endpoint("127.0.0.1:0".parse().unwrap()).expect("client ep");
 
-    let dest = dest_dir.clone();
+    let dest = dest_dir.to_path_buf();
     let server_handle = tokio::spawn(async move {
         let incoming = server_ep.accept().await.unwrap();
         let conn = incoming.await.unwrap();
@@ -350,17 +350,19 @@ async fn progress_callback_reports_correct_values() {
     conn.close(0u32.into(), b"done");
     client_ep.close(0u32.into(), b"shutdown");
 
-    let snaps = snapshots.lock().unwrap();
-    assert_eq!(
-        snaps.len(),
-        4,
-        "Should have 4 progress callbacks for 128KB file"
-    );
-    for (i, snap) in snaps.iter().enumerate() {
-        assert_eq!(snap.bytes_total, file_size as u64);
-        assert_eq!(snap.bytes_sent, ((i + 1) as u64) * 32 * 1024);
+    {
+        let snaps = snapshots.lock().unwrap();
+        assert_eq!(
+            snaps.len(),
+            4,
+            "Should have 4 progress callbacks for 128KB file"
+        );
+        for (i, snap) in snaps.iter().enumerate() {
+            assert_eq!(snap.bytes_total, file_size as u64);
+            assert_eq!(snap.bytes_sent, ((i + 1) as u64) * 32 * 1024);
+        }
+        assert!((snaps.last().unwrap().percent - 100.0).abs() < 0.01);
     }
-    assert!((snaps.last().unwrap().percent - 100.0).abs() < 0.01);
 
     tokio::fs::remove_dir_all(&src_dir).await.ok();
     tokio::fs::remove_dir_all(&dest_dir).await.ok();

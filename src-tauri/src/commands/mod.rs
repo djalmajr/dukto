@@ -155,6 +155,8 @@ pub async fn send_to_peer(
             let result = match setup {
                 Ok((mut send, mut recv, mut noise)) => {
                     let handle_progress = handle.clone();
+                    let handle_accepted = handle.clone();
+                    let tid_accepted = tid.clone();
                     send_transfer_with_cancellation(
                         &mut send,
                         &mut recv,
@@ -168,6 +170,18 @@ pub async fn send_to_peer(
                                 move |progress: &crate::protocol::types::TransferProgress| {
                                     let _ = handle_progress.emit("transfer:progress", progress);
                                 },
+                            on_accepted: move || {
+                                #[derive(Serialize)]
+                                struct SendAccepted {
+                                    transfer_id: String,
+                                }
+                                let _ = handle_accepted.emit(
+                                    "transfer:send-accepted",
+                                    &SendAccepted {
+                                        transfer_id: tid_accepted,
+                                    },
+                                );
+                            },
                         },
                     )
                     .await

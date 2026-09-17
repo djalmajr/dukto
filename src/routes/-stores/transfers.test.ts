@@ -263,6 +263,44 @@ test("keeps concurrent transfers independent and incoming approvals ordered and 
 			hostname: "incoming-1.local",
 			platform: "windows",
 		});
+
+		// Outgoing transfer enters waiting_approval until remote peer accepts
+		emit("transfer:send-started", { transfer_id: "send-waiting", peer_device_id: "host-waiting" });
+		store.startSendTransfer("send-waiting", 500, "host-waiting");
+		expect(store.getPeerTransfers("host-waiting")?.[0]).toMatchObject({
+			id: "send-waiting",
+			status: "waiting_approval",
+			bytesTotal: 500,
+			bytesSent: 0,
+			percent: 0,
+		});
+
+		// Upon remote acceptance, status transitions to active
+		emit("transfer:send-accepted", { transfer_id: "send-waiting" });
+		expect(store.getPeerTransfers("host-waiting")?.[0]).toMatchObject({
+			id: "send-waiting",
+			status: "active",
+		});
+
+		// Outgoing transfer rejected while waiting transitions to error
+		emit("transfer:send-started", {
+			transfer_id: "send-rejected",
+			peer_device_id: "host-rejected",
+		});
+		store.startSendTransfer("send-rejected", 300, "host-rejected");
+		expect(store.getPeerTransfers("host-rejected")?.[0]).toMatchObject({
+			id: "send-rejected",
+			status: "waiting_approval",
+		});
+		emit("transfer:send-error", {
+			transfer_id: "send-rejected",
+			error: "Transfer rejected by receiver",
+		});
+		expect(store.getPeerTransfers("host-rejected")?.[0]).toMatchObject({
+			id: "send-rejected",
+			status: "error",
+			errorMsg: "Transfer rejected by receiver",
+		});
 	} finally {
 		mock.restore();
 	}

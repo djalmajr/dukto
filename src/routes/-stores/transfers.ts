@@ -21,7 +21,13 @@ export interface IncomingRequest {
 	total_size: number;
 }
 
-export type TransferStatus = "sending" | "receiving" | "complete" | "error" | "rejected";
+export type TransferStatus =
+	| "waiting_approval"
+	| "sending"
+	| "receiving"
+	| "complete"
+	| "error"
+	| "rejected";
 
 export interface ActiveTransfer {
 	transfer_id: string;
@@ -68,7 +74,9 @@ function toTransferSlot(transfer: ActiveTransfer): TransferSlot {
 				? "complete"
 				: transfer.status === "error" || transfer.status === "rejected"
 					? "error"
-					: "active",
+					: transfer.status === "waiting_approval"
+						? "waiting_approval"
+						: "active",
 		percent: transfer.percent,
 		bytesSent: transfer.bytes_sent,
 		bytesTotal: transfer.bytes_total,
@@ -125,7 +133,11 @@ function startOrMergeSendTransfer(
 ) {
 	if (retiredTransferIds.has(transferId)) return;
 	setTransfers(transferId, (prev) => {
-		const status = isTerminal(prev?.status) ? prev.status : "sending";
+		const status = isTerminal(prev?.status)
+			? prev.status
+			: prev?.status === "sending"
+				? "sending"
+				: "waiting_approval";
 		return {
 			transfer_id: transferId,
 			peer_device_id: peerDeviceId || prev?.peer_device_id || "",
@@ -200,6 +212,18 @@ listen<{ transfer_id: string; peer_device_id: string }>("transfer:send-started",
 	startOrMergeSendTransfer(event.payload.transfer_id, event.payload.peer_device_id);
 });
 
+listen<{ transfer_id: string }>("transfer:send-accepted", (event) => {
+	if (retiredTransferIds.has(event.payload.transfer_id)) return;
+	setTransfers(event.payload.transfer_id, (prev) =>
+		prev && !isTerminal(prev.status)
+			? {
+					...prev,
+					status: "sending",
+				}
+			: prev,
+	);
+});
+
 listen<TransferProgress>("transfer:progress", (event) => {
 	const progress = event.payload;
 	if (retiredTransferIds.has(progress.transfer_id)) return;
@@ -217,6 +241,7 @@ listen<TransferProgress>("transfer:progress", (event) => {
 				bytes_sent: 0,
 				bytes_total: request?.total_size ?? 0,
 			}),
+			status: prev?.direction === "send" ? "sending" : (prev?.status ?? "receiving"),
 			percent: progress.percent,
 			bytes_sent: progress.bytes_sent,
 			bytes_total: progress.bytes_total,

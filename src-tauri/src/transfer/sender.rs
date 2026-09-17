@@ -18,10 +18,11 @@ use crate::transfer::fs::{walk_directory, WalkItem};
 // Noise max message is 65535. Keep chunks under the limit with overhead.
 const CHUNK_SIZE: usize = 32 * 1024; // 32 KB
 
-/// Local cancellation and progress callbacks for one sender operation.
-pub struct CancellableSendCallbacks<C, F> {
+/// Local cancellation, progress, and acceptance callbacks for one sender operation.
+pub struct CancellableSendCallbacks<C, F, A = fn()> {
     pub cancelled: C,
     pub on_progress: F,
+    pub on_accepted: A,
 }
 
 /// Send one or more files/folders over an established Noise-encrypted QUIC session.
@@ -35,10 +36,40 @@ pub async fn send_transfer<F>(
     inputs: &[PathBuf],
     transfer_id: &str,
     sender: &DeviceIdentity,
-    mut on_progress: F,
+    on_progress: F,
 ) -> Result<u64, Box<dyn std::error::Error + Send + Sync>>
 where
     F: FnMut(&TransferProgress),
+{
+    send_transfer_full(
+        send,
+        recv,
+        noise,
+        inputs,
+        transfer_id,
+        sender,
+        on_progress,
+        || {},
+    )
+    .await
+}
+
+/// Send one or more files/folders over an established Noise-encrypted QUIC session,
+/// invoking `on_accepted` when the receiver confirms acceptance before item transmission begins.
+#[allow(clippy::too_many_arguments)]
+pub async fn send_transfer_full<F, A>(
+    send: &mut quinn::SendStream,
+    recv: &mut quinn::RecvStream,
+    noise: &mut TransportState,
+    inputs: &[PathBuf],
+    transfer_id: &str,
+    sender: &DeviceIdentity,
+    mut on_progress: F,
+    on_accepted: A,
+) -> Result<u64, Box<dyn std::error::Error + Send + Sync>>
+where
+    F: FnMut(&TransferProgress),
+    A: FnOnce(),
 {
     // 1. Build flat item list from all inputs
     let items = collect_items(inputs)?;
@@ -68,6 +99,8 @@ where
     if !response.accepted {
         return Err("Transfer rejected by receiver".into());
     }
+
+    on_accepted();
 
     // 4. Send items sequentially
     let mut total_sent: u64 = 0;
@@ -158,22 +191,24 @@ where
 /// Send a transfer while handling both local cancellation and the peer's reliable
 /// QUIC stream cancellation signal. The reverse stream carries the acknowledgement
 /// when this side initiated the cancellation.
-pub async fn send_transfer_with_cancellation<F, C>(
+pub async fn send_transfer_with_cancellation<F, C, A>(
     send: &mut quinn::SendStream,
     recv: &mut quinn::RecvStream,
     noise: &mut TransportState,
     inputs: &[PathBuf],
     transfer_id: &str,
     sender: &DeviceIdentity,
-    callbacks: CancellableSendCallbacks<C, F>,
+    callbacks: CancellableSendCallbacks<C, F, A>,
 ) -> Result<u64, Box<dyn std::error::Error + Send + Sync>>
 where
     F: FnMut(&TransferProgress),
     C: Future<Output = ()>,
+    A: FnOnce(),
 {
     let CancellableSendCallbacks {
         cancelled,
         on_progress,
+        on_accepted,
     } = callbacks;
 
     enum Outcome<T> {
@@ -185,7 +220,16 @@ where
     let outcome = {
         let peer_stopped = send.stopped();
         tokio::pin!(peer_stopped);
-        let transfer = send_transfer(send, recv, noise, inputs, transfer_id, sender, on_progress);
+        let transfer = send_transfer_full(
+            send,
+            recv,
+            noise,
+            inputs,
+            transfer_id,
+            sender,
+            on_progress,
+            on_accepted,
+        );
         tokio::pin!(transfer);
         tokio::pin!(cancelled);
         let mut watch_peer_stop = true;

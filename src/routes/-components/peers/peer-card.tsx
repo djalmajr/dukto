@@ -20,7 +20,7 @@ import LucideX from "~icons/lucide/x";
 export interface TransferSlot {
 	id: string;
 	direction: "send" | "receive";
-	status: "active" | "complete" | "error";
+	status: "waiting_approval" | "active" | "complete" | "error";
 	percent: number;
 	bytesSent: number;
 	bytesTotal: number;
@@ -69,18 +69,20 @@ function TransferRow(props: {
 	onAbort?: () => void;
 	onDismiss?: () => void;
 }) {
+	const isWaiting = () => props.slot.status === "waiting_approval";
+	const isActive = () => props.slot.status === "active";
+	const isAborting = () => isWaiting() || isActive();
+	const isError = () => props.slot.status === "error";
+	const isDone = () => props.slot.status === "complete";
+
 	const label = () => {
 		const dir = props.slot.direction;
 		const arrow = dir === "send" ? "\u2191" : "\u2193";
-		if (props.slot.status === "active")
-			return `${arrow} ${dir === "send" ? t("sending") : t("receiving")}`;
-		if (props.slot.status === "complete")
-			return `${arrow} ${dir === "send" ? t("sent") : t("received")}`;
+		if (isWaiting()) return `${arrow} ${t("waitingForApproval")}`;
+		if (isActive()) return `${arrow} ${dir === "send" ? t("sending") : t("receiving")}`;
+		if (isDone()) return `${arrow} ${dir === "send" ? t("sent") : t("received")}`;
 		return `${arrow} ${t("failed")}`;
 	};
-
-	const isError = () => props.slot.status === "error";
-	const isDone = () => props.slot.status === "complete";
 
 	let countdownTimer: number | undefined;
 
@@ -116,14 +118,29 @@ function TransferRow(props: {
 					}}
 				>
 					{label()}
-					<Show when={props.slot.status === "active" && props.slot.speed}>
-						{" "}
-						&middot; {props.slot.speed}
-					</Show>
+					<Show when={isActive() && props.slot.speed}> &middot; {props.slot.speed}</Show>
 				</span>
 				<span class="ml-auto flex shrink-0 items-center gap-1.5 tabular-nums text-muted-foreground">
-					<Show when={props.slot.status === "active"}>
-						{formatBytes(props.slot.bytesSent)} / {formatBytes(props.slot.bytesTotal)}
+					<Show
+						when={isAborting()}
+						fallback={
+							<Button
+								aria-label={t("dismissTransfer")}
+								variant="ghost"
+								size="icon-sm"
+								class="pointer-events-auto shrink-0 text-muted-foreground [&_svg]:size-3"
+								onClick={(e) => {
+									e.stopPropagation();
+									props.onDismiss?.();
+								}}
+							>
+								<LucideX width={12} height={12} />
+							</Button>
+						}
+					>
+						<Show when={isActive()} fallback={formatBytes(props.slot.bytesTotal)}>
+							{formatBytes(props.slot.bytesSent)} / {formatBytes(props.slot.bytesTotal)}
+						</Show>
 						<Button
 							variant="ghost"
 							size="icon-sm"
@@ -139,20 +156,6 @@ function TransferRow(props: {
 							<LucideBan width={12} height={12} />
 						</Button>
 					</Show>
-					<Show when={props.slot.status !== "active"}>
-						<Button
-							aria-label={t("dismissTransfer")}
-							variant="ghost"
-							size="icon-sm"
-							class="pointer-events-auto shrink-0 text-muted-foreground [&_svg]:size-3"
-							onClick={(e) => {
-								e.stopPropagation();
-								props.onDismiss?.();
-							}}
-						>
-							<LucideX width={12} height={12} />
-						</Button>
-					</Show>
 				</span>
 			</div>
 			<Show when={isError() && props.slot.errorMsg}>
@@ -160,16 +163,21 @@ function TransferRow(props: {
 					{t(nativeErrorKey(props.slot.errorMsg, "transferFailed"))}
 				</p>
 			</Show>
-			<Show when={props.slot.status === "active"}>
+			<Show when={isAborting()}>
 				<div class="h-1 overflow-hidden rounded-full bg-muted">
-					<div
-						class="h-full rounded-full transition-all duration-300"
-						classList={{
-							"bg-[#2b7fff]": props.slot.direction === "send",
-							"bg-[#00c950]": props.slot.direction === "receive",
-						}}
-						style={{ width: `${Math.min(props.slot.percent, 100)}%` }}
-					/>
+					<Show
+						when={isActive()}
+						fallback={<div class="h-full w-full rounded-full bg-[#2b7fff]/40 animate-pulse" />}
+					>
+						<div
+							class="h-full rounded-full transition-all duration-300"
+							classList={{
+								"bg-[#2b7fff]": props.slot.direction === "send",
+								"bg-[#00c950]": props.slot.direction === "receive",
+							}}
+							style={{ width: `${Math.min(props.slot.percent, 100)}%` }}
+						/>
+					</Show>
 				</div>
 			</Show>
 		</div>
@@ -178,7 +186,8 @@ function TransferRow(props: {
 
 function PeerCard(props: PeerCardProps) {
 	const slots = () => props.transfers ?? [];
-	const hasActive = () => slots().some((s) => s.status === "active");
+	const hasActive = () =>
+		slots().some((s) => s.status === "active" || s.status === "waiting_approval");
 	const hasError = () => slots().some((s) => s.status === "error");
 	const hasAny = () => slots().length > 0;
 
