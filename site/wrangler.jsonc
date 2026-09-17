@@ -8,5 +8,5 @@
 		"html_handling": "auto-trailing-slash",
 		"not_found_handling": "404-page"
 	},
-	"routes": [{ "pattern": "dukto.djalmajr.dev", "custom_domain": true }]
+	"routes": [{ "pattern": "dukto.app", "custom_domain": true }]
 }
