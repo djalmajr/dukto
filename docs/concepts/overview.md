@@ -1,6 +1,6 @@
 # Overview
 
-Dukto transfers files between computers on the same local network. There is no account or cloud transfer service: run it on two computers and let local discovery find the receiver.
+Dukto transfers files between devices on the same local network. There is no account or cloud transfer service: run it on two devices and let local discovery find the receiver.
 
 ## How It Works
 
@@ -8,12 +8,12 @@ On startup, the app advertises itself through mDNS and listens for peers. Nearby
 
 ## Architecture
 
-The desktop app has two layers connected by Tauri:
+The application has two layers connected by Tauri:
 
 - **Frontend** — SolidJS presentation for hosts, transfers, and settings. It communicates with the backend through commands and events.
 - **Rust backend** — owns networking, discovery, transfer state, filesystem access, and settings persistence.
 
-The CLI uses the same Rust transfer implementation as the desktop app. It can discover devices, receive with an interactive approval prompt, or explicitly accept transfers for a scripted run.
+The CLI uses the same Rust transfer implementation as the application. It can discover devices, receive with an interactive approval prompt, or explicitly accept transfers for a scripted run.
 
 ## Why These Choices
 

@@ -15,7 +15,7 @@ bun install
 bun run dev
 ~~~
 
-The development command runs the Tauri desktop shell with the Vite frontend. Frontend changes hot-reload; Rust changes rebuild the native backend.
+The development command runs the Tauri desktop shell with the Vite frontend. Frontend changes hot-reload; Rust changes rebuild the native backend. For mobile platforms, use `bun run tauri ios dev` or `bun run tauri android dev`.
 
 The standalone prototype is optional and does not connect to the network or native APIs:
 

@@ -1,15 +1,15 @@
-# Dukto Desktop UI
+# Dukto App UI
 
-This document defines the community-facing interaction and layout contract for the desktop app.
+This document defines the community-facing interaction and layout contract for the application across desktop and mobile platforms.
 
 ## Window and title bar
 
-- Start at 600 logical pixels wide. Allow horizontal resize from 480 to 640 pixels.
+- Start at 600 logical pixels wide. Allow horizontal resize from 480 to 640 pixels on desktop.
 - Allow vertical resizing down to 360 pixels and scroll the content vertically when needed.
-- Preserve native window controls and disable maximize.
+- Preserve native window controls and disable maximize on desktop.
 - Keep the title bar 45 pixels high with a muted surface and bottom border.
 - Center the local device name and hostname.
-- Place the settings gear on the right on macOS and on the left on Linux and Windows.
+- Place the settings gear on the right on macOS, iOS, Android, and Linux, and on the left on Windows.
 - Preserve space for native macOS traffic lights. Windows uses custom minimize, disabled-maximize, and close controls on the right when native decorations are disabled.
 
 ## Content and host cards

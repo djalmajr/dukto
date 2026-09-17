@@ -10,7 +10,7 @@ This design provides encrypted transport, not authenticated identity. Device nam
 
 ## Approval and trust
 
-The desktop app asks you to accept or reject each incoming transfer. The CLI requires the explicit `--accept` option before it automatically accepts transfers. There is no persistent pairing or trusted-device list.
+The graphical app asks you to accept or reject each incoming transfer. The CLI requires the explicit `--accept` option before it automatically accepts transfers. There is no persistent pairing or trusted-device list.
 
 Review the sender and the item list before accepting. An incoming request cannot be accepted by clicking outside it or pressing Escape. Settings dialogs can be closed by clicking their overlay.
 
