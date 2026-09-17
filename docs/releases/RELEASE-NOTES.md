@@ -1,13 +1,13 @@
 # Dukto 0.1.1
 
-Dukto is a desktop app and command-line tool for transferring files over a local network between macOS, Windows, and Linux computers.
+Dukto is a cross-platform app (desktop and mobile) and command-line tool for transferring files over a local network across macOS, Windows, Linux, iOS, and Android devices.
 
 This preview includes:
 
 - Local device discovery through mDNS.
 - Direct file and folder transfers over encrypted QUIC sessions.
-- Receiver approval for every incoming desktop transfer.
-- A CLI that shares the desktop app's transfer implementation.
+- Receiver approval for every incoming transfer.
+- A CLI that shares the graphical app's transfer implementation.
 - Concurrent transfers, per-transfer progress, and receiver confirmation before the sender reports success.
 - Safe per-file staging: incomplete files are removed on cancellation or failure, and completed files are published without replacing existing files.
 

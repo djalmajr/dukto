@@ -1,8 +1,8 @@
 # Dukto
 
-Dukto transfers files and folders between macOS, Windows, and Linux computers on the same local network. Devices discover one another automatically; transfers move directly between peers without an account or cloud storage service.
+Dukto transfers files and folders between macOS, Windows, Linux, iOS, and Android devices on the same local network. Devices discover one another automatically; transfers move directly between peers without an account or cloud storage service.
 
-The desktop app and the command-line interface use the same transfer protocol.
+The graphical app (desktop and mobile) and the command-line interface use the same transfer protocol.
 
 ## Features
 

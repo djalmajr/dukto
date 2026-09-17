@@ -42,7 +42,7 @@ export const guides: Guide[] = [
 		navTitle: "Instalação",
 		group: "GETTING STARTED",
 		title: "Installation",
-		summary: "Choose the desktop app for everyday use or the CLI for your workflow.",
+		summary: "Choose the app for everyday use or the CLI for your workflow.",
 		sections: [
 			{
 				title: "Availability",
@@ -175,7 +175,7 @@ export const guides: Guide[] = [
 			},
 			{
 				title: "Approval and trust",
-				text: "The desktop app asks you to approve each incoming transfer. The CLI requires explicit --accept for automatic receiving. Dukto does not currently provide persistent pairing or a trusted-device list. Display names and advertised IDs are self-reported labels, not proof of a person's identity.",
+				text: "The graphical app asks you to approve each incoming transfer. The CLI requires explicit --accept for automatic receiving. Dukto does not currently provide persistent pairing or a trusted-device list. Display names and advertised IDs are self-reported labels, not proof of a person's identity.",
 			},
 			{
 				title: "Protocol compatibility",

@@ -25,7 +25,7 @@ The receiver address and UDP port are resolved through the service record. The s
 
 ## Troubleshooting
 
-- Keep Dukto open on both computers and use compatible protocol versions.
+- Keep Dukto open on both devices and use compatible protocol versions.
 - Confirm both devices can use the same non-isolated local network.
 - Allow mDNS on UDP 5353 and the receiver's advertised UDP port in the firewall.
 - Try a direct CLI address to distinguish discovery problems from connection problems.

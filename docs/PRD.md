@@ -2,13 +2,13 @@
 
 ## Summary
 
-Dukto is a desktop file-transfer app for computers on the same local network. It pairs automatic peer discovery with direct, encrypted transfers and an explicit receive decision. A command-line interface supports terminal workflows and automation through the same transfer protocol.
+Dukto is a cross-platform file-transfer app for devices on the same local network. It pairs automatic peer discovery with direct, encrypted transfers and an explicit receive decision. A command-line interface supports terminal workflows and automation through the same transfer protocol.
 
-The product prioritizes a small, understandable workflow: open Dukto on both computers, select a destination host, choose files or folders, and approve the incoming request on the receiving device.
+The product prioritizes a small, understandable workflow: open Dukto on both devices, select a destination host, choose files or folders, and approve the incoming request on the receiving device.
 
 ## Current scope
 
-The current product is a desktop LAN transfer app and CLI for macOS, Windows, and Linux.
+The current product is a cross-platform LAN transfer app for macOS, Windows, Linux, iOS, and Android, alongside a desktop CLI for terminal workflows.
 
 - mDNS advertises and discovers available peers on the local network.
 - QUIC carries transfer sessions; Noise encrypts the application session.
@@ -29,7 +29,7 @@ The LAN flow sends data directly between computers. Dukto does not upload LAN tr
 
 ### Receiver control
 
-Every desktop incoming transfer requires an explicit decision. CLI unattended receive requires an explicit command-line option for that process. There is no persistent auto-accept rule.
+Every incoming transfer in the application requires an explicit decision. CLI unattended receive requires an explicit command-line option for that process. There is no persistent auto-accept rule.
 
 ### Honest identity and security
 
@@ -45,7 +45,7 @@ The Tauri frontend presents application state and interactions. Rust owns discov
 
 ## Not currently included
 
-Internet pairing or relay, mobile apps, resumable transfers, persistent trusted devices, transfer history, groups, and automatic receive rules are not current product capabilities. No delivery dates are promised for these ideas.
+Internet pairing or relay, resumable transfers, persistent trusted devices, transfer history, groups, and automatic receive rules are not current product capabilities. No delivery dates are promised for these ideas.
 
 ## Community contributions
 
