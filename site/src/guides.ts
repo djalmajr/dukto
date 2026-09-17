@@ -186,19 +186,43 @@ export const guides: Guide[] = [
 		navTitle: "Privacidade",
 		group: "UNDERSTAND THE FLOW",
 		title: "Privacy and security",
-		summary: "Files travel directly between devices. You decide what to receive.",
+		summary: "Dukto transfers files directly between devices without collecting your personal data.",
 		sections: [
 			{
+				title: "Who operates Dukto",
+				text: "Dukto is developed and maintained by Djalma Júnior. Questions about this policy or Dukto's data practices can be sent to contato@djalmajr.dev.",
+			},
+			{
+				title: "Data collection",
+				text: "Dukto does not require an account and does not collect, sell, or send personal data, analytics, advertising identifiers, crash reports, or file contents to the developer. The app has no advertising or tracking SDKs.",
+			},
+			{
 				title: "Direct, encrypted transfer",
-				text: "Content travels over QUIC with a Noise session. Dukto's direct transfer flow does not send files to a cloud storage service.",
+				text: "Content travels directly to the device selected by the sender over QUIC with a Noise session. A transfer can expose the selected files, file names, device name, device identifier, network address, and transfer metadata to the participating devices. Dukto does not route or retain this information through a developer-operated server or cloud storage service.",
+			},
+			{
+				title: "Device access and permissions",
+				text: "Dukto uses network access and Wi-Fi multicast to discover and connect to nearby devices. It uses notifications to alert you about incoming transfers. Files are accessed only when you select them for sending or choose where received files are saved.",
 			},
 			{
 				title: "Approval and trust",
 				text: "The graphical app asks you to approve each incoming transfer. The CLI requires explicit --accept for automatic receiving. Dukto does not currently provide persistent pairing or a trusted-device list. Display names and advertised IDs are self-reported labels, not proof of a person's identity.",
 			},
 			{
+				title: "Storage, retention, and deletion",
+				text: "Settings and received files remain on your devices until you change or delete them. You can delete received files with your operating system, clear local app data, or uninstall Dukto. Because the developer does not receive or store your files or personal data, there is no developer-side account or cloud record to delete.",
+			},
+			{
+				title: "Children",
+				text: "Dukto is a general-purpose utility and is not directed to children under 13. The app does not knowingly collect personal data from children.",
+			},
+			{
 				title: "Protocol compatibility",
 				text: "Protocol 0.2 requires a receipt containing the transfer ID, item count, and byte count. Update the sender and receiver together. Older applications using protocol 0.1 are not compatible with this receipt.",
+			},
+			{
+				title: "Policy updates",
+				text: "This policy is effective September 17, 2026. Material changes will be published on this page with an updated effective date.",
 			},
 		],
 	},
