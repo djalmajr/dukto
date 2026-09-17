@@ -24,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: website
-      url: https://dukto.djalmajr.dev
+      url: https://dukto.app
     steps:
       - uses: actions/checkout@v7
         with:

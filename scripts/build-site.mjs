@@ -41,12 +41,12 @@ for (const route of routes) {
 	const html = shell
 		.replace(
 			"</head>",
-			`${generateHydrationScript()}${locales.map((locale) => `<link rel="alternate" hreflang="${locale}" href="https://dukto.djalmajr.dev${localizedPath(locale, route.path)}" />`).join("")}</head>`,
+			`${generateHydrationScript()}${locales.map((locale) => `<link rel="alternate" hreflang="${locale}" href="https://dukto.app${localizedPath(locale, route.path)}" />`).join("")}</head>`,
 		)
 		.replace(/<html lang="[^"]+"/, `<html lang="${route.locale}"`)
 		.replace('<div id="root"></div>', `<div id="root">${renderPage(route.path)}</div>`)
 		.replace(/<title>.*?<\/title>/, `<title>${escapeHtml(route.title)}</title>`)
-		.replace('href="https://dukto.djalmajr.dev/"', `href="https://dukto.djalmajr.dev${route.path}"`)
+		.replace('href="https://dukto.app/"', `href="https://dukto.app${route.path}"`)
 		.replace(
 			/(<meta name="description" content=")[^"]*/,
 			`$1${escapeHtml(route.description || "Arquivos e pastas entre Mac, Windows e Linux, direto pela rede local.")}`,
@@ -58,7 +58,7 @@ await writeFile(
 	"site/dist/sitemap.xml",
 	`<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${routes
 		.filter((r) => !r.path.endsWith("404.html"))
-		.map((r) => `<url><loc>https://dukto.djalmajr.dev${r.path}</loc></url>`)
+		.map((r) => `<url><loc>https://dukto.app${r.path}</loc></url>`)
 		.join("")}</urlset>`,
 );
 console.log(`Prerendered ${routes.length} pages.`);
