@@ -7,7 +7,11 @@ use dukto_lib::transfer::receiver::receive_transfer;
 use dukto_lib::transfer::sender::send_transfer;
 
 fn temp_dir(suffix: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("dukto-android-test-{}-{}", suffix, uuid::Uuid::new_v4()));
+    let dir = std::env::temp_dir().join(format!(
+        "dukto-android-test-{}-{}",
+        suffix,
+        uuid::Uuid::new_v4()
+    ));
     std::fs::create_dir_all(&dir).unwrap();
     dir
 }
@@ -51,7 +55,8 @@ async fn transfer_macos_to_android_bidirectional() {
         let (mut send, mut recv) = conn.accept_bi().await.unwrap();
         let mut noise = handshake_responder(&mut send, &mut recv).await.unwrap();
 
-        let result = receive_transfer(&mut send, &mut recv, &mut noise, &android_dest_clone, true).await;
+        let result =
+            receive_transfer(&mut send, &mut recv, &mut noise, &android_dest_clone, true).await;
         conn.close(0u32.into(), b"done");
         android_endpoint.close(0u32.into(), b"shutdown");
         result
@@ -59,9 +64,15 @@ async fn transfer_macos_to_android_bidirectional() {
 
     // macOS node connecting to Android
     let mac_endpoint = create_endpoint("127.0.0.1:0".parse().unwrap()).unwrap();
-    let mac_conn = mac_endpoint.connect(android_addr, "localhost").unwrap().await.unwrap();
+    let mac_conn = mac_endpoint
+        .connect(android_addr, "localhost")
+        .unwrap()
+        .await
+        .unwrap();
     let (mut mac_send, mut mac_recv) = mac_conn.open_bi().await.unwrap();
-    let mut mac_noise = handshake_initiator(&mut mac_send, &mut mac_recv).await.unwrap();
+    let mut mac_noise = handshake_initiator(&mut mac_send, &mut mac_recv)
+        .await
+        .unwrap();
 
     let mac_sender = macos_identity();
     let bytes_sent = send_transfer(
@@ -115,7 +126,8 @@ async fn transfer_android_to_macos_bidirectional() {
         let (mut send, mut recv) = conn.accept_bi().await.unwrap();
         let mut noise = handshake_responder(&mut send, &mut recv).await.unwrap();
 
-        let result = receive_transfer(&mut send, &mut recv, &mut noise, &mac_dest_clone, true).await;
+        let result =
+            receive_transfer(&mut send, &mut recv, &mut noise, &mac_dest_clone, true).await;
         conn.close(0u32.into(), b"done");
         mac_endpoint.close(0u32.into(), b"shutdown");
         result
@@ -123,9 +135,15 @@ async fn transfer_android_to_macos_bidirectional() {
 
     // Android node connecting to macOS
     let android_endpoint = create_endpoint("127.0.0.1:0".parse().unwrap()).unwrap();
-    let android_conn = android_endpoint.connect(mac_addr, "localhost").unwrap().await.unwrap();
+    let android_conn = android_endpoint
+        .connect(mac_addr, "localhost")
+        .unwrap()
+        .await
+        .unwrap();
     let (mut android_send, mut android_recv) = android_conn.open_bi().await.unwrap();
-    let mut android_noise = handshake_initiator(&mut android_send, &mut android_recv).await.unwrap();
+    let mut android_noise = handshake_initiator(&mut android_send, &mut android_recv)
+        .await
+        .unwrap();
 
     let android_sender = android_identity();
     let bytes_sent = send_transfer(
@@ -177,8 +195,12 @@ async fn multi_file_folder_transfer_between_android_and_macos() {
 
     let file1 = transfer_dir.join("notes.txt");
     let file2 = sub_dir.join("data.bin");
-    tokio::fs::write(&file1, b"Android notes line 1\nline 2").await.unwrap();
-    tokio::fs::write(&file2, &[0xDE, 0xAD, 0xBE, 0xEF, 0x01, 0x02, 0x03]).await.unwrap();
+    tokio::fs::write(&file1, b"Android notes line 1\nline 2")
+        .await
+        .unwrap();
+    tokio::fs::write(&file2, &[0xDE, 0xAD, 0xBE, 0xEF, 0x01, 0x02, 0x03])
+        .await
+        .unwrap();
 
     // macOS receiver
     let mac_endpoint = create_endpoint("127.0.0.1:0".parse().unwrap()).unwrap();
@@ -191,7 +213,8 @@ async fn multi_file_folder_transfer_between_android_and_macos() {
         let (mut send, mut recv) = conn.accept_bi().await.unwrap();
         let mut noise = handshake_responder(&mut send, &mut recv).await.unwrap();
 
-        let result = receive_transfer(&mut send, &mut recv, &mut noise, &mac_dest_clone, true).await;
+        let result =
+            receive_transfer(&mut send, &mut recv, &mut noise, &mac_dest_clone, true).await;
         conn.close(0u32.into(), b"done");
         mac_endpoint.close(0u32.into(), b"shutdown");
         result
@@ -199,9 +222,15 @@ async fn multi_file_folder_transfer_between_android_and_macos() {
 
     // Android sender
     let android_endpoint = create_endpoint("127.0.0.1:0".parse().unwrap()).unwrap();
-    let android_conn = android_endpoint.connect(mac_addr, "localhost").unwrap().await.unwrap();
+    let android_conn = android_endpoint
+        .connect(mac_addr, "localhost")
+        .unwrap()
+        .await
+        .unwrap();
     let (mut android_send, mut android_recv) = android_conn.open_bi().await.unwrap();
-    let mut android_noise = handshake_initiator(&mut android_send, &mut android_recv).await.unwrap();
+    let mut android_noise = handshake_initiator(&mut android_send, &mut android_recv)
+        .await
+        .unwrap();
 
     let android_sender = android_identity();
     let total_bytes = send_transfer(
@@ -227,11 +256,15 @@ async fn multi_file_folder_transfer_between_android_and_macos() {
     assert!(received_projects.join("empty_folder").is_dir());
 
     assert_eq!(
-        tokio::fs::read(received_projects.join("notes.txt")).await.unwrap(),
+        tokio::fs::read(received_projects.join("notes.txt"))
+            .await
+            .unwrap(),
         b"Android notes line 1\nline 2"
     );
     assert_eq!(
-        tokio::fs::read(received_projects.join("subdir").join("data.bin")).await.unwrap(),
+        tokio::fs::read(received_projects.join("subdir").join("data.bin"))
+            .await
+            .unwrap(),
         &[0xDE, 0xAD, 0xBE, 0xEF, 0x01, 0x02, 0x03]
     );
 

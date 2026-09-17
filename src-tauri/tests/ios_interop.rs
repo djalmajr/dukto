@@ -7,7 +7,11 @@ use dukto_lib::transfer::receiver::receive_transfer;
 use dukto_lib::transfer::sender::send_transfer;
 
 fn temp_dir(suffix: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("dukto-ios-test-{}-{}", suffix, uuid::Uuid::new_v4()));
+    let dir = std::env::temp_dir().join(format!(
+        "dukto-ios-test-{}-{}",
+        suffix,
+        uuid::Uuid::new_v4()
+    ));
     std::fs::create_dir_all(&dir).unwrap();
     dir
 }
@@ -51,7 +55,8 @@ async fn transfer_macos_to_ios_bidirectional() {
         let (mut send, mut recv) = conn.accept_bi().await.unwrap();
         let mut noise = handshake_responder(&mut send, &mut recv).await.unwrap();
 
-        let result = receive_transfer(&mut send, &mut recv, &mut noise, &ios_dest_clone, true).await;
+        let result =
+            receive_transfer(&mut send, &mut recv, &mut noise, &ios_dest_clone, true).await;
         conn.close(0u32.into(), b"done");
         ios_endpoint.close(0u32.into(), b"shutdown");
         result
@@ -59,9 +64,15 @@ async fn transfer_macos_to_ios_bidirectional() {
 
     // macOS node connecting to iOS
     let mac_endpoint = create_endpoint("127.0.0.1:0".parse().unwrap()).unwrap();
-    let mac_conn = mac_endpoint.connect(ios_addr, "localhost").unwrap().await.unwrap();
+    let mac_conn = mac_endpoint
+        .connect(ios_addr, "localhost")
+        .unwrap()
+        .await
+        .unwrap();
     let (mut mac_send, mut mac_recv) = mac_conn.open_bi().await.unwrap();
-    let mut mac_noise = handshake_initiator(&mut mac_send, &mut mac_recv).await.unwrap();
+    let mut mac_noise = handshake_initiator(&mut mac_send, &mut mac_recv)
+        .await
+        .unwrap();
 
     let mac_sender = macos_identity();
     let bytes_sent = send_transfer(
@@ -115,7 +126,8 @@ async fn transfer_ios_to_macos_bidirectional() {
         let (mut send, mut recv) = conn.accept_bi().await.unwrap();
         let mut noise = handshake_responder(&mut send, &mut recv).await.unwrap();
 
-        let result = receive_transfer(&mut send, &mut recv, &mut noise, &mac_dest_clone, true).await;
+        let result =
+            receive_transfer(&mut send, &mut recv, &mut noise, &mac_dest_clone, true).await;
         conn.close(0u32.into(), b"done");
         mac_endpoint.close(0u32.into(), b"shutdown");
         result
@@ -123,9 +135,15 @@ async fn transfer_ios_to_macos_bidirectional() {
 
     // iOS node connecting to macOS
     let ios_endpoint = create_endpoint("127.0.0.1:0".parse().unwrap()).unwrap();
-    let ios_conn = ios_endpoint.connect(mac_addr, "localhost").unwrap().await.unwrap();
+    let ios_conn = ios_endpoint
+        .connect(mac_addr, "localhost")
+        .unwrap()
+        .await
+        .unwrap();
     let (mut ios_send, mut ios_recv) = ios_conn.open_bi().await.unwrap();
-    let mut ios_noise = handshake_initiator(&mut ios_send, &mut ios_recv).await.unwrap();
+    let mut ios_noise = handshake_initiator(&mut ios_send, &mut ios_recv)
+        .await
+        .unwrap();
 
     let ios_sender = ios_identity();
     let bytes_sent = send_transfer(
@@ -166,9 +184,15 @@ async fn multi_file_folder_transfer_between_ios_and_macos() {
 
     let sub_folder = ios_source.join("vacation_photos");
     tokio::fs::create_dir_all(&sub_folder).await.unwrap();
-    tokio::fs::write(sub_folder.join("beach.png"), b"beach image data").await.unwrap();
-    tokio::fs::write(sub_folder.join("sunset.png"), b"sunset image data").await.unwrap();
-    tokio::fs::write(ios_source.join("notes.txt"), b"trip notes").await.unwrap();
+    tokio::fs::write(sub_folder.join("beach.png"), b"beach image data")
+        .await
+        .unwrap();
+    tokio::fs::write(sub_folder.join("sunset.png"), b"sunset image data")
+        .await
+        .unwrap();
+    tokio::fs::write(ios_source.join("notes.txt"), b"trip notes")
+        .await
+        .unwrap();
 
     let mac_endpoint = create_endpoint("127.0.0.1:0".parse().unwrap()).unwrap();
     let mac_addr = mac_endpoint.local_addr().unwrap();
@@ -180,16 +204,23 @@ async fn multi_file_folder_transfer_between_ios_and_macos() {
         let (mut send, mut recv) = conn.accept_bi().await.unwrap();
         let mut noise = handshake_responder(&mut send, &mut recv).await.unwrap();
 
-        let result = receive_transfer(&mut send, &mut recv, &mut noise, &mac_dest_clone, true).await;
+        let result =
+            receive_transfer(&mut send, &mut recv, &mut noise, &mac_dest_clone, true).await;
         conn.close(0u32.into(), b"done");
         mac_endpoint.close(0u32.into(), b"shutdown");
         result
     });
 
     let ios_endpoint = create_endpoint("127.0.0.1:0".parse().unwrap()).unwrap();
-    let ios_conn = ios_endpoint.connect(mac_addr, "localhost").unwrap().await.unwrap();
+    let ios_conn = ios_endpoint
+        .connect(mac_addr, "localhost")
+        .unwrap()
+        .await
+        .unwrap();
     let (mut ios_send, mut ios_recv) = ios_conn.open_bi().await.unwrap();
-    let mut ios_noise = handshake_initiator(&mut ios_send, &mut ios_recv).await.unwrap();
+    let mut ios_noise = handshake_initiator(&mut ios_send, &mut ios_recv)
+        .await
+        .unwrap();
 
     let ios_sender = ios_identity();
     send_transfer(
@@ -209,15 +240,21 @@ async fn multi_file_folder_transfer_between_ios_and_macos() {
     assert_eq!(recv_result.items_received, 3);
 
     assert_eq!(
-        tokio::fs::read(mac_downloads.join("vacation_photos/beach.png")).await.unwrap(),
+        tokio::fs::read(mac_downloads.join("vacation_photos/beach.png"))
+            .await
+            .unwrap(),
         b"beach image data"
     );
     assert_eq!(
-        tokio::fs::read(mac_downloads.join("vacation_photos/sunset.png")).await.unwrap(),
+        tokio::fs::read(mac_downloads.join("vacation_photos/sunset.png"))
+            .await
+            .unwrap(),
         b"sunset image data"
     );
     assert_eq!(
-        tokio::fs::read(mac_downloads.join("notes.txt")).await.unwrap(),
+        tokio::fs::read(mac_downloads.join("notes.txt"))
+            .await
+            .unwrap(),
         b"trip notes"
     );
 

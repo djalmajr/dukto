@@ -38,7 +38,10 @@ mod app_runner {
             .plugin(tauri_plugin_shell::init())
             .plugin(tauri_plugin_process::init());
 
-        #[cfg(all(feature = "desktop", not(any(target_os = "ios", target_os = "android"))))]
+        #[cfg(all(
+            feature = "desktop",
+            not(any(target_os = "ios", target_os = "android"))
+        ))]
         {
             builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
         }
@@ -90,8 +93,8 @@ mod app_runner {
                 app.manage(transfer_server);
 
                 // Start mDNS discovery with actual bound port
-                let (mdns_discovery, mut event_rx) =
-                    MdnsDiscovery::new(&device, bound_port).expect("failed to start mDNS discovery");
+                let (mdns_discovery, mut event_rx) = MdnsDiscovery::new(&device, bound_port)
+                    .expect("failed to start mDNS discovery");
 
                 mdns_discovery
                     .start_browsing()
