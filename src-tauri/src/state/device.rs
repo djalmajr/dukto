@@ -39,16 +39,68 @@ impl DeviceIdentity {
 
 #[cfg(target_os = "android")]
 fn system_identity(device_id: &str) -> (String, String) {
+    let model = android_system_property("ro.product.model");
+    android_identity(device_id, model.as_deref())
+}
+
+#[cfg(any(target_os = "android", test))]
+fn android_identity(device_id: &str, model: Option<&str>) -> (String, String) {
     let short_id: String = device_id
         .chars()
         .filter(|character| *character != '-')
         .take(8)
         .collect();
+    let model = model.map(str::trim).filter(|value| !value.is_empty());
+    let hostname = model
+        .map(hostname_label)
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| format!("android-{short_id}"));
 
     (
-        "Dukto User".to_string(),
-        format!("android-{short_id}.local"),
+        model.unwrap_or("Android device").to_string(),
+        format!("{hostname}.local"),
     )
+}
+
+#[cfg(any(target_os = "android", test))]
+fn hostname_label(value: &str) -> String {
+    let mut label = String::new();
+    let mut previous_was_separator = false;
+
+    for character in value.chars() {
+        if character.is_ascii_alphanumeric() {
+            label.push(character.to_ascii_lowercase());
+            previous_was_separator = false;
+        } else if !previous_was_separator && !label.is_empty() {
+            label.push('-');
+            previous_was_separator = true;
+        }
+        if label.len() >= 63 {
+            break;
+        }
+    }
+
+    label.trim_end_matches('-').to_string()
+}
+
+#[cfg(target_os = "android")]
+fn android_system_property(name: &str) -> Option<String> {
+    use std::ffi::CString;
+
+    const PROPERTY_VALUE_MAX: usize = 92;
+    let name = CString::new(name).ok()?;
+    let mut value = [0_u8; PROPERTY_VALUE_MAX];
+    // SAFETY: Android guarantees that __system_property_get writes at most
+    // PROPERTY_VALUE_MAX bytes and both buffers remain valid for the call.
+    let length = unsafe {
+        libc::__system_property_get(name.as_ptr(), value.as_mut_ptr().cast::<libc::c_char>())
+    };
+    if length <= 0 {
+        return None;
+    }
+    std::str::from_utf8(&value[..length as usize])
+        .ok()
+        .map(str::to_owned)
 }
 
 #[cfg(not(target_os = "android"))]
@@ -123,5 +175,23 @@ mod tests {
         );
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn android_identity_uses_the_device_model_instead_of_the_installation_id() {
+        let (display_name, hostname) =
+            android_identity("632226ee-0d60-45b9-956c-ab3da2c0f697", Some("SM-G781B"));
+
+        assert_eq!(display_name, "SM-G781B");
+        assert_eq!(hostname, "sm-g781b.local");
+    }
+
+    #[test]
+    fn android_identity_falls_back_to_a_stable_unique_hostname() {
+        let (display_name, hostname) =
+            android_identity("632226ee-0d60-45b9-956c-ab3da2c0f697", None);
+
+        assert_eq!(display_name, "Android device");
+        assert_eq!(hostname, "android-632226ee.local");
     }
 }

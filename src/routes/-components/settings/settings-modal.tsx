@@ -1,5 +1,4 @@
-import { open } from "@tauri-apps/plugin-shell";
-import { Show } from "solid-js";
+import { Show, createEffect, createSignal } from "solid-js";
 import { Button } from "~/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "~/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger } from "~/components/ui/tabs";
@@ -7,26 +6,28 @@ import { TextField, TextFieldInput } from "~/components/ui/text-field";
 import type { AppUpdateErrorCode, AppUpdateStatus } from "~/helpers/app-update-controller";
 import { t } from "~/helpers/i18n";
 import { nativeErrorKey } from "~/helpers/native-error";
+import { openPrivacyPolicy } from "~/helpers/privacy-policy";
 import LucideExternalLink from "~icons/lucide/external-link";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
-
-const PRIVACY_POLICY_URL = "https://dukto.app/docs/privacidade/";
 
 export type ThemeMode = "light" | "dark" | "system";
 
 interface SettingsModalProps {
 	open: boolean;
+	displayName: string;
 	destinationDir: string;
 	theme: ThemeMode;
 	language?: string;
 	currentVersion: string | null;
 	availableVersion: string | null;
+	currentPlatform: string;
 	updateBusy: boolean;
 	updateErrorCode: AppUpdateErrorCode;
 	updateErrorMessage: string | null;
 	updateStatus: AppUpdateStatus;
 	showAppUpdates: boolean;
-	onChangeDestination: () => void;
+	onChangeDisplayName: (displayName: string) => Promise<void>;
+	onChangeDestination: () => Promise<void>;
 	onChangeTheme: (theme: ThemeMode) => void;
 	onChangeLanguage?: (lang: string) => void;
 	onCheckForUpdates: () => void;
@@ -34,10 +35,54 @@ interface SettingsModalProps {
 }
 
 function SettingsModal(props: SettingsModalProps) {
-	const openPrivacyPolicy = () => {
-		void open(PRIVACY_POLICY_URL).catch((error) => {
-			console.error("Could not open privacy policy", error);
-		});
+	const [displayName, setDisplayName] = createSignal(props.displayName);
+	const [savingDisplayName, setSavingDisplayName] = createSignal(false);
+	const [displayNameError, setDisplayNameError] = createSignal<string | null>(null);
+	const [changingDestination, setChangingDestination] = createSignal(false);
+	const [destinationError, setDestinationError] = createSignal<string | null>(null);
+	const [privacyError, setPrivacyError] = createSignal(false);
+
+	createEffect(() => {
+		if (!props.open) return;
+		setDisplayName(props.displayName);
+		setDisplayNameError(null);
+		setDestinationError(null);
+		setPrivacyError(false);
+	});
+
+	const saveDisplayName = async () => {
+		const nextName = displayName().trim();
+		if (!nextName) {
+			setDisplayNameError(t("userNameRequired"));
+			return;
+		}
+		setSavingDisplayName(true);
+		setDisplayNameError(null);
+		try {
+			await props.onChangeDisplayName(nextName);
+			setDisplayName(nextName);
+		} catch {
+			setDisplayNameError(t("userNameSaveFailed"));
+		} finally {
+			setSavingDisplayName(false);
+		}
+	};
+
+	const changeDestination = async () => {
+		setChangingDestination(true);
+		setDestinationError(null);
+		try {
+			await props.onChangeDestination();
+		} catch {
+			setDestinationError(t("destinationFolderChangeFailed"));
+		} finally {
+			setChangingDestination(false);
+		}
+	};
+
+	const handleOpenPrivacyPolicy = () => {
+		setPrivacyError(false);
+		void openPrivacyPolicy(props.currentPlatform).catch(() => setPrivacyError(true));
 	};
 
 	const statusMessage = () => {
@@ -100,15 +145,54 @@ function SettingsModal(props: SettingsModalProps) {
 				<DialogTitle class="text-sm font-semibold">{t("settings")}</DialogTitle>
 				<div class="space-y-3">
 					<div class="space-y-1">
+						<p class="text-xs font-medium text-muted-foreground">{t("userName")}</p>
+						<div class="flex items-center gap-1.5">
+							<TextField class="min-w-0 flex-1">
+								<TextFieldInput
+									value={displayName()}
+									maxlength={64}
+									onInput={(event) => setDisplayName(event.currentTarget.value)}
+									onKeyDown={(event) => {
+										if (event.key === "Enter") {
+											event.preventDefault();
+											void saveDisplayName();
+										}
+									}}
+								/>
+							</TextField>
+							<Button
+								variant="outline"
+								disabled={
+									savingDisplayName() ||
+									!displayName().trim() ||
+									displayName().trim() === props.displayName
+								}
+								onClick={() => void saveDisplayName()}
+							>
+								{savingDisplayName() ? t("saving") : t("save")}
+							</Button>
+						</div>
+						<Show when={displayNameError()}>
+							{(message) => <output class="block text-xs text-destructive">{message()}</output>}
+						</Show>
+					</div>
+					<div class="space-y-1">
 						<p class="text-xs font-medium text-muted-foreground">{t("saveFilesTo")}</p>
 						<div class="flex items-center gap-1.5">
 							<TextField class="min-w-0 flex-1">
 								<TextFieldInput disabled value={props.destinationDir} class="bg-muted" />
 							</TextField>
-							<Button variant="outline" onClick={props.onChangeDestination}>
-								{t("change")}
+							<Button
+								variant="outline"
+								disabled={changingDestination()}
+								onClick={() => void changeDestination()}
+							>
+								{changingDestination() ? t("saving") : t("change")}
 							</Button>
 						</div>
+						<Show when={destinationError()}>
+							{(message) => <output class="block text-xs text-destructive">{message()}</output>}
+						</Show>
 					</div>
 					<div class="space-y-1">
 						<p class="text-xs font-medium text-muted-foreground">{t("appearance")}</p>
@@ -142,38 +226,41 @@ function SettingsModal(props: SettingsModalProps) {
 						</div>
 					</Show>
 					<footer class="space-y-1.5 border-t border-border pt-3" aria-label={t("about")}>
-						<div class="flex items-center justify-between gap-2">
-							<div class="flex min-w-0 items-center gap-1">
-								<span
-									class="shrink-0 text-xs text-muted-foreground"
-									aria-label={t("currentVersion", { version: props.currentVersion ?? "..." })}
-								>
-									v{props.currentVersion ?? "..."}
-								</span>
-								<Button
-									variant="ghost"
-									class="h-6 min-w-0 gap-1 px-1.5 text-xs font-normal text-muted-foreground hover:text-foreground [&_svg]:size-3"
-									onClick={openPrivacyPolicy}
-								>
-									{t("privacyPolicy")}
-									<LucideExternalLink class="size-3 shrink-0" />
-								</Button>
-							</div>
+						<div class="flex flex-wrap items-center gap-1">
+							<span
+								class="shrink-0 whitespace-nowrap text-xs text-muted-foreground"
+								aria-label={t("currentVersion", { version: props.currentVersion ?? "..." })}
+							>
+								v{props.currentVersion ?? "..."}
+							</span>
+							<Button
+								variant="ghost"
+								class="h-6 shrink-0 gap-1 px-1.5 text-xs font-normal text-muted-foreground hover:text-foreground"
+								onClick={handleOpenPrivacyPolicy}
+							>
+								{t("privacyPolicy")}
+								<LucideExternalLink class="size-4" />
+							</Button>
 							<Show when={props.showAppUpdates}>
 								<Button
 									variant="ghost"
-									class="h-6 min-w-0 gap-1.5 px-1.5 text-xs font-normal text-muted-foreground hover:text-foreground [&_svg]:size-3"
+									class="ml-auto h-6 shrink-0 gap-1.5 px-1.5 text-xs font-normal text-muted-foreground hover:text-foreground"
 									disabled={props.updateBusy}
 									onClick={props.onCheckForUpdates}
 								>
 									<LucideRefreshCw
-										class="size-3 shrink-0"
+										class="size-4"
 										classList={{ "motion-safe:animate-spin": props.updateStatus === "checking" }}
 									/>
 									{props.availableVersion ? t("viewUpdate") : t("checkForUpdates")}
 								</Button>
 							</Show>
 						</div>
+						<Show when={privacyError()}>
+							<output class="block text-xs leading-relaxed text-destructive">
+								{t("operationFailed")}
+							</output>
+						</Show>
 						<Show
 							when={
 								props.showAppUpdates &&

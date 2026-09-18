@@ -6,13 +6,22 @@ import { platform } from "@tauri-apps/plugin-os";
 import { Show, createEffect, onCleanup, onMount } from "solid-js";
 import { Button } from "~/components/ui/button";
 import WindowControls from "~/components/window-controls";
+import { pickDestinationDirectory } from "~/helpers/destination-directory";
 import { changeLanguage, language, t } from "~/helpers/i18n";
 import SettingsModal from "~/routes/-components/settings/settings-modal";
 import UpdateAvailableDialog from "~/routes/-components/settings/update-available-dialog";
 import { type IncomingRequest, incomingRequest } from "~/routes/-stores/transfers";
 import { appUpdates } from "~/stores/app-updates";
-import { device } from "~/stores/device";
-import { resolvedTheme, setDestinationDir, setTheme, settings, theme } from "~/stores/settings";
+import { device, setDeviceDisplayName } from "~/stores/device";
+import {
+	resolvedTheme,
+	setDestinationDir,
+	setTheme,
+	settings,
+	theme,
+	updateDisplayName,
+} from "~/stores/settings";
+import { formatDeviceHostname } from "~/utils/device-hostname";
 import LucideSettings from "~icons/lucide/settings";
 
 function isInteractiveTarget(target: HTMLElement) {
@@ -48,7 +57,7 @@ function RootLayout() {
 			if (disposed) return;
 			const sender = payload.sender;
 			const name = sender
-				? [sender.display_name, sender.hostname].filter(Boolean).join("@")
+				? [sender.display_name, formatDeviceHostname(sender.hostname)].filter(Boolean).join("@")
 				: t("anotherDevice");
 			try {
 				sendNotification({
@@ -89,15 +98,13 @@ function RootLayout() {
 	}
 
 	async function handleChangeDestination() {
-		try {
-			const { open } = await import("@tauri-apps/plugin-dialog");
-			const selected = await open({ directory: true, multiple: false });
-			if (selected) {
-				await setDestinationDir(selected as string);
-			}
-		} catch {
-			/* not in Tauri */
-		}
+		const selected = await pickDestinationDirectory(currentPlatform);
+		if (selected) await setDestinationDir(selected);
+	}
+
+	async function handleChangeDisplayName(displayName: string) {
+		const updated = await setDeviceDisplayName(displayName);
+		updateDisplayName(updated.display_name);
 	}
 
 	return (
@@ -111,8 +118,16 @@ function RootLayout() {
 				}}
 				onMouseDown={handleWindowDrag}
 			>
-				<p class="pointer-events-none absolute inset-x-[140px] truncate text-center text-xs font-medium text-muted-foreground">
-					{device() ? `${device()?.display_name} · ${device()?.hostname}` : "Dukto"}
+				<p
+					class="pointer-events-none absolute truncate text-center text-xs font-medium text-muted-foreground"
+					classList={{
+						"inset-x-[140px]": !isMobile,
+						"left-3 right-12": isMobile,
+					}}
+				>
+					{device()
+						? `${device()?.display_name} · ${formatDeviceHostname(device()?.hostname ?? "")}`
+						: "Dukto"}
 				</p>
 				<Button
 					variant="ghost"
@@ -138,6 +153,8 @@ function RootLayout() {
 			</div>
 			<SettingsModal
 				open={showSettings()}
+				currentPlatform={currentPlatform}
+				displayName={settings()?.display_name ?? device()?.display_name ?? ""}
 				destinationDir={settings()?.destination_dir ?? "..."}
 				theme={theme()}
 				language={language()}
@@ -149,6 +166,7 @@ function RootLayout() {
 				updateStatus={appUpdates.state.status}
 				showAppUpdates={!isMobile}
 				onChangeDestination={handleChangeDestination}
+				onChangeDisplayName={handleChangeDisplayName}
 				onChangeTheme={setTheme}
 				onChangeLanguage={changeLanguage}
 				onCheckForUpdates={() => void appUpdates.checkForUpdates(false)}

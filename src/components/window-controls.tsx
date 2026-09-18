@@ -15,7 +15,7 @@ export default function WindowControls() {
 				title={t("minimizeWindow")}
 				onClick={() => void getCurrentWindow().minimize()}
 			>
-				<Minus class="size-3" />
+				<Minus class="size-4" />
 			</Button>
 			<Button
 				variant="ghost"
@@ -24,7 +24,7 @@ export default function WindowControls() {
 				aria-label={t("maximizeWindow")}
 				title={t("maximizeWindow")}
 			>
-				<Square class="size-3" />
+				<Square class="size-4" />
 			</Button>
 			<Button
 				variant="ghost"
@@ -33,7 +33,7 @@ export default function WindowControls() {
 				title={t("closeWindow")}
 				onClick={() => void getCurrentWindow().close()}
 			>
-				<X class="size-3" />
+				<X class="size-4" />
 			</Button>
 		</div>
 	);

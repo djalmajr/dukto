@@ -2,6 +2,7 @@ import { For, Show } from "solid-js";
 import { Button } from "~/components/ui/button";
 import { t } from "~/helpers/i18n";
 import { type PeerInfo, peers } from "~/stores/peers";
+import { formatDeviceHostname } from "~/utils/device-hostname";
 
 interface PeerSelectorProps {
 	onSelect: (peer: PeerInfo) => void;
@@ -29,7 +30,9 @@ function PeerSelector(props: PeerSelectorProps) {
 										onClick={() => props.onSelect(peer)}
 									>
 										<span class="font-medium">{peer.display_name}</span>
-										<span class="ml-2 text-xs text-muted-foreground">{peer.hostname}</span>
+										<span class="ml-2 text-xs text-muted-foreground">
+											{formatDeviceHostname(peer.hostname)}
+										</span>
 									</button>
 								</li>
 							)}

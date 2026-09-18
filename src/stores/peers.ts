@@ -32,7 +32,11 @@ function peerFound(peer: PeerInfo) {
 		removalTimers.delete(id);
 	}
 
-	setPeers(id, peer);
+	const previous = peers[id];
+	setPeers(id, {
+		...peer,
+		addresses: [...new Set([...peer.addresses, ...(previous?.addresses ?? [])])],
+	});
 }
 
 function peerRemoved(fullname: string) {

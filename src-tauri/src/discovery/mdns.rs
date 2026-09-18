@@ -19,6 +19,7 @@ pub struct MdnsDiscovery {
     daemon: ServiceDaemon,
     service_fullname: String,
     own_device_id: String,
+    port: u16,
     event_tx: broadcast::Sender<DiscoveryEvent>,
 }
 
@@ -43,6 +44,15 @@ impl DiscoveryHandle {
             }
         }
     }
+
+    pub fn update_identity(
+        &self,
+        device: &DeviceIdentity,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let mut guard = self.inner.lock().unwrap();
+        let discovery = guard.as_mut().ok_or("Discovery is not running")?;
+        discovery.update_identity(device)
+    }
 }
 
 impl Drop for DiscoveryHandle {
@@ -60,30 +70,7 @@ impl MdnsDiscovery {
         let daemon = ServiceDaemon::new()?;
         let (event_tx, event_rx) = broadcast::channel(64);
 
-        let instance_name = &device.device_id;
-
-        let properties: Vec<(&str, &str)> = vec![
-            (TXT_PROTOCOL_VERSION, PROTOCOL_VERSION),
-            (TXT_DEVICE_ID, &device.device_id),
-            (TXT_DISPLAY_NAME, &device.display_name),
-            (TXT_HOSTNAME, &device.hostname),
-            (TXT_PLATFORM, &device.platform),
-        ];
-
-        // Use a unique hostname derived from device_id to avoid conflicting
-        // with the system's own Bonjour hostname registration.
-        let short_id = &device.device_id[..8.min(device.device_id.len())];
-        let mdns_hostname = format!("dukto-{}.local.", short_id);
-
-        let service_info = ServiceInfo::new(
-            SERVICE_TYPE,
-            instance_name,
-            &mdns_hostname,
-            "",
-            port,
-            properties.as_slice(),
-        )?
-        .enable_addr_auto();
+        let service_info = service_info(device, port)?;
 
         let service_fullname = service_info.get_fullname().to_string();
 
@@ -91,7 +78,7 @@ impl MdnsDiscovery {
 
         tracing::info!(
             service_type = SERVICE_TYPE,
-            instance = instance_name,
+            instance = %device.device_id,
             port = port,
             "mDNS service registered"
         );
@@ -100,6 +87,7 @@ impl MdnsDiscovery {
             daemon,
             service_fullname,
             own_device_id: device.device_id.clone(),
+            port,
             event_tx,
         };
 
@@ -124,6 +112,23 @@ impl MdnsDiscovery {
         Ok(())
     }
 
+    fn update_identity(
+        &mut self,
+        device: &DeviceIdentity,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        if device.device_id != self.own_device_id {
+            return Err("Cannot replace the discovery device id".into());
+        }
+
+        let receiver = self.daemon.unregister(&self.service_fullname)?;
+        let _ = receiver.recv_timeout(std::time::Duration::from_secs(2));
+        let service_info = service_info(device, self.port)?;
+        self.service_fullname = service_info.get_fullname().to_string();
+        self.daemon.register(service_info)?;
+        tracing::info!(display_name = %device.display_name, "mDNS identity updated");
+        Ok(())
+    }
+
     /// Unregister our service and shut down the daemon.
     pub fn shutdown(self) -> Result<(), Box<dyn std::error::Error>> {
         tracing::info!("Shutting down mDNS discovery");
@@ -133,6 +138,33 @@ impl MdnsDiscovery {
         self.daemon.shutdown()?;
         Ok(())
     }
+}
+
+fn service_info(
+    device: &DeviceIdentity,
+    port: u16,
+) -> Result<ServiceInfo, Box<dyn std::error::Error>> {
+    let properties: Vec<(&str, &str)> = vec![
+        (TXT_PROTOCOL_VERSION, PROTOCOL_VERSION),
+        (TXT_DEVICE_ID, &device.device_id),
+        (TXT_DISPLAY_NAME, &device.display_name),
+        (TXT_HOSTNAME, &device.hostname),
+        (TXT_PLATFORM, &device.platform),
+    ];
+
+    // Keep the DNS-SD server name unique even when two devices share a model or display name.
+    let short_id = &device.device_id[..8.min(device.device_id.len())];
+    let mdns_hostname = format!("dukto-{short_id}.local.");
+
+    Ok(ServiceInfo::new(
+        SERVICE_TYPE,
+        &device.device_id,
+        &mdns_hostname,
+        "",
+        port,
+        properties.as_slice(),
+    )?
+    .enable_addr_auto())
 }
 
 fn forward_service_event(

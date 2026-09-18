@@ -2,6 +2,7 @@ import { For, Show } from "solid-js";
 import PlatformIcon from "~/components/platform-icon";
 import { Button } from "~/components/ui/button";
 import { t } from "~/helpers/i18n";
+import { formatDeviceHostname } from "~/utils/device-hostname";
 import { formatBytes, sortFileItems } from "~/utils/format";
 import LucideFile from "~icons/lucide/file";
 import LucideFolder from "~icons/lucide/folder";
@@ -51,7 +52,7 @@ function SendPreview(props: SendPreviewProps) {
 						<p class="text-sm font-semibold leading-tight">
 							{t("sendTo", { name: props.peer.display_name })}
 						</p>
-						<p class="text-xs text-muted-foreground">{props.peer.hostname}</p>
+						<p class="text-xs text-muted-foreground">{formatDeviceHostname(props.peer.hostname)}</p>
 					</div>
 					<Button
 						variant="ghost"
@@ -60,7 +61,7 @@ function SendPreview(props: SendPreviewProps) {
 						aria-label={t("cancel")}
 						onClick={props.onCancel}
 					>
-						<LucideX width={14} height={14} />
+						<LucideX width={16} height={16} />
 					</Button>
 				</div>
 			</Show>
@@ -89,12 +90,12 @@ function SendPreview(props: SendPreviewProps) {
 								<Button
 									variant="ghost"
 									size="icon-sm"
-									class="shrink-0 text-muted-foreground/40 opacity-0 hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100 focus-visible:text-foreground [&_svg]:size-3"
+									class="shrink-0 text-muted-foreground/40 opacity-0 hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100 focus-visible:text-foreground [&_svg]:size-4"
 									onClick={() => props.onRemoveFile?.(file.path)}
 									title={t("remove")}
 									aria-label={t("removeFile", { name: file.name })}
 								>
-									<LucideX width={12} height={12} />
+									<LucideX width={16} height={16} />
 								</Button>
 							)}
 						</li>

@@ -1,2 +1,4 @@
 // Platform module — OS integration helpers.
-// Will be populated in Story 6.
+
+#[cfg(target_os = "android")]
+pub mod android_destination;

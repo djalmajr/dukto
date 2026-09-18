@@ -9,6 +9,7 @@ const manifestPath = path.join(appRoot, "src", "main", "AndroidManifest.xml");
 const gradlePath = path.join(appRoot, "build.gradle.kts");
 const sourceIconsPath = path.join(root, "src-tauri", "icons", "android");
 const sourceResourcesPath = path.join(root, "src-tauri", "android", "res");
+const sourceDestinationPluginPath = path.join(root, "src-tauri", "android", "DestinationPlugin.kt");
 const generatedResourcesPath = path.join(appRoot, "src", "main", "res");
 const requireSigning = process.argv.includes("--require-signing");
 
@@ -115,6 +116,13 @@ class MainActivity : TauriActivity() {
 `;
 
 	await writeFile(activityPath, source, "utf8");
+	await cp(
+		sourceDestinationPluginPath,
+		path.join(path.dirname(activityPath), "DestinationPlugin.kt"),
+		{
+			force: true,
+		},
+	);
 }
 
 async function configureIcons() {

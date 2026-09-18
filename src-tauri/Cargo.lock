@@ -1087,6 +1087,7 @@ dependencies = [
  "clap",
  "dashmap",
  "dirs",
+ "libc",
  "mdns-sd",
  "quinn",
  "rcgen",

@@ -57,6 +57,11 @@ test("hydrates existing peers and preserves updates arriving during the snapshot
 		expect(peers.removed).toBeUndefined();
 		handlers.get("peer:found")?.({ payload: peer("late") });
 		expect(peers.late.addresses).toEqual(["192.168.0.15"]);
+		handlers.get("peer:found")?.({
+			payload: { ...peer("late", "Updated name"), addresses: ["fe80::1234"] },
+		});
+		expect(peers.late.display_name).toBe("Updated name");
+		expect(peers.late.addresses).toEqual(["fe80::1234", "192.168.0.15"]);
 	} finally {
 		if (originalWindow) Object.defineProperty(globalThis, "window", originalWindow);
 		else Reflect.deleteProperty(globalThis, "window");

@@ -41,6 +41,11 @@ mod app_runner {
             .plugin(tauri_plugin_shell::init())
             .plugin(tauri_plugin_process::init());
 
+        #[cfg(target_os = "android")]
+        {
+            builder = builder.plugin(crate::platform::android_destination::init());
+        }
+
         #[cfg(all(
             feature = "desktop",
             not(any(target_os = "ios", target_os = "android"))
@@ -55,6 +60,11 @@ mod app_runner {
             commands::get_peers,
             commands::get_settings,
             commands::set_destination_dir,
+            commands::open_destination_picker,
+            commands::open_send_file_picker,
+            commands::release_selected_files,
+            commands::open_privacy_policy,
+            commands::set_display_name,
             commands::set_peer_order,
             commands::resolve_file_metadata,
             commands::send_to_peer,
@@ -70,6 +80,11 @@ mod app_runner {
             commands::get_peers,
             commands::get_settings,
             commands::set_destination_dir,
+            commands::open_destination_picker,
+            commands::open_send_file_picker,
+            commands::release_selected_files,
+            commands::open_privacy_policy,
+            commands::set_display_name,
             commands::set_peer_order,
             commands::resolve_file_metadata,
             commands::send_to_peer,
@@ -92,6 +107,8 @@ mod app_runner {
                 let device = DeviceIdentity::load_or_create(&data_dir)
                     .expect("failed to load or create device identity");
 
+                let app_state = AppState::new(device, data_dir);
+                let device = app_state.get_device();
                 tracing::info!(
                     device_id = %device.device_id,
                     display_name = %device.display_name,
@@ -99,8 +116,6 @@ mod app_runner {
                     platform = %device.platform,
                     "Device identity loaded"
                 );
-
-                let app_state = AppState::new(device.clone(), data_dir);
                 app.manage(app_state);
 
                 // Start QUIC listener for incoming transfers with fallback port

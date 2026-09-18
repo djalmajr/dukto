@@ -237,8 +237,9 @@ export function createAppUpdateController(
 	}
 
 	function startupCheck(): Promise<void> {
-		if (startupCheckStarted || dependencies.isDevelopment) return Promise.resolve();
+		if (startupCheckStarted) return Promise.resolve();
 		startupCheckStarted = true;
+		if (dependencies.isDevelopment) return loadCurrentVersion();
 		return checkForUpdates(true);
 	}
 
