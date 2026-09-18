@@ -3,6 +3,7 @@ import { createResource, createSignal } from "solid-js";
 
 export interface AppSettings {
 	destination_dir: string;
+	display_name: string | null;
 	peer_order: string[];
 }
 
@@ -39,7 +40,11 @@ async function setDestinationDir(path: string) {
 	refetchSettings();
 }
 
-export { settings, theme, resolvedTheme, setTheme, setDestinationDir };
+function updateDisplayName(displayName: string) {
+	mutateSettings((current) => (current ? { ...current, display_name: displayName } : current));
+}
+
+export { settings, theme, resolvedTheme, setTheme, setDestinationDir, updateDisplayName };
 
 export async function savePeerOrder(order: string[]) {
 	await invoke("set_peer_order", { order });

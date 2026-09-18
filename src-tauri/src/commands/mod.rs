@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{Emitter, State};
 
 use crate::crypto::noise::handshake_initiator;
+use crate::discovery::mdns::DiscoveryHandle;
 use crate::state::app_state::AppState;
 use crate::state::device::DeviceIdentity;
 use crate::state::settings::Settings;
@@ -18,7 +19,7 @@ use crate::transfer::server::TransferServer;
 
 #[tauri::command]
 pub fn get_device_info(state: State<'_, AppState>) -> DeviceIdentity {
-    state.device.clone()
+    state.get_device()
 }
 
 #[tauri::command]
@@ -37,11 +38,168 @@ pub fn get_settings(state: State<'_, AppState>) -> Settings {
 
 #[tauri::command]
 pub fn set_destination_dir(state: State<'_, AppState>, path: String) -> Result<(), String> {
+    tracing::debug!(path = %path, "Saving destination directory");
     state
         .update_settings(|s| {
             s.destination_dir = path;
         })
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    tracing::debug!("Destination directory saved");
+    Ok(())
+}
+
+#[derive(Clone, Serialize)]
+pub struct DestinationSelectionEvent {
+    path: Option<String>,
+    error: Option<String>,
+}
+
+#[cfg(target_os = "android")]
+#[derive(Clone, Serialize)]
+pub struct SendFileSelectionEvent {
+    files: Option<Vec<crate::platform::android_destination::AndroidSelectedFile>>,
+    error: Option<String>,
+}
+
+#[tauri::command]
+pub fn open_destination_picker(app_handle: tauri::AppHandle) -> Result<(), String> {
+    #[cfg(target_os = "android")]
+    {
+        use tauri::Manager;
+
+        let picker = app_handle
+            .state::<crate::platform::android_destination::AndroidDestination<tauri::Wry>>()
+            .inner()
+            .clone();
+        tauri::async_runtime::spawn(async move {
+            tracing::debug!("Opening Android destination picker");
+            let event = match picker.pick_directory().await {
+                Ok(path) => {
+                    tracing::debug!(?path, "Android destination picker returned");
+                    DestinationSelectionEvent { path, error: None }
+                }
+                Err(error) => {
+                    tracing::warn!(%error, "Android destination picker failed");
+                    DestinationSelectionEvent {
+                        path: None,
+                        error: Some(error),
+                    }
+                }
+            };
+            if let Err(error) = app_handle.emit("destination:selected", event) {
+                tracing::warn!(%error, "Could not emit Android destination selection");
+            }
+        });
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = app_handle;
+        Err("Native destination picker is only available on Android".into())
+    }
+}
+
+#[tauri::command]
+pub fn open_send_file_picker(app_handle: tauri::AppHandle, multiple: bool) -> Result<(), String> {
+    #[cfg(target_os = "android")]
+    {
+        use tauri::Manager;
+
+        let picker = app_handle
+            .state::<crate::platform::android_destination::AndroidDestination<tauri::Wry>>()
+            .inner()
+            .clone();
+        tauri::async_runtime::spawn(async move {
+            tracing::debug!(multiple, "Opening Android send file picker");
+            let event = match picker.pick_files(multiple).await {
+                Ok(files) => SendFileSelectionEvent { files, error: None },
+                Err(error) => {
+                    tracing::warn!(%error, "Android send file picker failed");
+                    SendFileSelectionEvent {
+                        files: None,
+                        error: Some(error),
+                    }
+                }
+            };
+            if let Err(error) = app_handle.emit("files:selected", event) {
+                tracing::warn!(%error, "Could not emit Android file selection");
+            }
+        });
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = (app_handle, multiple);
+        Err("Native send file picker is only available on Android".into())
+    }
+}
+
+#[tauri::command]
+pub async fn release_selected_files(
+    app_handle: tauri::AppHandle,
+    paths: Vec<String>,
+) -> Result<(), String> {
+    #[cfg(target_os = "android")]
+    {
+        release_android_selected_files(&app_handle, &paths).await
+    }
+
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = (app_handle, paths);
+        Ok(())
+    }
+}
+
+#[tauri::command]
+pub async fn open_privacy_policy(app_handle: tauri::AppHandle) -> Result<(), String> {
+    #[cfg(target_os = "android")]
+    {
+        use tauri::Manager;
+
+        app_handle
+            .state::<crate::platform::android_destination::AndroidDestination<tauri::Wry>>()
+            .inner()
+            .open_privacy_policy()
+            .await
+    }
+
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = app_handle;
+        Err("Native privacy policy opener is only available on Android".into())
+    }
+}
+
+#[cfg(target_os = "android")]
+async fn release_android_selected_files(
+    app_handle: &tauri::AppHandle,
+    paths: &[String],
+) -> Result<(), String> {
+    use tauri::Manager;
+
+    app_handle
+        .state::<crate::platform::android_destination::AndroidDestination<tauri::Wry>>()
+        .inner()
+        .release_files(paths)
+        .await
+}
+
+#[tauri::command]
+pub fn set_display_name(
+    state: State<'_, AppState>,
+    discovery: State<'_, DiscoveryHandle>,
+    display_name: String,
+) -> Result<DeviceIdentity, String> {
+    let device = state
+        .update_display_name(&display_name)
+        .map_err(|error| error.to_string())?;
+    discovery
+        .update_identity(&device)
+        .map_err(|error| error.to_string())?;
+    Ok(device)
 }
 
 #[tauri::command]
@@ -89,9 +247,11 @@ pub async fn send_to_peer(
         return Err(format!("Peer {} not found", device_id));
     };
 
-    let sender = state.device.clone();
+    let sender = state.get_device();
     let transfer_id = uuid::Uuid::new_v4().to_string();
     let input_paths: Vec<PathBuf> = paths.iter().map(PathBuf::from).collect();
+    #[cfg(target_os = "android")]
+    let selected_paths = paths.clone();
     let control = state
         .transfer_registry
         .register(transfer_id.clone())
@@ -205,6 +365,11 @@ pub async fn send_to_peer(
         .await;
         registry.remove(&tid, &control).await;
         control.close_connection().await;
+
+        #[cfg(target_os = "android")]
+        if let Err(error) = release_android_selected_files(&handle, &selected_paths).await {
+            tracing::warn!(%error, transfer_id = %tid, "Could not release selected Android files");
+        }
 
         if control.is_cancelled() {
             tracing::info!(transfer_id = %tid, "Transfer cancelled");

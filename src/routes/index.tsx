@@ -1,9 +1,11 @@
 import { createFileRoute } from "@tanstack/solid-router";
+import { platform } from "@tauri-apps/plugin-os";
 import { Show, createEffect, createMemo, createSignal, untrack } from "solid-js";
 import ErrorDisplay from "~/components/error-display";
 import { t } from "~/helpers/i18n";
 import { nativeErrorKey } from "~/helpers/native-error";
-import { resolveFileMetadata, sendToPeer } from "~/helpers/tauri";
+import { pickSendItems } from "~/helpers/send-item-picker";
+import { releaseSelectedFiles, resolveFileMetadata, sendToPeer } from "~/helpers/tauri";
 import PeerList from "~/routes/-components/peers/peer-list";
 import DropZone from "~/routes/-components/transfers/drop-zone";
 import IncomingRequestDialog from "~/routes/-components/transfers/incoming-request";
@@ -20,21 +22,36 @@ import {
 } from "~/routes/-stores/transfers";
 import type { PeerInfo } from "~/stores/peers";
 import { peers } from "~/stores/peers";
+import { formatDeviceHostname } from "~/utils/device-hostname";
 
 function HomePage() {
+	const currentPlatform = (() => {
+		try {
+			return platform();
+		} catch {
+			return "unknown";
+		}
+	})();
 	const selection = createHostSelection(resolveFileMetadata);
 	const [error, setError] = createSignal<string | null>(null);
 	const [picking, setPicking] = createSignal(false);
 
 	createEffect(() => {
 		const available = Object.keys(peers);
-		untrack(() => selection.retainAvailable(available));
+		untrack(() => releaseFiles(selection.retainAvailable(available)));
 	});
+
+	function releaseFiles(files: Array<{ path: string }>) {
+		void releaseSelectedFiles(files.map((file) => file.path)).catch((error) => {
+			console.error("Could not release selected files", error);
+		});
+	}
 
 	async function addPaths(hostId: string, paths: string[], revision = selection.revision(hostId)) {
 		if (!peers[hostId]) return;
 		try {
-			await selection.add(hostId, paths, revision);
+			const discarded = await selection.add(hostId, paths, revision);
+			releaseFiles(discarded);
 		} catch (e) {
 			if (revision === selection.revision(hostId)) setError(String(e));
 		}
@@ -46,10 +63,8 @@ function HomePage() {
 		const revision = selection.revision(hostId);
 		setPicking(true);
 		try {
-			const { open } = await import("@tauri-apps/plugin-dialog");
-			const selected = await open({ multiple: true, directory });
-			if (selected)
-				await addPaths(hostId, Array.isArray(selected) ? selected : [selected], revision);
+			const selected = await pickSendItems(currentPlatform, directory);
+			if (selected) releaseFiles(selection.addResolved(hostId, selected, revision));
 		} catch (e) {
 			if (revision === selection.revision(hostId)) setError(String(e));
 		} finally {
@@ -63,13 +78,21 @@ function HomePage() {
 		if (!peer || files.length === 0) return;
 		const paths = files.map((file) => file.path);
 		const totalSize = files.reduce((sum, file) => sum + file.size, 0);
-		selection.cancel(hostId);
 		try {
 			const transferId = await sendToPeer(hostId, paths, peer.addresses?.[0], peer.port);
+			selection.cancel(hostId);
 			startSendTransfer(transferId, totalSize, hostId, peer);
 		} catch (e) {
 			setError(String(e));
 		}
+	}
+
+	function cancelSelection(hostId: string) {
+		releaseFiles(selection.cancel(hostId));
+	}
+
+	function removeSelection(hostId: string, path: string) {
+		releaseFiles(selection.remove(hostId, path));
 	}
 
 	const incomingData = createMemo(() => {
@@ -81,7 +104,7 @@ function HomePage() {
 				? request.sender
 				: peers[request.sender_device_id];
 		const senderName = sender?.display_name.trim() || request.sender_device_id.slice(0, 8);
-		const senderHost = sender?.hostname.trim();
+		const senderHost = sender ? formatDeviceHostname(sender.hostname.trim()) : "";
 		return {
 			sender_name: senderHost ? `${senderName}@${senderHost}` : senderName,
 			item_count: request.item_count,
@@ -114,8 +137,8 @@ function HomePage() {
 									peer={peer}
 									files={selection.files(peer.device_id)}
 									onConfirm={() => handleSend(peer.device_id)}
-									onCancel={() => selection.cancel(peer.device_id)}
-									onRemoveFile={(path) => selection.remove(peer.device_id, path)}
+									onCancel={() => cancelSelection(peer.device_id)}
+									onRemoveFile={(path) => removeSelection(peer.device_id, path)}
 								/>
 							);
 						}}

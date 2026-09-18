@@ -169,6 +169,40 @@ unsafe extern "C" {
     ) -> i32;
 }
 
+#[cfg(target_os = "android")]
+fn rename_no_replace_sync(source: &Path, destination: &Path) -> Result<(), std::io::Error> {
+    use std::ffi::CString;
+    use std::os::unix::ffi::OsStrExt;
+
+    const AT_FDCWD: i32 = -100;
+    const RENAME_NOREPLACE: u32 = 1;
+
+    let source = CString::new(source.as_os_str().as_bytes())
+        .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidInput, "NUL in path"))?;
+    let destination = CString::new(destination.as_os_str().as_bytes())
+        .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidInput, "NUL in path"))?;
+
+    // Android's libc only exports renameat2 from API 30, while Dukto supports API 24.
+    // Calling the Linux syscall directly keeps the no-replace guarantee without raising
+    // the minimum Android version or risking an ordinary rename overwriting another file.
+    // SAFETY: both C strings live through the syscall and all arguments match renameat2(2).
+    let result = unsafe {
+        libc::syscall(
+            libc::SYS_renameat2,
+            AT_FDCWD,
+            source.as_ptr(),
+            AT_FDCWD,
+            destination.as_ptr(),
+            RENAME_NOREPLACE,
+        )
+    };
+    if result == 0 {
+        Ok(())
+    } else {
+        Err(std::io::Error::last_os_error())
+    }
+}
+
 #[cfg(target_os = "macos")]
 fn rename_no_replace_sync(source: &Path, destination: &Path) -> Result<(), std::io::Error> {
     use std::ffi::CString;
@@ -240,7 +274,12 @@ unsafe extern "system" {
     fn windows_move_file(old_path: *const u16, new_path: *const u16) -> i32;
 }
 
-#[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
+#[cfg(not(any(
+    target_os = "android",
+    target_os = "linux",
+    target_os = "macos",
+    windows
+)))]
 fn rename_no_replace_sync(_source: &Path, _destination: &Path) -> Result<(), std::io::Error> {
     Err(std::io::Error::new(
         std::io::ErrorKind::Unsupported,

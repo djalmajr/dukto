@@ -10,6 +10,7 @@ import {
 } from "~/components/ui/dropdown-menu";
 import { t } from "~/helpers/i18n";
 import { nativeErrorKey } from "~/helpers/native-error";
+import { formatDeviceHostname } from "~/utils/device-hostname";
 import { formatBytes } from "~/utils/format";
 import LucideBan from "~icons/lucide/ban";
 import LucideEllipsisVertical from "~icons/lucide/ellipsis-vertical";
@@ -58,7 +59,9 @@ function PeerIdentity(props: { peer: PeerCardProps["peer"] }) {
 			</span>
 			<div class="min-w-0 flex-1">
 				<p class="truncate text-sm font-semibold tracking-[-0.15px]">{props.peer.display_name}</p>
-				<p class="truncate text-xs text-muted-foreground">{props.peer.hostname}</p>
+				<p class="truncate text-xs text-muted-foreground">
+					{formatDeviceHostname(props.peer.hostname)}
+				</p>
 			</div>
 		</>
 	);
@@ -128,13 +131,13 @@ function TransferRow(props: {
 								aria-label={t("dismissTransfer")}
 								variant="ghost"
 								size="icon-sm"
-								class="pointer-events-auto shrink-0 text-muted-foreground [&_svg]:size-3"
+								class="pointer-events-auto shrink-0 text-muted-foreground [&_svg]:size-4"
 								onClick={(e) => {
 									e.stopPropagation();
 									props.onDismiss?.();
 								}}
 							>
-								<LucideX width={12} height={12} />
+								<LucideX width={16} height={16} />
 							</Button>
 						}
 					>
@@ -144,7 +147,7 @@ function TransferRow(props: {
 						<Button
 							variant="ghost"
 							size="icon-sm"
-							class="pointer-events-auto shrink-0 text-muted-foreground [&_svg]:size-3"
+							class="pointer-events-auto shrink-0 text-muted-foreground [&_svg]:size-4"
 							data-transfer-abort
 							title={t("abortTransfer")}
 							aria-label={t("abortTransfer")}
@@ -153,7 +156,7 @@ function TransferRow(props: {
 								props.onAbort?.();
 							}}
 						>
-							<LucideBan width={12} height={12} />
+							<LucideBan width={16} height={16} />
 						</Button>
 					</Show>
 				</span>
@@ -234,17 +237,18 @@ function PeerCard(props: PeerCardProps) {
 							variant="ghost"
 							size="icon-sm"
 							disabled={props.actionsDisabled}
-							class="shrink-0 text-muted-foreground"
+							class="peer-actions-trigger shrink-0 text-muted-foreground"
 							aria-label={t("hostActions", {
 								name: props.peer.display_name,
-								host: props.peer.hostname,
+								host: formatDeviceHostname(props.peer.hostname),
 							})}
 						>
 							<LucideEllipsisVertical class="size-4" />
 						</DropdownMenuTrigger>
 						<DropdownMenuPortal>
-							<DropdownMenuContent>
+							<DropdownMenuContent class="peer-actions-menu">
 								<DropdownMenuItem
+									class="peer-actions-menu-item"
 									disabled={props.actionsDisabled}
 									onSelect={() => props.onAddItems?.(false)}
 								>
@@ -252,6 +256,7 @@ function PeerCard(props: PeerCardProps) {
 									{t("addFiles")}
 								</DropdownMenuItem>
 								<DropdownMenuItem
+									class="peer-actions-menu-item"
 									disabled={props.actionsDisabled}
 									onSelect={() => props.onAddItems?.(true)}
 								>

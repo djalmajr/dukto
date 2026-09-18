@@ -54,4 +54,14 @@ describe("host-bound selection", () => {
 		expect(selection.files("mac")).toEqual([]);
 		expect(selection.files("windows").map((f) => f.path)).toEqual(["/keep"]);
 	});
+
+	test("removed selections are returned so native resources can be released", async () => {
+		const selection = createHostSelection(async (paths) => paths.map(file));
+		await selection.add("mac", ["/one", "/two"]);
+		await selection.add("windows", ["/three"]);
+
+		expect(selection.remove("mac", "/one").map((item) => item.path)).toEqual(["/one"]);
+		expect(selection.cancel("mac").map((item) => item.path)).toEqual(["/two"]);
+		expect(selection.retainAvailable([]).map((item) => item.path)).toEqual(["/three"]);
+	});
 });

@@ -27,6 +27,11 @@ export async function resolveFileMetadata(paths: string[]): Promise<FileMetadata
 	return invoke<FileMetadataInfo[]>("resolve_file_metadata", { paths });
 }
 
+export async function releaseSelectedFiles(paths: string[]): Promise<void> {
+	if (paths.length === 0) return;
+	return invoke<void>("release_selected_files", { paths });
+}
+
 export async function sendToPeer(
 	deviceId: string,
 	paths: string[],

@@ -14,7 +14,11 @@ export function nativeErrorKey(
 	if (/no space left|disk full|not enough space/.test(message)) return "diskFull";
 	if (/permission denied|access is denied|access denied/.test(message)) return "permissionDenied";
 	if (/no such file|cannot find the file|cannot find the path/.test(message)) return "fileNotFound";
-	if (/peer .*not found|no route to host|connection refused|network is unreachable/.test(message))
+	if (
+		/peer .*not found|peer has no ipv4 address|no route to host|connection refused|network is unreachable/.test(
+			message,
+		)
+	)
 		return "peerUnavailable";
 	if (message.includes("incompatible protocol")) return "incompatibleProtocol";
 	if (

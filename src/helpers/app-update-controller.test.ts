@@ -58,6 +58,16 @@ function makeDependencies(overrides: Partial<AppUpdateDependencies> = {}) {
 }
 
 describe("app update controller", () => {
+	it("loads the current version in development without checking for updates", async () => {
+		const { counts, dependencies } = makeDependencies({ isDevelopment: true });
+		const controller = createAppUpdateController(dependencies);
+
+		await controller.startupCheck();
+
+		expect(controller.state.currentVersion).toBe("0.1.0");
+		expect(counts).toMatchObject({ check: 0, getVersion: 1 });
+	});
+
 	it("deduplicates startup and manual checks while surfacing the result", async () => {
 		// Mutation captured: allowing a second check while the first is pending creates duplicate update resources.
 		const response = deferred<AppUpdateHandle | null>();

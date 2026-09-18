@@ -5,6 +5,7 @@ import type { TransferSlot } from "~/routes/-components/peers/peer-card";
 import PeerCard from "~/routes/-components/peers/peer-card";
 import { getUndiscoveredTransferPeers } from "~/routes/-stores/transfers";
 import { type PeerIdentity, type PeerInfo, peers } from "~/stores/peers";
+import { formatDeviceHostname } from "~/utils/device-hostname";
 
 import { movePeer, orderedPeerIds } from "~/routes/-helpers/peer-order";
 import { savePeerOrder, settings } from "~/stores/settings";
@@ -70,7 +71,7 @@ function PeerList(props: PeerListProps) {
 					disabled={saving() || !settings()}
 					label={(id) => {
 						const peer = peerEntries().find((peer) => peer.device_id === id);
-						return `${peer?.display_name}@${peer?.hostname}`;
+						return `${peer?.display_name}@${formatDeviceHostname(peer?.hostname ?? "")}`;
 					}}
 					onMove={reorder}
 				>

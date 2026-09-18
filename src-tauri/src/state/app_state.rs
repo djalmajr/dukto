@@ -16,7 +16,7 @@ pub struct TransferInfo {
 
 /// Centralized runtime state shared across Tauri commands.
 pub struct AppState {
-    pub device: DeviceIdentity,
+    device: Mutex<DeviceIdentity>,
     pub peers: DashMap<String, PeerInfo>,
     pub transfers: DashMap<String, TransferInfo>,
     pub settings: Mutex<Settings>,
@@ -25,10 +25,18 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub fn new(device: DeviceIdentity, data_dir: PathBuf) -> Self {
+    pub fn new(mut device: DeviceIdentity, data_dir: PathBuf) -> Self {
         let settings = Settings::load(&data_dir);
+        if let Some(display_name) = settings
+            .display_name
+            .as_deref()
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
+        {
+            device.display_name = display_name.to_string();
+        }
         Self {
-            device,
+            device: Mutex::new(device),
             peers: DashMap::new(),
             transfers: DashMap::new(),
             settings: Mutex::new(settings),
@@ -39,6 +47,34 @@ impl AppState {
 
     pub fn get_settings(&self) -> Settings {
         self.settings.lock().unwrap().clone()
+    }
+
+    pub fn get_device(&self) -> DeviceIdentity {
+        self.device.lock().unwrap().clone()
+    }
+
+    pub fn update_display_name(
+        &self,
+        display_name: &str,
+    ) -> Result<DeviceIdentity, Box<dyn std::error::Error>> {
+        let display_name = display_name.trim();
+        if display_name.is_empty() {
+            return Err("Display name cannot be empty".into());
+        }
+        if display_name.chars().count() > 64 {
+            return Err("Display name cannot exceed 64 characters".into());
+        }
+        if display_name.chars().any(char::is_control) {
+            return Err("Display name cannot contain control characters".into());
+        }
+
+        self.update_settings(|settings| {
+            settings.display_name = Some(display_name.to_string());
+        })?;
+
+        let mut device = self.device.lock().unwrap();
+        device.display_name = display_name.to_string();
+        Ok(device.clone())
     }
 
     pub fn update_settings<F>(&self, f: F) -> Result<(), Box<dyn std::error::Error>>
@@ -52,8 +88,20 @@ impl AppState {
     }
 
     /// Insert or update a peer from discovery.
-    pub fn upsert_peer(&self, peer: PeerInfo) {
-        self.peers.insert(peer.device_id.clone(), peer);
+    pub fn upsert_peer(&self, mut peer: PeerInfo) {
+        match self.peers.entry(peer.device_id.clone()) {
+            dashmap::mapref::entry::Entry::Occupied(mut entry) => {
+                for address in &entry.get().addresses {
+                    if !peer.addresses.contains(address) {
+                        peer.addresses.push(*address);
+                    }
+                }
+                entry.insert(peer);
+            }
+            dashmap::mapref::entry::Entry::Vacant(entry) => {
+                entry.insert(peer);
+            }
+        }
     }
 
     /// Remove a peer by fullname (mDNS service name contains device_id).
@@ -102,7 +150,7 @@ mod tests {
     #[test]
     fn app_state_holds_device_identity() {
         let state = make_state();
-        assert_eq!(state.device.device_id, "test-id");
+        assert_eq!(state.get_device().device_id, "test-id");
     }
 
     #[test]
@@ -130,6 +178,28 @@ mod tests {
         assert_eq!(
             state.peers.get("peer-1").unwrap().display_name,
             "Alice Updated"
+        );
+    }
+
+    #[test]
+    fn upsert_peer_preserves_addresses_from_previous_mdns_resolutions() {
+        let state = make_state();
+        let mut ipv4_peer = make_peer("peer-1", "Alice");
+        ipv4_peer.addresses = vec!["192.168.1.10".parse().unwrap()];
+        state.upsert_peer(ipv4_peer);
+
+        let mut ipv6_peer = make_peer("peer-1", "Alice Updated");
+        ipv6_peer.addresses = vec!["fe80::1234".parse().unwrap()];
+        state.upsert_peer(ipv6_peer);
+
+        let peer = state.peers.get("peer-1").unwrap();
+        assert_eq!(peer.display_name, "Alice Updated");
+        assert_eq!(
+            peer.addresses,
+            vec![
+                "fe80::1234".parse::<IpAddr>().unwrap(),
+                "192.168.1.10".parse::<IpAddr>().unwrap(),
+            ]
         );
     }
 
@@ -167,5 +237,32 @@ mod tests {
 
         let loaded = state.get_settings();
         assert_eq!(loaded.destination_dir, "/custom/path");
+    }
+
+    #[test]
+    fn saved_display_name_overrides_the_system_identity() {
+        let dir = temp_dir();
+        let mut settings = Settings::default();
+        settings.display_name = Some("Djalma's phone".into());
+        settings.save(&dir).unwrap();
+
+        let state = AppState::new(make_device(), dir.clone());
+
+        assert_eq!(state.get_device().display_name, "Djalma's phone");
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn updating_display_name_changes_the_runtime_identity_and_persists_it() {
+        let state = make_state();
+
+        let device = state.update_display_name("  My Galaxy  ").unwrap();
+
+        assert_eq!(device.display_name, "My Galaxy");
+        assert_eq!(state.get_device().display_name, "My Galaxy");
+        assert_eq!(
+            state.get_settings().display_name.as_deref(),
+            Some("My Galaxy")
+        );
     }
 }
