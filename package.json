@@ -6,7 +6,7 @@
 	"scripts": {
 		"android:init": "bunx tauri android init --ci && node scripts/configure-android.mjs",
 		"android:prepare": "node scripts/configure-android.mjs",
-		"android:build": "node scripts/configure-android.mjs && bunx tauri android build --aab",
+		"android:build": "node scripts/configure-android.mjs --require-signing && bunx tauri android build --aab",
 		"site:dev": "vite --config site/vite.config.ts",
 		"site:build": "node scripts/build-site.mjs",
 		"site:check": "tsc -p site/tsconfig.json --noEmit",

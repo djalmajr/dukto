@@ -186,7 +186,8 @@ export const guides: Guide[] = [
 		navTitle: "Privacidade",
 		group: "UNDERSTAND THE FLOW",
 		title: "Privacy and security",
-		summary: "Dukto transfers files directly between devices without collecting your personal data.",
+		summary:
+			"Dukto transfers files directly between devices without collecting your personal data.",
 		sections: [
 			{
 				title: "Who operates Dukto",

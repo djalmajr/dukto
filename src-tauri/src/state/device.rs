@@ -26,13 +26,37 @@ impl DeviceIdentity {
             id
         };
 
+        let (display_name, hostname) = system_identity(&device_id);
+
         Ok(Self {
             device_id,
-            display_name: whoami::username(),
-            hostname: whoami::fallible::hostname().unwrap_or_else(|_| "unknown".into()),
+            display_name,
+            hostname,
             platform: platform_name(),
         })
     }
+}
+
+#[cfg(target_os = "android")]
+fn system_identity(device_id: &str) -> (String, String) {
+    let short_id: String = device_id
+        .chars()
+        .filter(|character| *character != '-')
+        .take(8)
+        .collect();
+
+    (
+        "Dukto User".to_string(),
+        format!("android-{short_id}.local"),
+    )
+}
+
+#[cfg(not(target_os = "android"))]
+fn system_identity(_device_id: &str) -> (String, String) {
+    (
+        whoami::username(),
+        whoami::fallible::hostname().unwrap_or_else(|_| "unknown".into()),
+    )
 }
 
 fn platform_name() -> String {
