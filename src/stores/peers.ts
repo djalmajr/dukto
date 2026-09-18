@@ -15,22 +15,10 @@ export interface PeerInfo extends PeerIdentity {
 	protocol_version: string;
 }
 
-// Briefly tolerate an mDNS announcement being replaced during an interface
-// change or app restart, without keeping a departed host visible for a minute.
-const REMOVAL_GRACE_MS = 2_000;
-
 const [peers, setPeers] = createStore<Record<string, PeerInfo>>({});
-const removalTimers = new Map<string, number>();
 
 function peerFound(peer: PeerInfo) {
 	const id = peer.device_id;
-
-	// Cancel pending removal if peer re-appeared
-	const timer = removalTimers.get(id);
-	if (timer) {
-		clearTimeout(timer);
-		removalTimers.delete(id);
-	}
 
 	const previous = peers[id];
 	setPeers(id, {
@@ -42,18 +30,11 @@ function peerFound(peer: PeerInfo) {
 function peerRemoved(fullname: string) {
 	for (const id of Object.keys(peers)) {
 		if (fullname.includes(id)) {
-			// Already scheduled? skip
-			if (removalTimers.has(id)) break;
-
-			const timer = window.setTimeout(() => {
-				removalTimers.delete(id);
-				setPeers(
-					produce((state) => {
-						delete state[id];
-					}),
-				);
-			}, REMOVAL_GRACE_MS);
-			removalTimers.set(id, timer);
+			setPeers(
+				produce((state) => {
+					delete state[id];
+				}),
+			);
 			break;
 		}
 	}

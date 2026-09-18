@@ -1,7 +1,7 @@
 {
 	"name": "dukto",
 	"private": true,
-	"version": "0.2.1",
+	"version": "0.2.2",
 	"type": "module",
 	"scripts": {
 		"android:init": "bunx tauri android init --ci && node scripts/configure-android.mjs",
