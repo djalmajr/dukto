@@ -115,7 +115,7 @@ function Header(props: { path: string }) {
 					{t("Início")}
 				</a>
 				<a
-					href={localPath("/docs/primeiros-passos/")}
+					href={localPath("/docs/getting-started/")}
 					aria-current={
 						props.path === "/docs" || props.path.startsWith("/docs/") ? "page" : undefined
 					}
@@ -170,7 +170,7 @@ function Footer() {
 			</a>
 			<p>{t("Seus arquivos, logo ali.")}</p>
 			<div>
-				<a href={localPath("/docs/privacidade/")}>{t("Privacidade")}</a>
+				<a href={localPath("/docs/privacy/")}>{t("Privacidade")}</a>
 				<a
 					class="author-link"
 					href="https://djalmajr.dev"
@@ -317,7 +317,7 @@ function Home() {
 								{t("Obter o Dukto")}
 								<CloudDownload class="arrow-icon" aria-hidden="true" />
 							</LinkButton>
-							<a class="text-link" href={localPath("/docs/primeiros-passos/")}>
+							<a class="text-link" href={localPath("/docs/getting-started/")}>
 								{t("Comece em poucos passos")}
 								<ArrowRight class="arrow-icon" aria-hidden="true" />
 							</a>
@@ -483,7 +483,7 @@ function Home() {
 										"Envie pastas com sua estrutura preservada. Arquivos e subpastas chegam organizados ao destino.",
 									)}
 								</p>
-								<a href={localPath("/docs/arquivos-e-pastas/")}>
+								<a href={localPath("/docs/files-and-folders/")}>
 									{t("Saiba como enviar pastas")}
 									<Arrow />
 								</a>
@@ -505,7 +505,7 @@ function Home() {
 							{t("Encontre sua versão")}
 							<CloudDownload class="arrow-icon" aria-hidden="true" />
 						</LinkButton>
-						<a href={localPath("/docs/primeiros-passos/")}>
+						<a href={localPath("/docs/getting-started/")}>
 							{t("Ou leia o guia de primeiros passos")}{" "}
 							<ArrowRight class="arrow-icon" aria-hidden="true" />
 						</a>
@@ -517,7 +517,7 @@ function Home() {
 	);
 }
 function Docs(props: { guide: Guide }) {
-	const { t, localPath } = useLocale();
+	const { locale, t, localPath } = useLocale();
 	const [activeSection, setActiveSection] = createSignal(0);
 	const sections: HTMLElement[] = [];
 	onMount(() => {
@@ -572,10 +572,10 @@ function Docs(props: { guide: Guide }) {
 						)}
 					</For>
 				</aside>
-				<article class="doc-article" lang="en-US">
-					<span class="eyebrow">{props.guide.group}</span>
-					<h1>{props.guide.title}</h1>
-					<p class="doc-summary">{props.guide.summary}</p>
+				<article class="doc-article" lang={locale}>
+					<span class="eyebrow">{t(props.guide.group)}</span>
+					<h1>{t(props.guide.title)}</h1>
+					<p class="doc-summary">{t(props.guide.summary)}</p>
 					<div class="doc-rule" />
 					<For each={props.guide.sections}>
 						{(s, i) => (
@@ -585,10 +585,13 @@ function Docs(props: { guide: Guide }) {
 								}}
 								id={`section-${i()}`}
 							>
-								<h2>{s.title}</h2>
+								<h2>{t(s.title)}</h2>
 								<Show when={s.text}>
 									<p>
-										<GuideText text={s.text || ""} link={s.link} />
+										<GuideText
+											text={t(s.text || "")}
+											link={s.link ? { ...s.link, label: t(s.link.label) } : undefined}
+										/>
 									</p>
 								</Show>
 								<Show when={s.items}>
@@ -596,14 +599,14 @@ function Docs(props: { guide: Guide }) {
 										<For each={s.items}>
 											{(item) => (
 												<li>
-													<GuideText text={item} />
+													<GuideText text={t(item)} />
 												</li>
 											)}
 										</For>
 									</ul>
 								</Show>
 								<Show when={s.code}>
-									<CopyCode code={s.code || ""} localized={false} />
+									<CopyCode code={s.code || ""} />
 								</Show>
 							</section>
 						)}
@@ -639,7 +642,7 @@ function Docs(props: { guide: Guide }) {
 								href={`#section-${i()}`}
 								aria-current={activeSection() === i() ? "location" : undefined}
 							>
-								{s.title.replace(/^\d+\. /, "")}
+								{t(s.title).replace(/^\d+\. /, "")}
 							</a>
 						)}
 					</For>
@@ -797,7 +800,7 @@ function Downloads() {
 										)}
 									</For>
 								</div>
-								<a class="installation-link" href={localPath("/docs/instalacao/")}>
+								<a class="installation-link" href={localPath("/docs/installation/")}>
 									{t("Guia de instalação")}
 									<Arrow />
 								</a>
@@ -839,8 +842,8 @@ function Downloads() {
 				</section>
 				<div class="download-footnote">
 					{t("Use a mesma versão nos dispositivos. Consulte as")}{" "}
-					<a href={localPath("/docs/rede-e-descoberta/")}>{t("orientações de rede")}</a> {t("e a")}{" "}
-					<a href={localPath("/docs/privacidade/")}>{t("documentação de segurança")}</a>.
+					<a href={localPath("/docs/network-and-discovery/")}>{t("orientações de rede")}</a>{" "}
+					{t("e a")} <a href={localPath("/docs/privacy/")}>{t("documentação de segurança")}</a>.
 				</div>
 			</main>
 			<Footer />
@@ -857,7 +860,7 @@ function NotFound() {
 				<br />
 				{t("não está por aqui.")}
 			</h1>
-			<LinkButton href={localPath("/docs/primeiros-passos/")}>
+			<LinkButton href={localPath("/docs/getting-started/")}>
 				{t("Abrir a documentação")} <ArrowRight class="arrow-icon" aria-hidden="true" />
 			</LinkButton>
 		</main>

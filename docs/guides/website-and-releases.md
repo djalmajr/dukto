@@ -2,7 +2,7 @@
 
 ## Website
 
-The website is a separate Solid/Vite entry point under site/. Its interface and navigation can be localized; documentation body content is maintained in US English in site/src/guides.ts.
+The website is a separate Solid/Vite entry point under `site/`. English is the canonical language and uses unprefixed URLs. Spanish and Portuguese use `/es/` and `/pt/`, respectively. Route segments remain in English for every language. Documentation source content is maintained in US English in `site/src/guides.ts`; complete Spanish and Portuguese guide translations live in the guide locale files under `site/src/locales/`.
 
 Run these commands from the repository root:
 
@@ -13,7 +13,7 @@ bun run site:build
 bun run site:preview
 ~~~
 
-These commands build or preview local files; they do not publish the site. Keep documentation links valid across the generated routes and verify the prerendered pages after editing the guide source.
+These commands build or preview local files; they do not publish the site. Keep documentation links valid across the generated routes and verify the prerendered pages after editing the guide source. Preserve legacy language and guide URLs in `site/public/_redirects` when canonical routes change.
 
 Publish from `main` with the manual **Deploy website** GitHub Actions workflow (`.github/workflows/deploy-site.yml`). It builds and verifies the static pages before deploying the `dukto-site` Worker and its custom domain. Configure `CLOUDFLARE_API_TOKEN` as a secret and `CLOUDFLARE_ACCOUNT_ID` as a variable in the `website` environment, restricted to `main`. The production site is [dukto.app](https://dukto.app/).
 

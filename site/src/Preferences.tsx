@@ -1,18 +1,35 @@
-import { For, Show, createSignal, onMount } from "solid-js";
+import { For, Show, createSignal, onCleanup, onMount } from "solid-js";
 import IconLanguages from "~icons/lucide/languages";
 import IconMoon from "~icons/lucide/moon";
 import IconSun from "~icons/lucide/sun";
 import { Button } from "../../src/components/ui/button";
 import { languageNames, locales, localizedPath, useLocale } from "./i18n";
+import { isOutsideLanguagePicker } from "./language-picker";
 
 export function Preferences() {
 	const { t, locale } = useLocale();
 	const [dark, setDark] = createSignal(false);
 	const [open, setOpen] = createSignal(false);
 	const [path, setPath] = createSignal("/");
+	let languageButton: HTMLButtonElement | undefined;
+	let languagePicker: HTMLDivElement | undefined;
 	onMount(() => {
 		setDark(document.documentElement.dataset.theme === "dark");
 		setPath(window.location.pathname + window.location.hash);
+		const closeWhenOutside = (event: PointerEvent) => {
+			if (open() && isOutsideLanguagePicker(languagePicker, event.target)) setOpen(false);
+		};
+		const closeOnEscape = (event: KeyboardEvent) => {
+			if (!open() || event.key !== "Escape") return;
+			setOpen(false);
+			languageButton?.focus();
+		};
+		document.addEventListener("pointerdown", closeWhenOutside);
+		document.addEventListener("keydown", closeOnEscape);
+		onCleanup(() => {
+			document.removeEventListener("pointerdown", closeWhenOutside);
+			document.removeEventListener("keydown", closeOnEscape);
+		});
 	});
 	function toggleTheme() {
 		const next = !dark();
@@ -39,8 +56,9 @@ export function Preferences() {
 					<IconSun aria-hidden="true" />
 				</Show>
 			</Button>
-			<div class="language-picker">
+			<div class="language-picker" ref={languagePicker}>
 				<Button
+					ref={languageButton}
 					variant="ghost"
 					class="preference-button"
 					size="icon"
