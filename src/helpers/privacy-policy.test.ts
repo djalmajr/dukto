@@ -1,4 +1,5 @@
 import { expect, mock, test } from "bun:test";
+import { readFileSync } from "node:fs";
 
 test("privacy policy uses the native Android intent and the desktop shell opener", async () => {
 	const invokes: Array<{ command: string; args?: unknown }> = [];
@@ -17,6 +18,13 @@ test("privacy policy uses the native Android intent and the desktop shell opener
 
 	try {
 		const { openPrivacyPolicy, PRIVACY_POLICY_URL } = await import("./privacy-policy");
+		expect(PRIVACY_POLICY_URL).toBe("https://dukto.app/docs/privacy/");
+		const androidPlugin = readFileSync(
+			new URL("../../src-tauri/android/DestinationPlugin.kt", import.meta.url),
+			"utf8",
+		);
+		// Mutation captured: changing only the Android intent leaves the native privacy link stale.
+		expect(androidPlugin).toContain(`Uri.parse("${PRIVACY_POLICY_URL}")`);
 
 		await openPrivacyPolicy("android");
 		expect(invokes).toEqual([{ command: "open_privacy_policy", args: undefined }]);

@@ -119,7 +119,7 @@ class DestinationPlugin(private val activity: Activity) : Plugin(activity) {
     try {
       val intent = Intent(
         Intent.ACTION_VIEW,
-        Uri.parse("https://dukto.app/docs/privacidade/"),
+        Uri.parse("https://dukto.app/docs/privacy/"),
       )
       activity.startActivity(intent)
       invoke.resolve()

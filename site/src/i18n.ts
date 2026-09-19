@@ -1,31 +1,37 @@
 import { createContext, useContext } from "solid-js";
 import en from "./locales/en-us.json";
 import es from "./locales/es-es.json";
+import guideEs from "./locales/guides.es.json";
+import guidePt from "./locales/guides.pt.json";
 
-export const locales = ["pt-br", "en-us", "es-es"] as const;
+export const locales = ["en", "es", "pt"] as const;
 export type Locale = (typeof locales)[number];
 export const languageNames: Record<Locale, string> = {
-	"pt-br": "Português (Brasil)",
-	"en-us": "English (US)",
-	"es-es": "Español (España)",
+	en: "English",
+	es: "Español",
+	pt: "Português",
 };
-const dictionaries: Record<string, Record<string, string>> = { "en-us": en, "es-es": es };
+const dictionaries: Record<Locale, Record<string, string>> = {
+	en,
+	es: { ...es, ...guideEs },
+	pt: guidePt,
+};
 export function translate(locale: Locale, source: string) {
 	return dictionaries[locale]?.[source] ?? source;
 }
 export function routeLocale(path: string): Locale {
-	return path.startsWith("/en-us/") || path === "/en-us"
-		? "en-us"
-		: path.startsWith("/es-es/") || path === "/es-es"
-			? "es-es"
-			: "pt-br";
+	return path.startsWith("/es/") || path === "/es"
+		? "es"
+		: path.startsWith("/pt/") || path === "/pt"
+			? "pt"
+			: "en";
 }
 export function stripLocale(path: string) {
-	return path.replace(/^\/(en-us|es-es)(?=\/|$)/, "") || "/";
+	return path.replace(/^\/(en|es|pt|en-us|es-es|pt-br)(?=\/|$)/, "") || "/";
 }
 export function localizedPath(locale: Locale, path: string) {
 	if (!path.startsWith("/") || path.startsWith("//")) return path;
-	return (locale === "pt-br" ? "" : `/${locale}`) + stripLocale(path);
+	return (locale === "en" ? "" : `/${locale}`) + stripLocale(path);
 }
 export function localeValue(locale: Locale) {
 	return {
@@ -34,5 +40,5 @@ export function localeValue(locale: Locale) {
 		localPath: (path: string) => localizedPath(locale, path),
 	};
 }
-export const LocaleContext = createContext(localeValue("pt-br"));
+export const LocaleContext = createContext(localeValue("en"));
 export const useLocale = () => useContext(LocaleContext);

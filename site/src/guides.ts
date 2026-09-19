@@ -16,9 +16,9 @@ export type Guide = {
 };
 export const guides: Guide[] = [
 	{
-		slug: "primeiros-passos",
-		navGroup: "COMECE AQUI",
-		navTitle: "Primeiros passos",
+		slug: "getting-started",
+		navGroup: "GETTING STARTED",
+		navTitle: "Getting started",
 		group: "GETTING STARTED",
 		title: "Getting started",
 		summary: "Two devices. One direct connection. Your files where they belong.",
@@ -43,9 +43,9 @@ export const guides: Guide[] = [
 		],
 	},
 	{
-		slug: "instalacao",
-		navGroup: "COMECE AQUI",
-		navTitle: "Instalação",
+		slug: "installation",
+		navGroup: "GETTING STARTED",
+		navTitle: "Installation",
 		group: "GETTING STARTED",
 		title: "Installation",
 		summary: "Choose the app for everyday use or the CLI for your workflow.",
@@ -92,9 +92,9 @@ export const guides: Guide[] = [
 		],
 	},
 	{
-		slug: "arquivos-e-pastas",
-		navGroup: "USANDO O DUKTO",
-		navTitle: "Arquivos e pastas",
+		slug: "files-and-folders",
+		navGroup: "USING DUKTO",
+		navTitle: "Files and folders",
 		group: "USING DUKTO",
 		title: "Files and folders",
 		summary: "Send a single document or a whole folder while keeping its structure.",
@@ -116,8 +116,8 @@ export const guides: Guide[] = [
 	},
 	{
 		slug: "cli",
-		navGroup: "USANDO O DUKTO",
-		navTitle: "Referência da CLI",
+		navGroup: "USING DUKTO",
+		navTitle: "CLI reference",
 		group: "USING DUKTO",
 		title: "CLI reference",
 		summary: "Use the same direct transfer engine with commands that fit your scripts.",
@@ -149,9 +149,9 @@ export const guides: Guide[] = [
 		],
 	},
 	{
-		slug: "rede-e-descoberta",
-		navGroup: "ENTENDA O FLUXO",
-		navTitle: "Rede e descoberta",
+		slug: "network-and-discovery",
+		navGroup: "UNDERSTAND THE FLOW",
+		navTitle: "Network and discovery",
 		group: "UNDERSTAND THE FLOW",
 		title: "Network and discovery",
 		summary:
@@ -181,9 +181,9 @@ export const guides: Guide[] = [
 		],
 	},
 	{
-		slug: "privacidade",
-		navGroup: "ENTENDA O FLUXO",
-		navTitle: "Privacidade",
+		slug: "privacy",
+		navGroup: "UNDERSTAND THE FLOW",
+		navTitle: "Privacy and security",
 		group: "UNDERSTAND THE FLOW",
 		title: "Privacy and security",
 		summary:
@@ -228,9 +228,9 @@ export const guides: Guide[] = [
 		],
 	},
 	{
-		slug: "validacao",
-		navGroup: "ENTENDA O FLUXO",
-		navTitle: "Solução de problemas",
+		slug: "troubleshooting",
+		navGroup: "UNDERSTAND THE FLOW",
+		navTitle: "Troubleshooting",
 		group: "UNDERSTAND THE FLOW",
 		title: "Troubleshooting",
 		summary:

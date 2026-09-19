@@ -6,9 +6,9 @@ export function pageMetadata(path: string) {
 	const guide = guides.find((g) => clean === `/docs/${g.slug}`);
 	const t = (text: string) => translate(routeLanguage, text);
 	return {
-		locale: guide ? "en-US" : routeLanguage,
+		locale: routeLanguage,
 		title: guide
-			? `${guide.title} — Dukto Docs`
+			? `${t(guide.title)} — Dukto Docs`
 			: clean === "/downloads"
 				? `${t("Downloads")} — Dukto`
 				: clean === "/docs"
@@ -17,7 +17,7 @@ export function pageMetadata(path: string) {
 						? t("Dukto — Seus arquivos, logo ali.")
 						: t("Página não encontrada — Dukto"),
 		description:
-			guide?.summary ||
+			(guide ? t(guide.summary) : undefined) ||
 			t(
 				"Arquivos e pastas entre macOS, Windows, Linux, Android e iOS, direto entre seus dispositivos.",
 			),

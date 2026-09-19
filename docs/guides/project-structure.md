@@ -8,7 +8,7 @@ The repository separates the cross-platform application frontend, its Rust backe
 - `src/routes/` contains the main screen and route-scoped features. TanStack Router ignores directories and files prefixed with `-`, so `-components/`, `-stores/`, and `-helpers/` can colocate route implementation without becoming routes.
 - `src-tauri/` contains the Rust backend, commands exposed to the frontend, and the CLI binary. Transfer protocol and filesystem behavior live in the backend.
 - `src-proto/` is a standalone Vite prototype for visualizing application flows with sample state.
-- `site/` contains the public Solid/Vite website, including the English documentation articles.
+- `site/` contains the public Solid/Vite website. English is canonical; complete Spanish and Portuguese translations use `/es/` and `/pt/` routes with English route segments.
 
 ## State and side effects
 
