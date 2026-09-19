@@ -1349,7 +1349,8 @@ footer > div {
 	display: flex;
 	flex-direction: column;
 	gap: 4px;
-	width: 200px;
+	width: max-content;
+	max-width: calc(100vw - 32px);
 	padding: 8px;
 	border: 1px solid var(--line);
 	border-radius: 6px;
