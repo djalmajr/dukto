@@ -46,6 +46,17 @@
 		"createUpdaterArtifacts": true
 	},
 	"plugins": {
+		"deep-link": {
+			"desktop": {
+				"schemes": ["dukto"]
+			},
+			"mobile": [
+				{
+					"scheme": ["dukto"],
+					"appLink": false
+				}
+			]
+		},
 		"updater": {
 			"endpoints": ["https://github.com/djalmajr/dukto/releases/latest/download/latest.json"],
 			"pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEU2RUQ3OUMwM0M4NDBGMDUKUldRRkQ0UTh3SG50NWdVWGMySVRXQWdoOVJmK3JRRkUwS2g1cjJJMzVtbzRRKytwTlFGTEkxTGcK",

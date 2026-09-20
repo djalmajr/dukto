@@ -1,0 +1,491 @@
+use std::{fmt, time::Duration};
+
+use iroh::endpoint::{RecvStream, SendStream};
+use ring::rand::SecureRandom;
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use snow::TransportState;
+use thiserror::Error;
+use tokio::time::timeout;
+use zeroize::Zeroizing;
+
+use crate::{
+    crypto::noise::{
+        handshake_initiator_bound, handshake_responder_bound, recv_framed, send_framed,
+    },
+    internet::{
+        channel::IrohAuthenticatedChannel,
+        pairing::{
+            ManualCodePairing, ManualPairingCode, PairingKeys, PairingOrigin, PairingRole,
+            PairingTranscript, PAIRING_NONCE_BYTES,
+        },
+    },
+    transfer::channel::{AuthenticatedChannel, ChannelCloseReason, RouteKind},
+};
+
+const SESSION_PROTOCOL_VERSION: u8 = 1;
+const SESSION_AUTH_TIMEOUT: Duration = Duration::from_secs(30);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InternetSessionRole {
+    InvitationOwner,
+    InvitationJoiner,
+}
+
+pub struct InternetSessionCredentials {
+    pub session_id: String,
+    pub advertised_endpoint_id: String,
+    pub addresses: Vec<String>,
+    pub expires_at_unix: u64,
+    pub role: InternetSessionRole,
+    pub secret: Zeroizing<[u8; 32]>,
+    pub manual_code: Option<ManualPairingCode>,
+}
+
+impl fmt::Debug for InternetSessionCredentials {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("InternetSessionCredentials")
+            .field("session_id", &self.session_id)
+            .field("advertised_endpoint_id", &self.advertised_endpoint_id)
+            .field("addresses", &self.addresses)
+            .field("expires_at_unix", &self.expires_at_unix)
+            .field("role", &self.role)
+            .field("secret", &"[REDACTED]")
+            .field(
+                "manual_code",
+                &self.manual_code.as_ref().map(|_| "[REDACTED]"),
+            )
+            .finish()
+    }
+}
+
+pub struct EstablishedInternetSession {
+    channel: IrohAuthenticatedChannel,
+    send: Option<SendStream>,
+    receive: Option<RecvStream>,
+    noise: Option<TransportState>,
+}
+
+impl EstablishedInternetSession {
+    pub fn peer_id(&self) -> &str {
+        self.channel.peer_id()
+    }
+
+    pub fn route_kind(&self) -> RouteKind {
+        self.channel.route_kind()
+    }
+
+    pub fn take_transfer_parts(
+        &mut self,
+    ) -> Option<(
+        IrohAuthenticatedChannel,
+        SendStream,
+        RecvStream,
+        TransportState,
+    )> {
+        Some((
+            self.channel.clone(),
+            self.send.take()?,
+            self.receive.take()?,
+            self.noise.take()?,
+        ))
+    }
+}
+
+impl fmt::Debug for EstablishedInternetSession {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("EstablishedInternetSession")
+            .field("peer_id", &self.peer_id())
+            .field("route", &self.route_kind())
+            .field("has_transfer_stream", &self.send.is_some())
+            .finish()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub enum InternetSessionError {
+    #[error("internet session role is invalid")]
+    InvalidRole,
+    #[error("internet session peer identity does not match")]
+    PeerIdentityMismatch,
+    #[error("internet session control message is invalid")]
+    InvalidControlMessage,
+    #[error("internet session authentication failed")]
+    AuthenticationFailed,
+    #[error("internet session authentication timed out")]
+    Timeout,
+    #[error("internet session transport failed")]
+    Transport,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum PairingMode {
+    InviteLink,
+    ManualCode,
+}
+
+impl PairingMode {
+    fn origin(self) -> PairingOrigin {
+        match self {
+            Self::InviteLink => PairingOrigin::InviteLink,
+            Self::ManualCode => PairingOrigin::ManualCode,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct InitiatorHello {
+    version: u8,
+    session_id: String,
+    endpoint_id: String,
+    mode: PairingMode,
+    nonce: [u8; PAIRING_NONCE_BYTES],
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ResponderHello {
+    version: u8,
+    nonce: [u8; PAIRING_NONCE_BYTES],
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PairingMessage {
+    version: u8,
+    message: Vec<u8>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PairingConfirmation {
+    version: u8,
+    value: [u8; 32],
+}
+
+pub async fn authenticate_initiator(
+    channel: IrohAuthenticatedChannel,
+    local_endpoint_id: &str,
+    credentials: InternetSessionCredentials,
+    now_unix: u64,
+) -> Result<EstablishedInternetSession, InternetSessionError> {
+    if credentials.role != InternetSessionRole::InvitationJoiner {
+        return Err(InternetSessionError::InvalidRole);
+    }
+    if channel.peer_id() != credentials.advertised_endpoint_id {
+        channel.close(ChannelCloseReason::AuthenticationFailed);
+        return Err(InternetSessionError::PeerIdentityMismatch);
+    }
+
+    let close_channel = channel.clone();
+    match timeout(
+        SESSION_AUTH_TIMEOUT,
+        authenticate_initiator_inner(channel, local_endpoint_id, credentials, now_unix),
+    )
+    .await
+    {
+        Ok(Ok(session)) => Ok(session),
+        Ok(Err(error)) => {
+            close_channel.close(ChannelCloseReason::AuthenticationFailed);
+            Err(error)
+        }
+        Err(_) => {
+            close_channel.close(ChannelCloseReason::AuthenticationFailed);
+            Err(InternetSessionError::Timeout)
+        }
+    }
+}
+
+async fn authenticate_initiator_inner(
+    channel: IrohAuthenticatedChannel,
+    local_endpoint_id: &str,
+    credentials: InternetSessionCredentials,
+    now_unix: u64,
+) -> Result<EstablishedInternetSession, InternetSessionError> {
+    let (mut send, mut receive) = channel
+        .open_bi()
+        .await
+        .map_err(|_| InternetSessionError::Transport)?;
+    let initiator_nonce = generate_nonce()?;
+    let mode = if credentials.manual_code.is_some() {
+        PairingMode::ManualCode
+    } else {
+        PairingMode::InviteLink
+    };
+    send_control(
+        &mut send,
+        &InitiatorHello {
+            version: SESSION_PROTOCOL_VERSION,
+            session_id: credentials.session_id.clone(),
+            endpoint_id: local_endpoint_id.to_owned(),
+            mode,
+            nonce: initiator_nonce,
+        },
+    )
+    .await?;
+    let responder: ResponderHello = receive_control(&mut receive).await?;
+    validate_version_and_nonce(responder.version, &responder.nonce)?;
+
+    let transcript = PairingTranscript::new(
+        mode.origin(),
+        &credentials.session_id,
+        local_endpoint_id,
+        &credentials.advertised_endpoint_id,
+        initiator_nonce,
+        responder.nonce,
+        credentials.expires_at_unix,
+        now_unix,
+    )
+    .map_err(|_| InternetSessionError::AuthenticationFailed)?;
+    let keys = initiator_keys(&mut send, &mut receive, &credentials, &transcript).await?;
+
+    send_control(
+        &mut send,
+        &PairingConfirmation {
+            version: SESSION_PROTOCOL_VERSION,
+            value: *keys.confirmation(PairingRole::Initiator),
+        },
+    )
+    .await?;
+    let confirmation: PairingConfirmation = receive_control(&mut receive).await?;
+    validate_confirmation(confirmation, keys.confirmation(PairingRole::Responder))?;
+    let noise = handshake_initiator_bound(&mut send, &mut receive, keys.noise_binding())
+        .await
+        .map_err(|_| InternetSessionError::AuthenticationFailed)?;
+    Ok(EstablishedInternetSession {
+        channel,
+        send: Some(send),
+        receive: Some(receive),
+        noise: Some(noise),
+    })
+}
+
+pub async fn authenticate_responder<F>(
+    channel: IrohAuthenticatedChannel,
+    local_endpoint_id: &str,
+    now_unix: u64,
+    credentials_for: F,
+) -> Result<(String, EstablishedInternetSession), InternetSessionError>
+where
+    F: FnOnce(&str) -> Result<InternetSessionCredentials, InternetSessionError>,
+{
+    let close_channel = channel.clone();
+    match timeout(
+        SESSION_AUTH_TIMEOUT,
+        authenticate_responder_inner(channel, local_endpoint_id, now_unix, credentials_for),
+    )
+    .await
+    {
+        Ok(Ok(session)) => Ok(session),
+        Ok(Err(error)) => {
+            close_channel.close(ChannelCloseReason::AuthenticationFailed);
+            Err(error)
+        }
+        Err(_) => {
+            close_channel.close(ChannelCloseReason::AuthenticationFailed);
+            Err(InternetSessionError::Timeout)
+        }
+    }
+}
+
+async fn authenticate_responder_inner<F>(
+    channel: IrohAuthenticatedChannel,
+    local_endpoint_id: &str,
+    now_unix: u64,
+    credentials_for: F,
+) -> Result<(String, EstablishedInternetSession), InternetSessionError>
+where
+    F: FnOnce(&str) -> Result<InternetSessionCredentials, InternetSessionError>,
+{
+    let (mut send, mut receive) = channel
+        .accept_bi()
+        .await
+        .map_err(|_| InternetSessionError::Transport)?;
+    let hello: InitiatorHello = receive_control(&mut receive).await?;
+    validate_version_and_nonce(hello.version, &hello.nonce)?;
+    if hello.endpoint_id != channel.peer_id() {
+        return Err(InternetSessionError::PeerIdentityMismatch);
+    }
+    let credentials = credentials_for(&hello.session_id)?;
+    if credentials.role != InternetSessionRole::InvitationOwner
+        || credentials.advertised_endpoint_id != local_endpoint_id
+        || credentials.session_id != hello.session_id
+    {
+        return Err(InternetSessionError::InvalidRole);
+    }
+    let responder_nonce = generate_nonce()?;
+    send_control(
+        &mut send,
+        &ResponderHello {
+            version: SESSION_PROTOCOL_VERSION,
+            nonce: responder_nonce,
+        },
+    )
+    .await?;
+
+    let transcript = PairingTranscript::new(
+        hello.mode.origin(),
+        &credentials.session_id,
+        channel.peer_id(),
+        local_endpoint_id,
+        hello.nonce,
+        responder_nonce,
+        credentials.expires_at_unix,
+        now_unix,
+    )
+    .map_err(|_| InternetSessionError::AuthenticationFailed)?;
+    let keys = responder_keys(
+        &mut send,
+        &mut receive,
+        &credentials,
+        &transcript,
+        hello.mode,
+    )
+    .await?;
+
+    let confirmation: PairingConfirmation = receive_control(&mut receive).await?;
+    validate_confirmation(confirmation, keys.confirmation(PairingRole::Initiator))?;
+    send_control(
+        &mut send,
+        &PairingConfirmation {
+            version: SESSION_PROTOCOL_VERSION,
+            value: *keys.confirmation(PairingRole::Responder),
+        },
+    )
+    .await?;
+    let noise = handshake_responder_bound(&mut send, &mut receive, keys.noise_binding())
+        .await
+        .map_err(|_| InternetSessionError::AuthenticationFailed)?;
+    let session_id = credentials.session_id;
+    Ok((
+        session_id,
+        EstablishedInternetSession {
+            channel,
+            send: Some(send),
+            receive: Some(receive),
+            noise: Some(noise),
+        },
+    ))
+}
+
+async fn initiator_keys(
+    send: &mut SendStream,
+    receive: &mut RecvStream,
+    credentials: &InternetSessionCredentials,
+    transcript: &PairingTranscript,
+) -> Result<PairingKeys, InternetSessionError> {
+    let Some(code) = credentials.manual_code.as_ref() else {
+        return transcript
+            .derive_keys(credentials.secret.as_ref())
+            .map_err(|_| InternetSessionError::AuthenticationFailed);
+    };
+    let (mut pairing, message) = ManualCodePairing::start(PairingRole::Initiator, code, transcript)
+        .map_err(|_| InternetSessionError::AuthenticationFailed)?;
+    send_control(
+        send,
+        &PairingMessage {
+            version: SESSION_PROTOCOL_VERSION,
+            message,
+        },
+    )
+    .await?;
+    let peer: PairingMessage = receive_control(receive).await?;
+    validate_pairing_message(&peer)?;
+    pairing
+        .finish(&peer.message)
+        .map_err(|_| InternetSessionError::AuthenticationFailed)
+}
+
+async fn responder_keys(
+    send: &mut SendStream,
+    receive: &mut RecvStream,
+    credentials: &InternetSessionCredentials,
+    transcript: &PairingTranscript,
+    mode: PairingMode,
+) -> Result<PairingKeys, InternetSessionError> {
+    if mode == PairingMode::InviteLink {
+        return transcript
+            .derive_keys(credentials.secret.as_ref())
+            .map_err(|_| InternetSessionError::AuthenticationFailed);
+    }
+    let code = credentials
+        .manual_code
+        .as_ref()
+        .ok_or(InternetSessionError::AuthenticationFailed)?;
+    let peer: PairingMessage = receive_control(receive).await?;
+    validate_pairing_message(&peer)?;
+    let (mut pairing, message) = ManualCodePairing::start(PairingRole::Responder, code, transcript)
+        .map_err(|_| InternetSessionError::AuthenticationFailed)?;
+    send_control(
+        send,
+        &PairingMessage {
+            version: SESSION_PROTOCOL_VERSION,
+            message,
+        },
+    )
+    .await?;
+    pairing
+        .finish(&peer.message)
+        .map_err(|_| InternetSessionError::AuthenticationFailed)
+}
+
+fn validate_pairing_message(message: &PairingMessage) -> Result<(), InternetSessionError> {
+    if message.version != SESSION_PROTOCOL_VERSION || message.message.is_empty() {
+        return Err(InternetSessionError::InvalidControlMessage);
+    }
+    Ok(())
+}
+
+#[allow(deprecated)]
+fn validate_confirmation(
+    confirmation: PairingConfirmation,
+    expected: &[u8; 32],
+) -> Result<(), InternetSessionError> {
+    if confirmation.version != SESSION_PROTOCOL_VERSION
+        || ring::constant_time::verify_slices_are_equal(&confirmation.value, expected).is_err()
+    {
+        return Err(InternetSessionError::AuthenticationFailed);
+    }
+    Ok(())
+}
+
+fn validate_version_and_nonce(
+    version: u8,
+    nonce: &[u8; PAIRING_NONCE_BYTES],
+) -> Result<(), InternetSessionError> {
+    if version != SESSION_PROTOCOL_VERSION || nonce.iter().all(|byte| *byte == 0) {
+        return Err(InternetSessionError::InvalidControlMessage);
+    }
+    Ok(())
+}
+
+fn generate_nonce() -> Result<[u8; PAIRING_NONCE_BYTES], InternetSessionError> {
+    let mut nonce = [0_u8; PAIRING_NONCE_BYTES];
+    ring::rand::SystemRandom::new()
+        .fill(&mut nonce)
+        .map_err(|_| InternetSessionError::AuthenticationFailed)?;
+    Ok(nonce)
+}
+
+async fn send_control<T: Serialize>(
+    send: &mut SendStream,
+    message: &T,
+) -> Result<(), InternetSessionError> {
+    let encoded =
+        serde_json::to_vec(message).map_err(|_| InternetSessionError::InvalidControlMessage)?;
+    send_framed(send, &encoded)
+        .await
+        .map_err(|_| InternetSessionError::Transport)
+}
+
+async fn receive_control<T: DeserializeOwned>(
+    receive: &mut RecvStream,
+) -> Result<T, InternetSessionError> {
+    let encoded = recv_framed(receive)
+        .await
+        .map_err(|_| InternetSessionError::Transport)?;
+    serde_json::from_slice(&encoded).map_err(|_| InternetSessionError::InvalidControlMessage)
+}

@@ -4,7 +4,11 @@ import { Show, createEffect, createMemo, createSignal, untrack } from "solid-js"
 import ErrorDisplay from "~/components/error-display";
 import { t } from "~/helpers/i18n";
 import { nativeErrorKey } from "~/helpers/native-error";
-import { pickSendItems } from "~/helpers/send-item-picker";
+import {
+	pickSendItems,
+	supportsFolderSelection,
+	supportsMediaSelection,
+} from "~/helpers/send-item-picker";
 import { releaseSelectedFiles, resolveFileMetadata, sendToPeer } from "~/helpers/tauri";
 import PeerList from "~/routes/-components/peers/peer-list";
 import DropZone from "~/routes/-components/transfers/drop-zone";
@@ -22,6 +26,7 @@ import {
 } from "~/routes/-stores/transfers";
 import type { PeerInfo } from "~/stores/peers";
 import { peers } from "~/stores/peers";
+import { selectPreferredIpv4 } from "~/utils/device-address";
 import { formatDeviceHostname } from "~/utils/device-hostname";
 
 function HomePage() {
@@ -57,13 +62,13 @@ function HomePage() {
 		}
 	}
 
-	async function pickItems(peer: PeerInfo, directory: boolean) {
+	async function pickItems(peer: PeerInfo, directory: boolean, media = false) {
 		if (picking() || !peers[peer.device_id]) return;
 		const hostId = peer.device_id;
 		const revision = selection.revision(hostId);
 		setPicking(true);
 		try {
-			const selected = await pickSendItems(currentPlatform, directory);
+			const selected = await pickSendItems(currentPlatform, directory, media);
 			if (selected) releaseFiles(selection.addResolved(hostId, selected, revision));
 		} catch (e) {
 			if (revision === selection.revision(hostId)) setError(String(e));
@@ -79,7 +84,12 @@ function HomePage() {
 		const paths = files.map((file) => file.path);
 		const totalSize = files.reduce((sum, file) => sum + file.size, 0);
 		try {
-			const transferId = await sendToPeer(hostId, paths, peer.addresses?.[0], peer.port);
+			const transferId = await sendToPeer(
+				hostId,
+				paths,
+				selectPreferredIpv4(peer.addresses ?? []),
+				peer.port,
+			);
 			selection.cancel(hostId);
 			startSendTransfer(transferId, totalSize, hostId, peer);
 		} catch (e) {
@@ -127,7 +137,17 @@ function HomePage() {
 					<PeerList
 						actionsDisabled={picking()}
 						dropTargetId={dropTargetId()}
-						onAddItems={pickItems}
+						onAddFiles={(peer) => void pickItems(peer, false)}
+						onAddFolders={
+							supportsFolderSelection(currentPlatform)
+								? (peer) => void pickItems(peer, true)
+								: undefined
+						}
+						onAddMedia={
+							supportsMediaSelection(currentPlatform)
+								? (peer) => void pickItems(peer, false, true)
+								: undefined
+						}
 						getTransfers={(peerId) => getPeerTransfers(peerId)}
 						getExpandedContent={(peer) => {
 							if (selection.files(peer.device_id).length === 0) return undefined;

@@ -16,6 +16,7 @@ import LucideBan from "~icons/lucide/ban";
 import LucideEllipsisVertical from "~icons/lucide/ellipsis-vertical";
 import LucideFilePlus from "~icons/lucide/file-plus";
 import LucideFolderPlus from "~icons/lucide/folder-plus";
+import LucideImages from "~icons/lucide/images";
 import LucideX from "~icons/lucide/x";
 
 export interface TransferSlot {
@@ -43,7 +44,9 @@ export interface PeerCardProps {
 	dropHighlight?: boolean;
 	dropTargetEnabled?: boolean;
 	actionsDisabled?: boolean;
-	onAddItems?: (directory: boolean) => void;
+	onAddFiles?: () => void;
+	onAddFolders?: () => void;
+	onAddMedia?: () => void;
 	onClick?: () => void;
 	onAbortTransfer?: (transferId: string) => void;
 	onDismissTransfer?: (transferId: string) => void;
@@ -117,7 +120,7 @@ function TransferRow(props: {
 					class="min-w-0 truncate"
 					classList={{
 						"text-muted-foreground": !isError(),
-						"text-destructive": isError(),
+						"text-error-foreground": isError(),
 					}}
 				>
 					{label()}
@@ -162,7 +165,7 @@ function TransferRow(props: {
 				</span>
 			</div>
 			<Show when={isError() && props.slot.errorMsg}>
-				<p class="text-xs text-destructive/80">
+				<p class="text-xs text-error-foreground/90">
 					{t(nativeErrorKey(props.slot.errorMsg, "transferFailed"))}
 				</p>
 			</Show>
@@ -189,10 +192,13 @@ function TransferRow(props: {
 
 function PeerCard(props: PeerCardProps) {
 	const slots = () => props.transfers ?? [];
+	const hasActions = () => Boolean(props.onAddFiles || props.onAddFolders || props.onAddMedia);
+	const actionsUnavailable = () => props.actionsDisabled || !hasActions();
 	const hasActive = () =>
 		slots().some((s) => s.status === "active" || s.status === "waiting_approval");
 	const hasError = () => slots().some((s) => s.status === "error");
 	const hasAny = () => slots().length > 0;
+	const isExpanded = () => hasAny() || Boolean(props.expandedContent);
 
 	return (
 		<div
@@ -208,8 +214,9 @@ function PeerCard(props: PeerCardProps) {
 		>
 			<div
 				{...props.headerDrag}
-				class="flex w-full items-center gap-3 px-3.5 py-3.5 rounded-xl outline-none transition-colors data-[active=true]:bg-accent"
+				class="flex w-full items-center gap-3 rounded-t-xl px-3.5 py-3.5 outline-none transition-colors data-[active=true]:bg-accent"
 				classList={{
+					"rounded-b-xl": !isExpanded(),
 					"touch-none select-none cursor-grab active:cursor-grabbing":
 						props.headerDrag?.tabIndex === 0,
 				}}
@@ -230,13 +237,13 @@ function PeerCard(props: PeerCardProps) {
 						<PeerIdentity peer={props.peer} />
 					</Button>
 				</Show>
-				<Show when={props.onAddItems}>
+				<Show when={hasActions() || props.actionsDisabled}>
 					<DropdownMenu placement="bottom-end">
 						<DropdownMenuTrigger
 							as={Button}
 							variant="ghost"
 							size="icon-sm"
-							disabled={props.actionsDisabled}
+							disabled={actionsUnavailable()}
 							class="peer-actions-trigger shrink-0 text-muted-foreground"
 							aria-label={t("hostActions", {
 								name: props.peer.display_name,
@@ -247,22 +254,36 @@ function PeerCard(props: PeerCardProps) {
 						</DropdownMenuTrigger>
 						<DropdownMenuPortal>
 							<DropdownMenuContent class="peer-actions-menu">
-								<DropdownMenuItem
-									class="peer-actions-menu-item"
-									disabled={props.actionsDisabled}
-									onSelect={() => props.onAddItems?.(false)}
-								>
-									<LucideFilePlus class="size-4" />
-									{t("addFiles")}
-								</DropdownMenuItem>
-								<DropdownMenuItem
-									class="peer-actions-menu-item"
-									disabled={props.actionsDisabled}
-									onSelect={() => props.onAddItems?.(true)}
-								>
-									<LucideFolderPlus class="size-4" />
-									{t("addFolders")}
-								</DropdownMenuItem>
+								<Show when={props.onAddFiles}>
+									<DropdownMenuItem
+										class="peer-actions-menu-item"
+										disabled={actionsUnavailable()}
+										onSelect={() => props.onAddFiles?.()}
+									>
+										<LucideFilePlus class="size-4" />
+										{t("addFiles")}
+									</DropdownMenuItem>
+								</Show>
+								<Show when={props.onAddFolders}>
+									<DropdownMenuItem
+										class="peer-actions-menu-item"
+										disabled={actionsUnavailable()}
+										onSelect={() => props.onAddFolders?.()}
+									>
+										<LucideFolderPlus class="size-4" />
+										{t("addFolders")}
+									</DropdownMenuItem>
+								</Show>
+								<Show when={props.onAddMedia}>
+									<DropdownMenuItem
+										class="peer-actions-menu-item"
+										disabled={actionsUnavailable()}
+										onSelect={() => props.onAddMedia?.()}
+									>
+										<LucideImages class="size-4" />
+										{t("addPhotosAndVideos")}
+									</DropdownMenuItem>
+								</Show>
 							</DropdownMenuContent>
 						</DropdownMenuPortal>
 					</DropdownMenu>

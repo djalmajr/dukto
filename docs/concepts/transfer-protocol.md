@@ -1,6 +1,6 @@
 # Transfer Protocol
 
-Dukto sends file data over QUIC and establishes a Noise session before application messages are exchanged. The protocol is sequential per transfer and requires receiver approval before file data flows.
+Dukto sends file data over a QUIC stream and establishes a Noise session before application messages are exchanged. LAN sessions use Quinn; the experimental internet path adapts transport-authenticated iroh streams to the same transfer protocol. The protocol is sequential per transfer and requires receiver approval before file data flows.
 
 ## Connection Lifecycle
 
@@ -57,7 +57,7 @@ These checks reduce unsafe path writes and accidental data loss. They do not est
 
 ## Cancellation and Errors
 
-When a sender cancels a transfer, it closes the QUIC connection with application close code `0xD0170` and reason `dukto:transfer-cancelled:v1`. The receiver recognizes this exact marker and reports a remote cancellation; an ordinary connection failure remains a connection error.
+When a sender cancels a transfer, it resets the active transfer streams with application code `0xD0170`; the LAN adapter also closes the QUIC connection with reason `dukto:transfer-cancelled:v1`. The receiver recognizes the reserved marker and reports a remote cancellation; an ordinary connection failure remains a connection error.
 
 A disconnect, cancellation, protocol error, or filesystem error can stop a transfer. The receiver removes only the incomplete staged file. Files that finished earlier in the batch and files that existed before the transfer are preserved. Dukto does not resume interrupted transfers.
 

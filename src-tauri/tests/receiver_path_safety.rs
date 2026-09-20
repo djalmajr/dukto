@@ -1,3 +1,5 @@
+#![cfg(unix)]
+
 use dukto_lib::crypto::noise::{handshake_initiator, handshake_responder};
 use dukto_lib::state::device::DeviceIdentity;
 use dukto_lib::transfer::quic::create_endpoint;
@@ -29,7 +31,6 @@ impl Drop for TemporaryDirectory {
     }
 }
 
-#[cfg(unix)]
 #[tokio::test]
 async fn receiver_rejects_symlinked_parent_without_writing_outside_destination() {
     // Mutation captured: bypassing safe destination resolution writes through this symlink.

@@ -11,7 +11,9 @@ const sourceIconsPath = path.join(root, "src-tauri", "icons", "android");
 const sourceResourcesPath = path.join(root, "src-tauri", "android", "res");
 const sourceDestinationPluginPath = path.join(root, "src-tauri", "android", "DestinationPlugin.kt");
 const generatedResourcesPath = path.join(appRoot, "src", "main", "res");
+const stringsPath = path.join(generatedResourcesPath, "values", "strings.xml");
 const requireSigning = process.argv.includes("--require-signing");
+const androidDisplayName = "Dukto Share";
 
 async function findFile(directory, filename) {
 	const entries = await readdir(directory, { withFileTypes: true });
@@ -131,6 +133,28 @@ async function configureIcons() {
 
 async function configureResources() {
 	await cp(sourceResourcesPath, generatedResourcesPath, { recursive: true, force: true });
+
+	let strings = await readFile(stringsPath, "utf8");
+	strings = strings
+		.replace(
+			/<string name="app_name">[^<]*<\/string>/,
+			`<string name="app_name">${androidDisplayName}</string>`,
+		)
+		.replace(
+			/<string name="main_activity_title">[^<]*<\/string>/,
+			`<string name="main_activity_title">${androidDisplayName}</string>`,
+		);
+	requireMatch(
+		strings,
+		/<string name="app_name">Dukto Share<\/string>/,
+		"Android app label must be Dukto Share",
+	);
+	requireMatch(
+		strings,
+		/<string name="main_activity_title">Dukto Share<\/string>/,
+		"Android activity title must be Dukto Share",
+	);
+	await writeFile(stringsPath, strings, "utf8");
 
 	const themePaths = [
 		path.join(generatedResourcesPath, "values", "themes.xml"),

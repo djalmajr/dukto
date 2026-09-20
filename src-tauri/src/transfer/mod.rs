@@ -1,5 +1,6 @@
 #[cfg(feature = "app-common")]
 pub mod cancellation;
+pub mod channel;
 pub mod fs;
 pub mod partial_file;
 pub mod quic;

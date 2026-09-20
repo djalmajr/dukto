@@ -51,13 +51,7 @@ impl PartialFile {
             }
         }
 
-        Err(std::io::Error::new(
-            std::io::ErrorKind::AlreadyExists,
-            format!(
-                "Unable to publish a unique destination for {}",
-                requested_path.display()
-            ),
-        ))
+        Err(unique_destination_exhausted_error())
     }
 }
 
@@ -96,10 +90,21 @@ pub async fn create_partial_file(path: &Path) -> Result<PartialFile, std::io::Er
         }
     }
 
-    Err(std::io::Error::new(
+    Err(partial_file_exhausted_error())
+}
+
+fn unique_destination_exhausted_error() -> std::io::Error {
+    std::io::Error::new(
         std::io::ErrorKind::AlreadyExists,
-        format!("Unable to create a partial file beside {}", path.display()),
-    ))
+        "Unable to publish a unique destination",
+    )
+}
+
+fn partial_file_exhausted_error() -> std::io::Error {
+    std::io::Error::new(
+        std::io::ErrorKind::AlreadyExists,
+        "Unable to create a partial file in the selected destination",
+    )
 }
 
 fn conflict_candidate(path: &Path, index: usize) -> PathBuf {
@@ -203,7 +208,7 @@ fn rename_no_replace_sync(source: &Path, destination: &Path) -> Result<(), std::
     }
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "ios", target_os = "macos"))]
 fn rename_no_replace_sync(source: &Path, destination: &Path) -> Result<(), std::io::Error> {
     use std::ffi::CString;
     use std::os::unix::ffi::OsStrExt;
@@ -215,7 +220,7 @@ fn rename_no_replace_sync(source: &Path, destination: &Path) -> Result<(), std::
     let destination = CString::new(destination.as_os_str().as_bytes())
         .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidInput, "NUL in path"))?;
     // SAFETY: both C strings live through the call and RENAME_EXCL prevents replacement.
-    let result = unsafe { macos_renamex_np(source.as_ptr(), destination.as_ptr(), RENAME_EXCL) };
+    let result = unsafe { apple_renamex_np(source.as_ptr(), destination.as_ptr(), RENAME_EXCL) };
     if result == 0 {
         Ok(())
     } else {
@@ -223,10 +228,10 @@ fn rename_no_replace_sync(source: &Path, destination: &Path) -> Result<(), std::
     }
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "ios", target_os = "macos"))]
 unsafe extern "C" {
     #[link_name = "renamex_np"]
-    fn macos_renamex_np(
+    fn apple_renamex_np(
         old_path: *const std::ffi::c_char,
         new_path: *const std::ffi::c_char,
         flags: u32,
@@ -276,6 +281,7 @@ unsafe extern "system" {
 
 #[cfg(not(any(
     target_os = "android",
+    target_os = "ios",
     target_os = "linux",
     target_os = "macos",
     windows
@@ -407,5 +413,17 @@ mod tests {
         assert_eq!(published, requested_path);
         assert_eq!(fs::read(&published).unwrap(), b"complete long-path payload");
         fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn exhaustion_errors_do_not_include_destination_paths() {
+        assert_eq!(
+            unique_destination_exhausted_error().to_string(),
+            "Unable to publish a unique destination"
+        );
+        assert_eq!(
+            partial_file_exhausted_error().to_string(),
+            "Unable to create a partial file in the selected destination"
+        );
     }
 }

@@ -27,6 +27,7 @@ tauri-plugin-os = { version = "2", optional = true }
 tauri-plugin-shell = { version = "2", optional = true }
 tauri-plugin-updater = { version = "2.11", optional = true }
 tauri-plugin-process = { version = "2.3", optional = true }
+tauri-plugin-deep-link = { version = "2", optional = true }
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -43,9 +44,26 @@ snow = "0.9"
 rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
 rcgen = "0.13"
 dirs = "6"
+ring = "0.17"
+spake2 = "0.4"
+iroh = { version = "1.2", default-features = false, features = ["tls-ring"] }
+zeroize = "1"
+base64 = "0.22"
+qrcode = { version = "0.14", default-features = false, features = ["svg"] }
+futures-util = "0.3"
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls-no-provider", "stream"] }
+
+[dev-dependencies]
+iroh = { version = "1.2", default-features = false, features = ["test-utils", "tls-ring"] }
+tauri = { version = "2", features = ["test"] }
 
 [target.'cfg(target_os = "android")'.dependencies]
 libc = "0.2"
+
+[target.'cfg(target_os = "ios")'.dependencies]
+objc2 = "0.6"
+objc2-ui-kit = { version = "0.3", default-features = false, features = ["UIApplication", "UIDevice"] }
+zeroconf = "0.18"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [], optional = true }
@@ -61,6 +79,7 @@ app-common = [
 	"dep:tauri-plugin-os",
 	"dep:tauri-plugin-shell",
 	"dep:tauri-plugin-process",
+	"dep:tauri-plugin-deep-link",
 ]
 desktop = ["app-common", "dep:tauri-plugin-updater"]
 mobile = ["app-common"]

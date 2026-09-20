@@ -17,13 +17,7 @@ bun run dev
 
 The development command runs the Tauri desktop shell with the Vite frontend. Frontend changes hot-reload; Rust changes rebuild the native backend. For mobile platforms, use `bun run tauri ios dev` or `bun run tauri android dev`.
 
-The standalone prototype is optional and does not connect to the network or native APIs:
-
-~~~sh
-bun run proto:dev
-~~~
-
-It uses mock state to preview common host, transfer, and settings flows. Use the desktop app for native dialogs, network transfers, operating-system integration, and final accessibility checks.
+For focused interface iteration, keep deterministic state and validation in testable helpers, then validate the complete flow in the desktop or mobile shell. Use the real application for native dialogs, network transfers, operating-system integration, and final accessibility checks.
 
 ## Build and validate
 

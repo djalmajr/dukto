@@ -1,6 +1,6 @@
 # Dukto
 
-Dukto transfers files and folders between macOS, Windows, Linux, iOS, and Android devices on the same local network. Devices discover one another automatically; transfers move directly between peers without an account or cloud storage service.
+Dukto transfers files and folders between macOS, Windows, Linux, iOS, and Android devices on the same local network. Devices discover one another automatically; transfers move directly between peers without an account or cloud storage service. The source tree also contains an experimental, account-free internet invitation flow; its production relay and rendezvous service is not deployed yet.
 
 The graphical app (desktop and mobile) and the command-line interface use the same transfer protocol.
 
@@ -13,7 +13,7 @@ The graphical app (desktop and mobile) and the command-line interface use the sa
 - Progress, transfer rates, receipts, and transfer-specific cancellation.
 - A CLI for terminal workflows and automation.
 
-Dukto does not currently provide internet relay, persistent trusted-device pairing, or transfer resumption. Display names and hostnames are self-reported; approve requests only from devices you expect.
+Dukto releases do not currently include an operated internet relay/rendezvous service, persistent trusted-device pairing, or transfer resumption. Display names and hostnames are self-reported; approve requests only from devices you expect.
 
 ## Documentation
 
@@ -22,6 +22,7 @@ All documentation body content is maintained in US English. The website may loca
 - [Product scope](docs/PRD.md)
 - [Architecture overview](docs/concepts/overview.md)
 - [LAN discovery](docs/concepts/discovery.md)
+- [Experimental internet transfers](docs/concepts/internet-transfers.md)
 - [Transfer protocol](docs/concepts/transfer-protocol.md)
 - [Security model](docs/concepts/security.md)
 - [CLI guide](docs/guides/cli.md)

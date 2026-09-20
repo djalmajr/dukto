@@ -1,12 +1,14 @@
 # Security
 
-Dukto encrypts transfers over the local network. There is no plaintext transfer mode. Encryption protects the contents in transit, but it does not verify that a peer represents a particular person or device.
+Dukto encrypts transfers. There is no plaintext transfer mode. Encryption protects the contents in transit, but it does not by itself verify that a peer represents a particular person or device.
 
 ## Encryption
 
 Dukto uses QUIC with TLS 1.3 and establishes a Noise session for application data. The QUIC certificates are self-signed and are not verified against a certificate authority. Noise derives session keys, but Dukto does not verify or persist a trusted peer key. An active intermediary may therefore establish separate encrypted sessions with each side.
 
 This design provides encrypted transport, not authenticated identity. Device names, host names, and advertised IDs are labels supplied by the peer. Do not treat them as proof of who is sending a transfer.
+
+The experimental internet path adds invitation possession, authenticated iroh endpoint IDs, transcript-bound pairing, and a bound Noise session. Its rendezvous document is encrypted on the client and relays do not receive plaintext transfer data. Relay operators can still observe IP addresses, timing, duration, and traffic volume. See [Internet Transfers](internet-transfers.md) for the configuration and current release boundary.
 
 ## Approval and trust
 

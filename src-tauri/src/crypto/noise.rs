@@ -1,7 +1,7 @@
 use snow::{Builder, TransportState};
 use std::error::Error;
 use std::time::Duration;
-// tokio::io::AsyncWriteExt used indirectly via quinn streams
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 const NOISE_PATTERN: &str = "Noise_XX_25519_ChaChaPoly_BLAKE2s";
 const MAX_MSG_LEN: usize = 65535;
@@ -104,6 +104,19 @@ pub fn is_remote_transfer_cancellation(error: &(dyn Error + 'static)) -> bool {
         ) {
             return true;
         }
+        if matches!(
+            error.downcast_ref::<iroh::endpoint::ReadError>(),
+            Some(iroh::endpoint::ReadError::Reset(code))
+                if code.into_inner()
+                    == u64::from(crate::protocol::types::TRANSFER_CANCEL_CLOSE_CODE)
+        ) || matches!(
+            error.downcast_ref::<iroh::endpoint::WriteError>(),
+            Some(iroh::endpoint::WriteError::Stopped(code))
+                if code.into_inner()
+                    == u64::from(crate::protocol::types::TRANSFER_CANCEL_CLOSE_CODE)
+        ) {
+            return true;
+        }
         if let Some(io_error) = error.downcast_ref::<std::io::Error>() {
             if io_error
                 .get_ref()
@@ -139,11 +152,40 @@ where
 
 /// Perform Noise_XX handshake as the initiator over a QUIC stream.
 /// Returns a TransportState ready for encrypted communication.
-pub async fn handshake_initiator(
-    send: &mut quinn::SendStream,
-    recv: &mut quinn::RecvStream,
-) -> Result<TransportState, Box<dyn std::error::Error + Send + Sync>> {
-    let builder = Builder::new(NOISE_PATTERN.parse()?);
+pub async fn handshake_initiator<W, R>(
+    send: &mut W,
+    recv: &mut R,
+) -> Result<TransportState, Box<dyn std::error::Error + Send + Sync>>
+where
+    W: AsyncWrite + Unpin + Send,
+    R: AsyncRead + Unpin + Send,
+{
+    handshake_initiator_inner(send, recv, &[]).await
+}
+
+/// Perform an initiator handshake bound to pairing-derived transcript material.
+pub async fn handshake_initiator_bound<W, R>(
+    send: &mut W,
+    recv: &mut R,
+    binding: &[u8; 32],
+) -> Result<TransportState, Box<dyn std::error::Error + Send + Sync>>
+where
+    W: AsyncWrite + Unpin + Send,
+    R: AsyncRead + Unpin + Send,
+{
+    handshake_initiator_inner(send, recv, binding).await
+}
+
+async fn handshake_initiator_inner<W, R>(
+    send: &mut W,
+    recv: &mut R,
+    prologue: &[u8],
+) -> Result<TransportState, Box<dyn std::error::Error + Send + Sync>>
+where
+    W: AsyncWrite + Unpin + Send,
+    R: AsyncRead + Unpin + Send,
+{
+    let builder = Builder::new(NOISE_PATTERN.parse()?).prologue(prologue);
     let keypair = builder.generate_keypair()?;
     let mut noise = builder
         .local_private_key(&keypair.private)
@@ -168,11 +210,40 @@ pub async fn handshake_initiator(
 
 /// Perform Noise_XX handshake as the responder over a QUIC stream.
 /// Returns a TransportState ready for encrypted communication.
-pub async fn handshake_responder(
-    send: &mut quinn::SendStream,
-    recv: &mut quinn::RecvStream,
-) -> Result<TransportState, Box<dyn std::error::Error + Send + Sync>> {
-    let builder = Builder::new(NOISE_PATTERN.parse()?);
+pub async fn handshake_responder<W, R>(
+    send: &mut W,
+    recv: &mut R,
+) -> Result<TransportState, Box<dyn std::error::Error + Send + Sync>>
+where
+    W: AsyncWrite + Unpin + Send,
+    R: AsyncRead + Unpin + Send,
+{
+    handshake_responder_inner(send, recv, &[]).await
+}
+
+/// Perform a responder handshake bound to pairing-derived transcript material.
+pub async fn handshake_responder_bound<W, R>(
+    send: &mut W,
+    recv: &mut R,
+    binding: &[u8; 32],
+) -> Result<TransportState, Box<dyn std::error::Error + Send + Sync>>
+where
+    W: AsyncWrite + Unpin + Send,
+    R: AsyncRead + Unpin + Send,
+{
+    handshake_responder_inner(send, recv, binding).await
+}
+
+async fn handshake_responder_inner<W, R>(
+    send: &mut W,
+    recv: &mut R,
+    prologue: &[u8],
+) -> Result<TransportState, Box<dyn std::error::Error + Send + Sync>>
+where
+    W: AsyncWrite + Unpin + Send,
+    R: AsyncRead + Unpin + Send,
+{
+    let builder = Builder::new(NOISE_PATTERN.parse()?).prologue(prologue);
     let keypair = builder.generate_keypair()?;
     let mut noise = builder
         .local_private_key(&keypair.private)
@@ -196,10 +267,13 @@ pub async fn handshake_responder(
 }
 
 /// Send a length-prefixed frame.
-pub async fn send_framed(
-    send: &mut quinn::SendStream,
+pub async fn send_framed<W>(
+    send: &mut W,
     data: &[u8],
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>>
+where
+    W: AsyncWrite + Unpin + Send,
+{
     let len = (data.len() as u32).to_le_bytes();
     send.write_all(&len)
         .await
@@ -211,9 +285,12 @@ pub async fn send_framed(
 }
 
 /// Receive a length-prefixed frame.
-pub async fn recv_framed(
-    recv: &mut quinn::RecvStream,
-) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
+pub async fn recv_framed<R>(
+    recv: &mut R,
+) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>>
+where
+    R: AsyncRead + Unpin + Send,
+{
     let mut len_buf = [0u8; 4];
     recv.read_exact(&mut len_buf)
         .await

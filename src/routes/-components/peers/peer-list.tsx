@@ -10,10 +10,13 @@ import { formatDeviceHostname } from "~/utils/device-hostname";
 import { movePeer, orderedPeerIds } from "~/routes/-helpers/peer-order";
 import { savePeerOrder, settings } from "~/stores/settings";
 import HostOrder from "./host-order";
+import RemotePeerEntry from "./remote-peer-entry";
 
 interface PeerListProps {
 	onPeerSelect?: (peer: PeerInfo) => void;
-	onAddItems?: (peer: PeerInfo, directory: boolean) => void;
+	onAddFiles?: (peer: PeerInfo) => void;
+	onAddFolders?: (peer: PeerInfo) => void;
+	onAddMedia?: (peer: PeerInfo) => void;
 	getExpandedContent?: (peer: PeerInfo) => JSX.Element | undefined;
 	getTransfers?: (peerId: string) => TransferSlot[] | undefined;
 	actionsDisabled?: boolean;
@@ -53,6 +56,7 @@ function PeerList(props: PeerListProps) {
 
 	return (
 		<div class="flex w-full flex-1 flex-col space-y-2">
+			<RemotePeerEntry />
 			<Show
 				when={peerEntries().length > 0}
 				fallback={
@@ -83,11 +87,25 @@ function PeerList(props: PeerListProps) {
 							if (!currentPeer || !props.getExpandedContent) return undefined;
 							return props.getExpandedContent(currentPeer);
 						};
-						const addItems = () => {
-							if (!availablePeer() || !props.onAddItems) return undefined;
-							return (directory: boolean) => {
+						const addFiles = () => {
+							if (!availablePeer() || !props.onAddFiles) return undefined;
+							return () => {
 								const currentPeer = availablePeer();
-								if (currentPeer) props.onAddItems?.(currentPeer, directory);
+								if (currentPeer) props.onAddFiles?.(currentPeer);
+							};
+						};
+						const addFolders = () => {
+							if (!availablePeer() || !props.onAddFolders) return undefined;
+							return () => {
+								const currentPeer = availablePeer();
+								if (currentPeer) props.onAddFolders?.(currentPeer);
+							};
+						};
+						const addMedia = () => {
+							if (!availablePeer() || !props.onAddMedia) return undefined;
+							return () => {
+								const currentPeer = availablePeer();
+								if (currentPeer) props.onAddMedia?.(currentPeer);
 							};
 						};
 						const onClick = () => {
@@ -107,8 +125,10 @@ function PeerList(props: PeerListProps) {
 										expandedContent={expandedContent()}
 										dropTargetEnabled={!!availablePeer()}
 										dropHighlight={!!availablePeer() && props.dropTargetId === id}
-										actionsDisabled={props.actionsDisabled}
-										onAddItems={addItems()}
+										actionsDisabled={props.actionsDisabled || !availablePeer()}
+										onAddFiles={addFiles()}
+										onAddFolders={addFolders()}
+										onAddMedia={addMedia()}
 										onClick={onClick()}
 										onAbortTransfer={(id) => props.onAbortTransfer?.(id)}
 										onDismissTransfer={(id) => props.onDismissTransfer?.(id)}

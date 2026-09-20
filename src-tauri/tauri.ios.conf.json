@@ -2,5 +2,11 @@
 	"$schema": "https://raw.githubusercontent.com/nicokosi/tauri-v2-schemas/main/tauri.conf.json",
 	"build": {
 		"features": ["mobile"]
+	},
+	"bundle": {
+		"iOS": {
+			"frameworks": ["SystemConfiguration"],
+			"infoPlist": "Info.ios.plist"
+		}
 	}
 }

@@ -31,3 +31,20 @@ test("errors and plural item counts follow the selected language", async () => {
 	await i18n.changeLanguage("en");
 	expect(i18n.t(nativeErrorKey("connection lost"))).toBe("Connection lost.");
 });
+
+test("internet transfer copy is localized and compact at the stacked breakpoint", () => {
+	expect(pt.internetTransferTitle).toBe("Transferir pela internet");
+	expect(es.remoteStatusReadyRelay).toContain("relay");
+	expect(en.remoteStatusReadyDirect).toBe("Connected directly");
+
+	const actionKeys = [
+		"createInternetInvitation",
+		"connectWithInvitation",
+		"copyInvitationLink",
+		"cancelInvitation",
+		"confirmPairingCode",
+	] as const;
+	for (const locale of [en, pt, es]) {
+		for (const key of actionKeys) expect(locale[key].length).toBeLessThanOrEqual(24);
+	}
+});

@@ -57,6 +57,32 @@ impl PeerInfo {
     }
 }
 
+/// Choose the most reliable IPv4 address advertised by a peer.
+///
+/// Bonjour may resolve the same iOS device on Wi-Fi and on the USB link. The
+/// USB address is IPv4 link-local (169.254/16) and can complete a handshake but
+/// disappear during a longer transfer, so a regular LAN address must win even
+/// when it was discovered later.
+pub fn preferred_ipv4_address(addresses: &[IpAddr]) -> Option<IpAddr> {
+    let mut link_local = None;
+
+    for address in addresses {
+        let IpAddr::V4(address) = address else {
+            continue;
+        };
+        if address.is_unspecified() || address.is_loopback() || address.is_multicast() {
+            continue;
+        }
+        if address.is_link_local() {
+            link_local.get_or_insert(IpAddr::V4(*address));
+        } else {
+            return Some(IpAddr::V4(*address));
+        }
+    }
+
+    link_local
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -115,5 +141,42 @@ mod tests {
         assert_eq!(original.display_name, rebuilt.display_name);
         assert_eq!(original.hostname, rebuilt.hostname);
         assert_eq!(original.platform, rebuilt.platform);
+    }
+
+    #[test]
+    fn preferred_ipv4_chooses_lan_over_ios_usb_link_local() {
+        let addresses = vec![
+            "169.254.195.158".parse().unwrap(),
+            "192.168.0.6".parse().unwrap(),
+        ];
+
+        assert_eq!(
+            preferred_ipv4_address(&addresses),
+            Some("192.168.0.6".parse().unwrap())
+        );
+    }
+
+    #[test]
+    fn preferred_ipv4_keeps_link_local_as_a_last_resort() {
+        let addresses = vec![
+            "fe80::1234".parse().unwrap(),
+            "169.254.195.158".parse().unwrap(),
+        ];
+
+        assert_eq!(
+            preferred_ipv4_address(&addresses),
+            Some("169.254.195.158".parse().unwrap())
+        );
+    }
+
+    #[test]
+    fn preferred_ipv4_ignores_addresses_that_cannot_identify_a_remote_peer() {
+        let addresses = vec![
+            "0.0.0.0".parse().unwrap(),
+            "127.0.0.1".parse().unwrap(),
+            "224.0.0.251".parse().unwrap(),
+        ];
+
+        assert_eq!(preferred_ipv4_address(&addresses), None);
     }
 }

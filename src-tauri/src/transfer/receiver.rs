@@ -4,11 +4,12 @@ use tokio::io::AsyncWriteExt;
 use tokio::sync::watch;
 
 use crate::crypto::noise::{
-    is_remote_transfer_cancellation, recv_framed, reset_transfer_send_stream, send_framed,
-    stop_transfer_receive_stream, RemoteTransferCancelled, TransferCancelled,
+    is_remote_transfer_cancellation, recv_framed, send_framed, RemoteTransferCancelled,
+    TransferCancelled,
 };
 use crate::protocol::framing::decode_packet_header;
 use crate::protocol::types::*;
+use crate::transfer::channel::{TransferReceiveStream, TransferSendStream};
 use crate::transfer::fs::resolve_conflict;
 use crate::transfer::partial_file::create_partial_file;
 use crate::transfer::safe_destination::resolve_safe_destination_path;
@@ -22,13 +23,17 @@ pub struct ReceiveResult {
 }
 
 /// Receive a transfer (single or multi-item) over an established Noise-encrypted QUIC session.
-pub async fn receive_transfer(
-    send: &mut quinn::SendStream,
-    recv: &mut quinn::RecvStream,
+pub async fn receive_transfer<S, R>(
+    send: &mut S,
+    recv: &mut R,
     noise: &mut TransportState,
     destination_dir: &Path,
     auto_accept: bool,
-) -> Result<ReceiveResult, Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<ReceiveResult, Box<dyn std::error::Error + Send + Sync>>
+where
+    S: TransferSendStream,
+    R: TransferReceiveStream,
+{
     receive_transfer_with_accept(
         send,
         recv,
@@ -41,15 +46,17 @@ pub async fn receive_transfer(
 }
 
 /// Shared CLI/desktop receiver: approval and progress belong to the caller.
-pub async fn receive_transfer_with_accept<F, Fut, P>(
-    send: &mut quinn::SendStream,
-    recv: &mut quinn::RecvStream,
+pub async fn receive_transfer_with_accept<S, R, F, Fut, P>(
+    send: &mut S,
+    recv: &mut R,
     noise: &mut TransportState,
     destination_dir: &Path,
     approve: F,
     on_progress: P,
 ) -> Result<ReceiveResult, Box<dyn std::error::Error + Send + Sync>>
 where
+    S: TransferSendStream,
+    R: TransferReceiveStream,
     F: FnOnce(TransferHeader) -> Fut,
     Fut: std::future::Future<Output = bool>,
     P: FnMut(&TransferProgress),
@@ -65,15 +72,17 @@ where
     .await
 }
 
-async fn receive_transfer_inner<F, Fut, P>(
-    send: &mut quinn::SendStream,
-    recv: &mut quinn::RecvStream,
+async fn receive_transfer_inner<S, R, F, Fut, P>(
+    send: &mut S,
+    recv: &mut R,
     noise: &mut TransportState,
     destination_dir: &Path,
     approve: F,
     mut on_progress: P,
 ) -> Result<ReceiveResult, Box<dyn std::error::Error + Send + Sync>>
 where
+    S: TransferSendStream,
+    R: TransferReceiveStream,
     F: FnOnce(TransferHeader, watch::Receiver<bool>) -> Fut,
     Fut: std::future::Future<Output = bool>,
     P: FnMut(&TransferProgress),
@@ -100,9 +109,9 @@ where
         tokio::select! {
             biased;
             accepted = &mut approval => break accepted,
-            reset = recv.received_reset(), if watch_peer_reset => {
+            reset = recv.received_reset_transfer(), if watch_peer_reset => {
                 match reset {
-                    Ok(Some(code)) if code == TRANSFER_CANCEL_CLOSE_CODE.into() => {
+                    Ok(Some(code)) if code == u64::from(TRANSFER_CANCEL_CLOSE_CODE) => {
                         peer_cancelled.send_replace(true);
                         // Give approval adapters time to remove their pending request before
                         // the caller sends the reliable reverse-stream acknowledgement.
@@ -130,8 +139,9 @@ where
     send_encrypted_json(send, noise, PacketType::AcceptReject, &response).await?;
 
     if !accepted {
-        send.finish()?;
-        let _ = tokio::time::timeout(std::time::Duration::from_secs(5), send.stopped()).await;
+        send.finish_transfer()?;
+        let _ =
+            tokio::time::timeout(std::time::Duration::from_secs(5), send.stopped_transfer()).await;
         return Err("Transfer rejected".into());
     }
 
@@ -222,9 +232,9 @@ where
         bytes_received,
     };
     send_encrypted_json(send, noise, PacketType::Success, &receipt).await?;
-    send.finish()?;
+    send.finish_transfer()?;
     // Keep the response alive until delivered; the sender can close after reading it.
-    let _ = tokio::time::timeout(std::time::Duration::from_secs(5), send.stopped()).await;
+    let _ = tokio::time::timeout(std::time::Duration::from_secs(5), send.stopped_transfer()).await;
     Ok(ReceiveResult {
         transfer_id: header.transfer_id,
         items_received,
@@ -233,9 +243,9 @@ where
 }
 
 /// Receive a transfer while handling local cancellation and reliable peer reset/stop signals.
-pub async fn receive_transfer_with_cancellation<F, Fut, P, C>(
-    send: &mut quinn::SendStream,
-    recv: &mut quinn::RecvStream,
+pub async fn receive_transfer_with_cancellation<S, R, F, Fut, P, C>(
+    send: &mut S,
+    recv: &mut R,
     noise: &mut TransportState,
     destination_dir: &Path,
     approve: F,
@@ -243,6 +253,8 @@ pub async fn receive_transfer_with_cancellation<F, Fut, P, C>(
     cancelled: C,
 ) -> Result<ReceiveResult, Box<dyn std::error::Error + Send + Sync>>
 where
+    S: TransferSendStream,
+    R: TransferReceiveStream,
     F: FnOnce(TransferHeader, watch::Receiver<bool>) -> Fut,
     Fut: std::future::Future<Output = bool>,
     P: FnMut(&TransferProgress),
@@ -265,29 +277,35 @@ where
         Some(Err(error)) if is_remote_transfer_cancellation(error.as_ref()) => {
             // A reset from the sender is acknowledged on our send half. A stop
             // from the sender is answered by stopping the corresponding receive half.
-            reset_transfer_send_stream(send);
-            stop_transfer_receive_stream(recv);
+            send.reset_transfer(TRANSFER_CANCEL_CLOSE_CODE);
+            recv.stop_transfer(TRANSFER_CANCEL_CLOSE_CODE);
             Err(Box::new(RemoteTransferCancelled))
         }
         Some(Err(error)) => Err(error),
         None => {
-            stop_transfer_receive_stream(recv);
-            let _ = tokio::time::timeout(std::time::Duration::from_secs(3), send.stopped()).await;
+            recv.stop_transfer(TRANSFER_CANCEL_CLOSE_CODE);
+            let _ =
+                tokio::time::timeout(std::time::Duration::from_secs(3), send.stopped_transfer())
+                    .await;
             Err(Box::new(TransferCancelled))
         }
     }
 }
 
 /// Receive binary chunks for a single file item, reading exactly `expected_bytes`.
-async fn receive_item_chunks<P: FnMut(u64)>(
-    recv: &mut quinn::RecvStream,
+async fn receive_item_chunks<R, P>(
+    recv: &mut R,
     noise: &mut TransportState,
     file: &mut tokio::fs::File,
     expected_bytes: u64,
     total_bytes: &mut u64,
     header: &TransferHeader,
     on_progress: &mut P,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>>
+where
+    R: TransferReceiveStream,
+    P: FnMut(u64),
+{
     let mut item_bytes: u64 = 0;
 
     while item_bytes < expected_bytes {
@@ -317,25 +335,33 @@ async fn receive_item_chunks<P: FnMut(u64)>(
 }
 
 /// Backward-compatible wrapper for single-file receive.
-pub async fn receive_file(
-    send: &mut quinn::SendStream,
-    recv: &mut quinn::RecvStream,
+pub async fn receive_file<S, R>(
+    send: &mut S,
+    recv: &mut R,
     noise: &mut TransportState,
     destination_dir: &Path,
     auto_accept: bool,
-) -> Result<(String, u64), Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<(String, u64), Box<dyn std::error::Error + Send + Sync>>
+where
+    S: TransferSendStream,
+    R: TransferReceiveStream,
+{
     let result = receive_transfer(send, recv, noise, destination_dir, auto_accept).await?;
     // For backward compat, return a generic name
     Ok(("transfer".into(), result.bytes_received))
 }
 
 /// Send an encrypted JSON packet.
-async fn send_encrypted_json<T: serde::Serialize>(
-    send: &mut quinn::SendStream,
+async fn send_encrypted_json<S, T>(
+    send: &mut S,
     noise: &mut TransportState,
     ptype: PacketType,
     value: &T,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>>
+where
+    S: TransferSendStream,
+    T: serde::Serialize,
+{
     let json = serde_json::to_vec(value)?;
     let mut plaintext = Vec::with_capacity(1 + json.len());
     plaintext.push(ptype as u8);
@@ -347,10 +373,13 @@ async fn send_encrypted_json<T: serde::Serialize>(
 }
 
 /// Receive and decrypt a packet.
-async fn recv_encrypted(
-    recv: &mut quinn::RecvStream,
+async fn recv_encrypted<R>(
+    recv: &mut R,
     noise: &mut TransportState,
-) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>>
+where
+    R: TransferReceiveStream,
+{
     let encrypted = recv_framed(recv).await?;
     let mut decrypted = vec![0u8; encrypted.len() + 128];
     let len = noise.read_message(&encrypted, &mut decrypted)?;

@@ -1,6 +1,6 @@
 # Overview
 
-Dukto transfers files between devices on the same local network. There is no account or cloud transfer service: run it on two devices and let local discovery find the receiver.
+Dukto's stable flow transfers files between devices on the same local network. There is no account or cloud file-storage service: run it on two devices and let local discovery find the receiver. The source tree also includes an [experimental internet invitation flow](internet-transfers.md) whose operated relay and rendezvous service is still a release gate.
 
 ## How It Works
 
@@ -22,6 +22,8 @@ The CLI uses the same Rust transfer implementation as the application. It can di
 **Why QUIC?** QUIC runs over UDP and provides reliable streams, multiplexing, and encrypted transport through TLS 1.3.
 
 **Why Noise with QUIC?** Dukto establishes a Noise session for application data in addition to QUIC's TLS transport. Session encryption does not verify a peer's real-world identity; review each incoming request and its sender details.
+
+**Why iroh for internet transfers?** It prefers a peer-to-peer path and can fall back to configured encrypted relays when NAT traversal cannot connect the devices directly. Pairing authenticates the invited transport endpoints before the shared transfer protocol starts.
 
 **Why SolidJS?** Fine-grained reactivity keeps updates such as transfer progress focused on the UI elements that changed.
 

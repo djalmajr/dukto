@@ -8,7 +8,7 @@ interface AndroidFileSelectionEvent {
 	files: FileMetadataInfo[] | null;
 }
 
-function pickAndroidFiles(): Promise<FileMetadataInfo[] | null> {
+function pickAndroidFiles(media: boolean): Promise<FileMetadataInfo[] | null> {
 	return new Promise((resolve, reject) => {
 		let unlisten: (() => void) | undefined;
 		void listen<AndroidFileSelectionEvent>("files:selected", ({ payload }) => {
@@ -18,7 +18,7 @@ function pickAndroidFiles(): Promise<FileMetadataInfo[] | null> {
 		})
 			.then((stopListening) => {
 				unlisten = stopListening;
-				return invoke("open_send_file_picker", { multiple: true });
+				return invoke("open_send_file_picker", { media, multiple: true });
 			})
 			.catch((error) => {
 				unlisten?.();
@@ -27,13 +27,32 @@ function pickAndroidFiles(): Promise<FileMetadataInfo[] | null> {
 	});
 }
 
+export function supportsFolderSelection(currentPlatform: string): boolean {
+	return currentPlatform !== "ios";
+}
+
+export function supportsMediaSelection(currentPlatform: string): boolean {
+	return currentPlatform === "android" || currentPlatform === "ios";
+}
+
 export async function pickSendItems(
 	currentPlatform: string,
 	directory: boolean,
+	media = false,
 ): Promise<FileMetadataInfo[] | null> {
-	if (currentPlatform === "android" && !directory) return pickAndroidFiles();
+	if (directory && !supportsFolderSelection(currentPlatform)) return null;
+	if (currentPlatform === "android" && !directory) return pickAndroidFiles(media);
 
-	const selected = await open({ multiple: true, directory });
+	const selected = await open({
+		multiple: true,
+		directory,
+		...(currentPlatform === "ios"
+			? {
+					fileAccessMode: "copy" as const,
+					pickerMode: media ? ("media" as const) : ("document" as const),
+				}
+			: {}),
+	});
 	if (!selected) return null;
 	const paths = Array.isArray(selected) ? selected : [selected];
 	return resolveFileMetadata(paths);

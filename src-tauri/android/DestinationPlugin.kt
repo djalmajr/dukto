@@ -8,7 +8,10 @@ import android.os.ParcelFileDescriptor
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
 import android.system.Os
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.ActivityResult
+import androidx.activity.result.contract.ActivityResultContracts.PickMultipleVisualMedia
+import androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageAndVideo
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import app.tauri.annotation.ActivityCallback
@@ -24,6 +27,7 @@ import java.util.UUID
 
 @InvokeArg
 class PickFilesArgs {
+  var media: Boolean = false
   var multiple: Boolean = true
 }
 
@@ -63,12 +67,19 @@ class DestinationPlugin(private val activity: Activity) : Plugin(activity) {
   @Command
   fun pickFiles(invoke: Invoke) {
     val args = invoke.parseArgs(PickFilesArgs::class.java)
-    val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-      addCategory(Intent.CATEGORY_OPENABLE)
-      addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-      addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
-      type = "*/*"
-      putExtra(Intent.EXTRA_ALLOW_MULTIPLE, args.multiple)
+    val intent = if (args.media) {
+      PickMultipleVisualMedia().createIntent(
+        activity,
+        PickVisualMediaRequest(ImageAndVideo),
+      )
+    } else {
+      Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+        addCategory(Intent.CATEGORY_OPENABLE)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+        type = "*/*"
+        putExtra(Intent.EXTRA_ALLOW_MULTIPLE, args.multiple)
+      }
     }
     startActivityForResult(invoke, intent, "filePickerResult")
   }

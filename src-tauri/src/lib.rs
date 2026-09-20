@@ -2,6 +2,7 @@
 pub mod commands;
 pub mod crypto;
 pub mod discovery;
+pub mod internet;
 pub mod platform;
 pub mod protocol;
 pub mod state;
@@ -9,6 +10,8 @@ pub mod transfer;
 
 #[cfg(feature = "app-common")]
 mod app_runner {
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
     use tauri::{Emitter, Manager};
 
     use crate::commands;
@@ -18,6 +21,7 @@ mod app_runner {
     use crate::transfer::server::TransferServer;
 
     const QUIC_PORT: u16 = 4242;
+    const REMOTE_SESSION_SWEEP_INTERVAL: Duration = Duration::from_secs(30);
 
     #[cfg_attr(
         any(target_os = "android", target_os = "ios"),
@@ -35,6 +39,7 @@ mod app_runner {
 
         #[allow(unused_mut)]
         let mut builder = tauri::Builder::default()
+            .plugin(tauri_plugin_deep_link::init())
             .plugin(tauri_plugin_dialog::init())
             .plugin(tauri_plugin_notification::init())
             .plugin(tauri_plugin_os::init())
@@ -70,6 +75,12 @@ mod app_runner {
             commands::send_to_peer,
             commands::cancel_transfer,
             commands::respond_transfer,
+            commands::internet::create_internet_invite,
+            commands::internet::get_internet_invitation_link,
+            commands::internet::import_internet_invite,
+            commands::internet::send_to_internet_session,
+            commands::internet::cancel_internet_invite,
+            commands::internet::confirm_internet_pairing_code,
             commands::updater::download_app_update,
             commands::updater::install_app_update,
         ]);
@@ -90,6 +101,12 @@ mod app_runner {
             commands::send_to_peer,
             commands::cancel_transfer,
             commands::respond_transfer,
+            commands::internet::create_internet_invite,
+            commands::internet::get_internet_invitation_link,
+            commands::internet::import_internet_invite,
+            commands::internet::send_to_internet_session,
+            commands::internet::cancel_internet_invite,
+            commands::internet::confirm_internet_pairing_code,
         ]);
 
         builder
@@ -98,6 +115,8 @@ mod app_runner {
                 if let Some(window) = app.get_webview_window("main") {
                     window.set_decorations(false)?;
                 }
+                #[cfg(target_os = "ios")]
+                crate::platform::ios_power::set_idle_timer_disabled(app.handle(), true)?;
                 tracing::info!("Dukto v{} starting", env!("CARGO_PKG_VERSION"));
 
                 let data_dir = app
@@ -108,6 +127,7 @@ mod app_runner {
                     .expect("failed to load or create device identity");
 
                 let app_state = AppState::new(device, data_dir);
+                let remote_sessions = app_state.remote_sessions.clone();
                 let device = app_state.get_device();
                 tracing::info!(
                     device_id = %device.device_id,
@@ -117,6 +137,18 @@ mod app_runner {
                     "Device identity loaded"
                 );
                 app.manage(app_state);
+
+                tauri::async_runtime::spawn(async move {
+                    let mut interval = tokio::time::interval(REMOTE_SESSION_SWEEP_INTERVAL);
+                    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+                    loop {
+                        interval.tick().await;
+                        let Ok(elapsed) = SystemTime::now().duration_since(UNIX_EPOCH) else {
+                            continue;
+                        };
+                        remote_sessions.expire(elapsed.as_secs());
+                    }
+                });
 
                 // Start QUIC listener for incoming transfers with fallback port
                 let transfer_registry = app.state::<AppState>().transfer_registry.clone();
@@ -172,6 +204,8 @@ mod app_runner {
             .run(|app, event| {
                 if matches!(event, tauri::RunEvent::Exit) {
                     app.state::<DiscoveryHandle>().shutdown();
+                    #[cfg(target_os = "ios")]
+                    let _ = crate::platform::ios_power::set_idle_timer_disabled(app, false);
                 }
             });
     }

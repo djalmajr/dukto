@@ -5,6 +5,9 @@ use std::sync::{Arc, Mutex};
 use dukto_lib::crypto::noise::{handshake_initiator, handshake_responder};
 use dukto_lib::protocol::types::TransferProgress;
 use dukto_lib::state::device::DeviceIdentity;
+use dukto_lib::transfer::channel::{
+    AuthenticatedChannel, ChannelCloseReason, QuinnAuthenticatedChannel, RouteKind,
+};
 use dukto_lib::transfer::quic::create_endpoint;
 use dukto_lib::transfer::receiver::{receive_transfer, receive_transfer_with_accept};
 use dukto_lib::transfer::sender::{send_file, send_transfer};
@@ -167,10 +170,13 @@ async fn run_transfer(
     let server_handle = tokio::spawn(async move {
         let incoming = server_ep.accept().await.unwrap();
         let conn = incoming.await.unwrap();
-        let (mut send, mut recv) = conn.accept_bi().await.unwrap();
+        let channel = QuinnAuthenticatedChannel::new_direct(conn, "device-sender").unwrap();
+        assert_eq!(channel.peer_id(), "device-sender");
+        assert_eq!(channel.route_kind(), RouteKind::Direct);
+        let (mut send, mut recv) = channel.accept_bi().await.unwrap();
         let mut noise = handshake_responder(&mut send, &mut recv).await.unwrap();
         let result = receive_transfer(&mut send, &mut recv, &mut noise, &dest, auto_accept).await;
-        conn.close(0u32.into(), b"done");
+        channel.close(ChannelCloseReason::Completed);
         server_ep.close(0u32.into(), b"shutdown");
         result
     });
@@ -180,7 +186,10 @@ async fn run_transfer(
         .unwrap()
         .await
         .unwrap();
-    let (mut send, mut recv) = conn.open_bi().await.unwrap();
+    let channel = QuinnAuthenticatedChannel::new_direct(conn, "test-receiver").unwrap();
+    assert_eq!(channel.peer_id(), "test-receiver");
+    assert_eq!(channel.route_kind(), RouteKind::Direct);
+    let (mut send, mut recv) = channel.open_bi().await.unwrap();
     let mut noise = handshake_initiator(&mut send, &mut recv).await.unwrap();
 
     let bytes_sent = send_transfer(
@@ -196,7 +205,7 @@ async fn run_transfer(
 
     let recv_result = server_handle.await.unwrap();
 
-    conn.close(0u32.into(), b"done");
+    channel.close(ChannelCloseReason::Completed);
     client_ep.close(0u32.into(), b"shutdown");
 
     match (bytes_sent, recv_result) {

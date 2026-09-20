@@ -1,3 +1,4 @@
+pub mod internet;
 #[cfg(feature = "desktop")]
 pub mod updater;
 
@@ -38,7 +39,7 @@ pub fn get_settings(state: State<'_, AppState>) -> Settings {
 
 #[tauri::command]
 pub fn set_destination_dir(state: State<'_, AppState>, path: String) -> Result<(), String> {
-    tracing::debug!(path = %path, "Saving destination directory");
+    tracing::debug!("Saving destination directory");
     state
         .update_settings(|s| {
             s.destination_dir = path;
@@ -75,7 +76,7 @@ pub fn open_destination_picker(app_handle: tauri::AppHandle) -> Result<(), Strin
             tracing::debug!("Opening Android destination picker");
             let event = match picker.pick_directory().await {
                 Ok(path) => {
-                    tracing::debug!(?path, "Android destination picker returned");
+                    tracing::debug!("Android destination picker returned");
                     DestinationSelectionEvent { path, error: None }
                 }
                 Err(error) => {
@@ -101,7 +102,11 @@ pub fn open_destination_picker(app_handle: tauri::AppHandle) -> Result<(), Strin
 }
 
 #[tauri::command]
-pub fn open_send_file_picker(app_handle: tauri::AppHandle, multiple: bool) -> Result<(), String> {
+pub fn open_send_file_picker(
+    app_handle: tauri::AppHandle,
+    multiple: bool,
+    media: bool,
+) -> Result<(), String> {
     #[cfg(target_os = "android")]
     {
         use tauri::Manager;
@@ -111,8 +116,8 @@ pub fn open_send_file_picker(app_handle: tauri::AppHandle, multiple: bool) -> Re
             .inner()
             .clone();
         tauri::async_runtime::spawn(async move {
-            tracing::debug!(multiple, "Opening Android send file picker");
-            let event = match picker.pick_files(multiple).await {
+            tracing::debug!(media, multiple, "Opening Android send file picker");
+            let event = match picker.pick_files(multiple, media).await {
                 Ok(files) => SendFileSelectionEvent { files, error: None },
                 Err(error) => {
                     tracing::warn!(%error, "Android send file picker failed");
@@ -131,7 +136,7 @@ pub fn open_send_file_picker(app_handle: tauri::AppHandle, multiple: bool) -> Re
 
     #[cfg(not(target_os = "android"))]
     {
-        let _ = (app_handle, multiple);
+        let _ = (app_handle, media, multiple);
         Err("Native send file picker is only available on Android".into())
     }
 }
@@ -146,7 +151,13 @@ pub async fn release_selected_files(
         release_android_selected_files(&app_handle, &paths).await
     }
 
-    #[cfg(not(target_os = "android"))]
+    #[cfg(target_os = "ios")]
+    {
+        let _ = app_handle;
+        release_ios_selected_files(&paths).await
+    }
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
         let _ = (app_handle, paths);
         Ok(())
@@ -174,17 +185,55 @@ pub async fn open_privacy_policy(app_handle: tauri::AppHandle) -> Result<(), Str
 }
 
 #[cfg(target_os = "android")]
-async fn release_android_selected_files(
-    app_handle: &tauri::AppHandle,
+async fn release_android_selected_files<R: tauri::Runtime>(
+    app_handle: &tauri::AppHandle<R>,
     paths: &[String],
 ) -> Result<(), String> {
     use tauri::Manager;
 
     app_handle
-        .state::<crate::platform::android_destination::AndroidDestination<tauri::Wry>>()
+        .state::<crate::platform::android_destination::AndroidDestination<R>>()
         .inner()
         .release_files(paths)
         .await
+}
+
+#[cfg(target_os = "ios")]
+async fn release_ios_selected_files(paths: &[String]) -> Result<(), String> {
+    let root = ios_selected_files_root()?;
+    let canonical_root = match tokio::fs::canonicalize(&root).await {
+        Ok(root) => root,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error.to_string()),
+    };
+
+    for path in paths {
+        let selected = PathBuf::from(path);
+        let canonical = match tokio::fs::canonicalize(&selected).await {
+            Ok(path) => path,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => return Err(error.to_string()),
+        };
+        if !canonical.starts_with(&canonical_root) {
+            return Err("Refusing to release a file outside the iOS selection cache".into());
+        }
+        let metadata = tokio::fs::symlink_metadata(&canonical)
+            .await
+            .map_err(|error| error.to_string())?;
+        if metadata.is_dir() {
+            tokio::fs::remove_dir_all(&canonical)
+                .await
+                .map_err(|error| error.to_string())?;
+        } else {
+            tokio::fs::remove_file(&canonical)
+                .await
+                .map_err(|error| error.to_string())?;
+        }
+        if let Some(parent) = canonical.parent() {
+            let _ = tokio::fs::remove_dir(parent).await;
+        }
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -232,12 +281,9 @@ pub async fn send_to_peer(
         if peer.protocol_version != crate::discovery::types::PROTOCOL_VERSION {
             return Err("Peer uses an incompatible protocol. Update both Dukto apps.".into());
         }
-        let addr = peer
-            .addresses
-            .iter()
-            .find(|ip| ip.is_ipv4())
-            .ok_or("Peer has no IPv4 address")?;
-        SocketAddr::new(*addr, peer.port)
+        let addr = crate::discovery::types::preferred_ipv4_address(&peer.addresses)
+            .ok_or("Peer has no usable IPv4 address")?;
+        SocketAddr::new(addr, peer.port)
     } else if let (Some(addr_str), Some(port)) = (&peer_address, peer_port) {
         let addr: std::net::IpAddr = addr_str
             .parse()
@@ -250,7 +296,7 @@ pub async fn send_to_peer(
     let sender = state.get_device();
     let transfer_id = uuid::Uuid::new_v4().to_string();
     let input_paths: Vec<PathBuf> = paths.iter().map(PathBuf::from).collect();
-    #[cfg(target_os = "android")]
+    #[cfg(any(target_os = "android", target_os = "ios"))]
     let selected_paths = paths.clone();
     let control = state
         .transfer_registry
@@ -371,6 +417,11 @@ pub async fn send_to_peer(
             tracing::warn!(%error, transfer_id = %tid, "Could not release selected Android files");
         }
 
+        #[cfg(target_os = "ios")]
+        if let Err(error) = release_ios_selected_files(&selected_paths).await {
+            tracing::warn!(%error, transfer_id = %tid, "Could not release selected iOS files");
+        }
+
         if control.is_cancelled() {
             tracing::info!(transfer_id = %tid, "Transfer cancelled");
             return;
@@ -454,10 +505,15 @@ pub async fn resolve_file_metadata(paths: Vec<String>) -> Result<Vec<FileMetadat
     let mut results = Vec::with_capacity(paths.len());
 
     for path_str in &paths {
-        let path = std::path::Path::new(path_str);
-        let metadata = tokio::fs::metadata(path)
+        let selected_path = selected_file_path(path_str)?;
+        #[cfg(target_os = "ios")]
+        let path = stage_ios_selected_file(&selected_path).await?;
+        #[cfg(not(target_os = "ios"))]
+        let path = selected_path;
+
+        let metadata = tokio::fs::metadata(&path)
             .await
-            .map_err(|e| format!("Cannot read {}: {}", path_str, e))?;
+            .map_err(|error| format!("Selected item metadata could not be read: {error}"))?;
 
         let name = path
             .file_name()
@@ -466,20 +522,66 @@ pub async fn resolve_file_metadata(paths: Vec<String>) -> Result<Vec<FileMetadat
             .to_string();
 
         let size = if metadata.is_dir() {
-            dir_size(path).await.unwrap_or(0)
+            dir_size(&path).await.unwrap_or(0)
         } else {
             metadata.len()
         };
 
         results.push(FileMetadataInfo {
             name,
-            path: path_str.clone(),
+            path: path.to_string_lossy().to_string(),
             size,
             is_dir: metadata.is_dir(),
         });
     }
 
     Ok(results)
+}
+
+fn selected_file_path(value: &str) -> Result<PathBuf, String> {
+    if value.starts_with("file:") {
+        return tauri::Url::parse(value)
+            .map_err(|error| format!("Invalid file URL: {error}"))?
+            .to_file_path()
+            .map_err(|_| "The selected file URL is not a local path".to_string());
+    }
+    Ok(PathBuf::from(value))
+}
+
+#[cfg(target_os = "ios")]
+fn ios_selected_files_root() -> Result<PathBuf, String> {
+    dirs::cache_dir()
+        .map(|directory| directory.join("dukto-selected-files"))
+        .ok_or_else(|| "The iOS cache directory is unavailable".to_string())
+}
+
+#[cfg(target_os = "ios")]
+async fn stage_ios_selected_file(source: &std::path::Path) -> Result<PathBuf, String> {
+    let metadata = tokio::fs::symlink_metadata(source)
+        .await
+        .map_err(|error| format!("Selected iOS item could not be read: {error}"))?;
+    if !metadata.is_file() {
+        return Err("The selected iOS item is not a regular file".into());
+    }
+
+    let directory = ios_selected_files_root()?.join(uuid::Uuid::new_v4().to_string());
+    tokio::fs::create_dir_all(&directory)
+        .await
+        .map_err(|error| error.to_string())?;
+    let name = source
+        .file_name()
+        .and_then(|name| name.to_str())
+        .map(crate::transfer::fs::sanitize_name)
+        .unwrap_or_else(|| "document".into());
+    let destination = directory.join(name);
+
+    if tokio::fs::rename(source, &destination).await.is_err() {
+        tokio::fs::copy(source, &destination)
+            .await
+            .map_err(|error| format!("Could not preserve the selected iOS file: {error}"))?;
+        let _ = tokio::fs::remove_file(source).await;
+    }
+    Ok(destination)
 }
 
 /// Compute total size of a directory recursively.
@@ -580,7 +682,34 @@ mod tests {
 
     #[tokio::test]
     async fn resolve_metadata_nonexistent_fails() {
-        let result = resolve_file_metadata(vec!["/tmp/duto-nonexistent-xyz".into()]).await;
-        assert!(result.is_err());
+        let sentinel = "private-filename-sentinel";
+        let result = resolve_file_metadata(vec![format!("/tmp/{sentinel}")])
+            .await
+            .unwrap_err();
+        assert!(!result.contains(sentinel));
+        assert!(result.starts_with("Selected item metadata could not be read:"));
+    }
+
+    #[test]
+    fn file_picker_urls_are_normalized_to_local_paths() {
+        #[cfg(windows)]
+        let (url, expected) = (
+            "file:///C:/Users/Public/My%20Document.pdf",
+            PathBuf::from(r"C:\Users\Public\My Document.pdf"),
+        );
+        #[cfg(not(windows))]
+        let (url, expected) = (
+            "file:///tmp/My%20Document.pdf",
+            PathBuf::from("/tmp/My Document.pdf"),
+        );
+
+        let path = selected_file_path(url).unwrap();
+        assert_eq!(path, expected);
+    }
+
+    #[test]
+    fn ordinary_paths_are_preserved() {
+        let path = selected_file_path("/tmp/document.pdf").unwrap();
+        assert_eq!(path, PathBuf::from("/tmp/document.pdf"));
     }
 }

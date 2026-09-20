@@ -98,10 +98,10 @@ pub fn validate_relative_path(path: &str) -> Result<(), String> {
         return Err("Empty relative path".into());
     }
     if path.starts_with('/') || path.starts_with('\\') {
-        return Err(format!("Absolute path rejected: {}", path));
+        return Err("Absolute paths are not allowed".into());
     }
     if path.contains("..") {
-        return Err(format!("Path traversal rejected: {}", path));
+        return Err("Path traversal is not allowed".into());
     }
     if path.contains('\0') {
         return Err("Null byte in path".into());
@@ -267,6 +267,15 @@ mod tests {
     fn validate_path_rejects_empty_and_null() {
         assert!(validate_relative_path("").is_err());
         assert!(validate_relative_path("file\0.txt").is_err());
+    }
+
+    #[test]
+    fn validation_errors_do_not_echo_received_paths() {
+        let sentinel = "private-filename-sentinel";
+        for path in [format!("/{sentinel}"), format!("../{sentinel}")] {
+            let error = validate_relative_path(&path).unwrap_err();
+            assert!(!error.contains(sentinel));
+        }
     }
 
     // --- sanitize_name ---

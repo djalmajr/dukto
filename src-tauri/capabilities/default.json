@@ -9,6 +9,7 @@
 		"core:window:allow-minimize",
 		"core:window:allow-close",
 		"dialog:default",
+		"deep-link:default",
 		"notification:default",
 		"os:default",
 		"shell:default",

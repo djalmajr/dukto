@@ -6,13 +6,13 @@ use std::{
 use tokio::io::AsyncReadExt;
 
 use crate::crypto::noise::{
-    is_remote_transfer_cancellation, recv_framed, reset_transfer_send_stream, send_framed,
-    stop_transfer_receive_stream, wait_for_transfer_cancel_ack, RemoteTransferCancelled,
+    is_remote_transfer_cancellation, recv_framed, send_framed, RemoteTransferCancelled,
     TransferCancelled,
 };
 use crate::protocol::framing::decode_packet_header;
 use crate::protocol::types::*;
 use crate::state::device::DeviceIdentity;
+use crate::transfer::channel::{TransferReceiveStream, TransferSendStream};
 use crate::transfer::fs::{walk_directory, WalkItem};
 
 // Noise max message is 65535. Keep chunks under the limit with overhead.
@@ -29,9 +29,9 @@ pub struct CancellableSendCallbacks<C, F, A = fn()> {
 /// `inputs` can be files or directories; directories are walked recursively.
 /// `on_progress` is called after each chunk with a `TransferProgress` snapshot.
 /// Returns total bytes sent.
-pub async fn send_transfer<F>(
-    send: &mut quinn::SendStream,
-    recv: &mut quinn::RecvStream,
+pub async fn send_transfer<S, R, F>(
+    send: &mut S,
+    recv: &mut R,
     noise: &mut TransportState,
     inputs: &[PathBuf],
     transfer_id: &str,
@@ -39,6 +39,8 @@ pub async fn send_transfer<F>(
     on_progress: F,
 ) -> Result<u64, Box<dyn std::error::Error + Send + Sync>>
 where
+    S: TransferSendStream,
+    R: TransferReceiveStream,
     F: FnMut(&TransferProgress),
 {
     send_transfer_full(
@@ -57,9 +59,9 @@ where
 /// Send one or more files/folders over an established Noise-encrypted QUIC session,
 /// invoking `on_accepted` when the receiver confirms acceptance before item transmission begins.
 #[allow(clippy::too_many_arguments)]
-pub async fn send_transfer_full<F, A>(
-    send: &mut quinn::SendStream,
-    recv: &mut quinn::RecvStream,
+pub async fn send_transfer_full<S, R, F, A>(
+    send: &mut S,
+    recv: &mut R,
     noise: &mut TransportState,
     inputs: &[PathBuf],
     transfer_id: &str,
@@ -68,6 +70,8 @@ pub async fn send_transfer_full<F, A>(
     on_accepted: A,
 ) -> Result<u64, Box<dyn std::error::Error + Send + Sync>>
 where
+    S: TransferSendStream,
+    R: TransferReceiveStream,
     F: FnMut(&TransferProgress),
     A: FnOnce(),
 {
@@ -164,7 +168,7 @@ where
 
     // 5. Send Success
     send_encrypted_raw(send, noise, PacketType::Success, &[]).await?;
-    send.finish()?;
+    send.finish_transfer()?;
 
     // Do not report success or close QUIC while payloads are still in flight.
     let data = tokio::time::timeout(
@@ -191,9 +195,9 @@ where
 /// Send a transfer while handling both local cancellation and the peer's reliable
 /// QUIC stream cancellation signal. The reverse stream carries the acknowledgement
 /// when this side initiated the cancellation.
-pub async fn send_transfer_with_cancellation<F, C, A>(
-    send: &mut quinn::SendStream,
-    recv: &mut quinn::RecvStream,
+pub async fn send_transfer_with_cancellation<S, R, F, C, A>(
+    send: &mut S,
+    recv: &mut R,
     noise: &mut TransportState,
     inputs: &[PathBuf],
     transfer_id: &str,
@@ -201,6 +205,8 @@ pub async fn send_transfer_with_cancellation<F, C, A>(
     callbacks: CancellableSendCallbacks<C, F, A>,
 ) -> Result<u64, Box<dyn std::error::Error + Send + Sync>>
 where
+    S: TransferSendStream,
+    R: TransferReceiveStream,
     F: FnMut(&TransferProgress),
     C: Future<Output = ()>,
     A: FnOnce(),
@@ -214,11 +220,11 @@ where
     enum Outcome<T> {
         Complete(T),
         LocalCancellation,
-        PeerStopped(quinn::VarInt),
+        PeerStopped(u64),
     }
 
     let outcome = {
-        let peer_stopped = send.stopped();
+        let peer_stopped = send.stopped_transfer();
         tokio::pin!(peer_stopped);
         let transfer = send_transfer_full(
             send,
@@ -254,32 +260,36 @@ where
         Outcome::Complete(Err(error)) if is_remote_transfer_cancellation(error.as_ref()) => {
             // The peer reset the inbound stream or stopped this outbound stream.
             // Send both available stream signals so either case is acknowledged.
-            reset_transfer_send_stream(send);
-            stop_transfer_receive_stream(recv);
+            send.reset_transfer(crate::protocol::types::TRANSFER_CANCEL_CLOSE_CODE);
+            recv.stop_transfer(crate::protocol::types::TRANSFER_CANCEL_CLOSE_CODE);
             Err(Box::new(RemoteTransferCancelled))
         }
         Outcome::Complete(Err(error)) => Err(error),
         Outcome::PeerStopped(code)
-            if code == crate::protocol::types::TRANSFER_CANCEL_CLOSE_CODE.into() =>
+            if code == u64::from(crate::protocol::types::TRANSFER_CANCEL_CLOSE_CODE) =>
         {
-            stop_transfer_receive_stream(recv);
+            recv.stop_transfer(crate::protocol::types::TRANSFER_CANCEL_CLOSE_CODE);
             Err(Box::new(RemoteTransferCancelled))
         }
         Outcome::PeerStopped(code) => {
             Err(format!("Peer stopped the transfer stream ({code})").into())
         }
         Outcome::LocalCancellation => {
-            reset_transfer_send_stream(send);
-            let _ = wait_for_transfer_cancel_ack(recv).await;
+            send.reset_transfer(crate::protocol::types::TRANSFER_CANCEL_CLOSE_CODE);
+            let _ = tokio::time::timeout(
+                std::time::Duration::from_secs(3),
+                recv.received_reset_transfer(),
+            )
+            .await;
             Err(Box::new(TransferCancelled))
         }
     }
 }
 
 /// Convenience wrapper for sending a single file (backward compatible).
-pub async fn send_file<F>(
-    send: &mut quinn::SendStream,
-    recv: &mut quinn::RecvStream,
+pub async fn send_file<S, R, F>(
+    send: &mut S,
+    recv: &mut R,
     noise: &mut TransportState,
     file_path: &Path,
     transfer_id: &str,
@@ -287,6 +297,8 @@ pub async fn send_file<F>(
     on_progress: F,
 ) -> Result<u64, Box<dyn std::error::Error + Send + Sync>>
 where
+    S: TransferSendStream,
+    R: TransferReceiveStream,
     F: FnMut(&TransferProgress),
 {
     send_transfer(
@@ -312,7 +324,7 @@ fn collect_items(
 
     for input in inputs {
         let metadata = std::fs::metadata(input)
-            .map_err(|e| format!("Cannot read {}: {}", input.display(), e))?;
+            .map_err(|error| format!("Selected transfer input could not be read: {error}"))?;
 
         if metadata.is_file() {
             let name = input
@@ -349,23 +361,30 @@ fn collect_items(
 }
 
 /// Send an encrypted JSON packet.
-async fn send_encrypted_json<T: serde::Serialize>(
-    send: &mut quinn::SendStream,
+async fn send_encrypted_json<S, T>(
+    send: &mut S,
     noise: &mut TransportState,
     ptype: PacketType,
     value: &T,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>>
+where
+    S: TransferSendStream,
+    T: serde::Serialize,
+{
     let json = serde_json::to_vec(value)?;
     send_encrypted_raw(send, noise, ptype, &json).await
 }
 
 /// Send an encrypted raw packet.
-async fn send_encrypted_raw(
-    send: &mut quinn::SendStream,
+async fn send_encrypted_raw<S>(
+    send: &mut S,
     noise: &mut TransportState,
     ptype: PacketType,
     payload: &[u8],
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>>
+where
+    S: TransferSendStream,
+{
     let mut plaintext = Vec::with_capacity(1 + payload.len());
     plaintext.push(ptype as u8);
     plaintext.extend_from_slice(payload);
@@ -377,13 +396,31 @@ async fn send_encrypted_raw(
 }
 
 /// Receive and decrypt a packet.
-async fn recv_encrypted(
-    recv: &mut quinn::RecvStream,
+async fn recv_encrypted<R>(
+    recv: &mut R,
     noise: &mut TransportState,
-) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>>
+where
+    R: TransferReceiveStream,
+{
     let encrypted = recv_framed(recv).await?;
     let mut decrypted = vec![0u8; encrypted.len() + 128];
     let len = noise.read_message(&encrypted, &mut decrypted)?;
     decrypted.truncate(len);
     Ok(decrypted)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::collect_items;
+
+    #[test]
+    fn input_errors_do_not_echo_selected_paths() {
+        let sentinel = "private-filename-sentinel";
+        let path = std::env::temp_dir().join(sentinel);
+        let error = collect_items(&[path]).unwrap_err().to_string();
+
+        assert!(!error.contains(sentinel));
+        assert!(error.starts_with("Selected transfer input could not be read:"));
+    }
 }

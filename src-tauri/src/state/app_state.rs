@@ -4,8 +4,10 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use super::device::DeviceIdentity;
+use super::internet_session::RemoteSessionRegistry;
 use super::settings::Settings;
 use crate::discovery::types::PeerInfo;
+use crate::internet::endpoint::InternetEndpoint;
 use crate::transfer::cancellation::TransferRegistry;
 
 /// Info about an active or completed transfer.
@@ -22,6 +24,8 @@ pub struct AppState {
     pub settings: Mutex<Settings>,
     pub data_dir: PathBuf,
     pub transfer_registry: Arc<TransferRegistry>,
+    pub remote_sessions: Arc<RemoteSessionRegistry>,
+    pub internet_endpoint: tokio::sync::OnceCell<InternetEndpoint>,
 }
 
 impl AppState {
@@ -42,6 +46,8 @@ impl AppState {
             settings: Mutex::new(settings),
             data_dir,
             transfer_registry: Arc::new(TransferRegistry::default()),
+            remote_sessions: Arc::new(RemoteSessionRegistry::default()),
+            internet_endpoint: tokio::sync::OnceCell::new(),
         }
     }
 
@@ -242,8 +248,10 @@ mod tests {
     #[test]
     fn saved_display_name_overrides_the_system_identity() {
         let dir = temp_dir();
-        let mut settings = Settings::default();
-        settings.display_name = Some("Djalma's phone".into());
+        let settings = Settings {
+            display_name: Some("Djalma's phone".into()),
+            ..Settings::default()
+        };
         settings.save(&dir).unwrap();
 
         let state = AppState::new(make_device(), dir.clone());

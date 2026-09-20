@@ -37,6 +37,37 @@ jobs:
       - run: cargo build --manifest-path src-tauri/Cargo.toml --no-default-features --features cli --bin dukto-cli --locked
       - run: node scripts/test-cli.mjs
 
+  desktop-platforms:
+    name: Desktop (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest, macos-14]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+      - uses: dtolnay/rust-toolchain@stable
+      - run: bun install --frozen-lockfile
+      - name: Build frontend and generate route types
+        run: bun run vite:build
+      - name: Install Linux desktop dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev
+      - name: Compile the desktop app and all Rust targets
+        run: cargo check --manifest-path src-tauri/Cargo.toml --features desktop --all-targets --locked
+      - name: Test desktop core and transports without hosted-runner multicast discovery
+        run: >-
+          cargo test --manifest-path src-tauri/Cargo.toml --features desktop --locked --
+          --skip discovery::mdns::tests::raw_mdns_register_and_browse
+          --skip discovery::mdns::tests::register_and_browse_finds_peer
+          --skip discovery::mdns::tests::explicit_shutdown_announces_peer_removal
+          --skip discovery::mdns::tests::discovers_peer_arriving_after_thirty_seconds
+          --skip discovery::mdns::tests::does_not_discover_self_via_broadcast
+          --skip discovery::mdns::tests::browse_refresh_rediscovers_restarted_peer_before_removal
+
   desktop-update-guard:
     runs-on: macos-14
     steps:

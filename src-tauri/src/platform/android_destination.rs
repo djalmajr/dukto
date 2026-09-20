@@ -35,6 +35,7 @@ struct PickFilesResponse {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct PickFilesRequest {
+    media: bool,
     multiple: bool,
 }
 
@@ -55,11 +56,12 @@ impl<R: Runtime> AndroidDestination<R> {
     pub async fn pick_files(
         &self,
         multiple: bool,
+        media: bool,
     ) -> Result<Option<Vec<AndroidSelectedFile>>, String> {
         self.0
             .run_mobile_plugin_async::<PickFilesResponse>(
                 "pickFiles",
-                PickFilesRequest { multiple },
+                PickFilesRequest { media, multiple },
             )
             .await
             .map(|response| response.files)

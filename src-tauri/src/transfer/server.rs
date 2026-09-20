@@ -10,9 +10,14 @@ use tokio::sync::{mpsc, watch, Mutex};
 use crate::crypto::noise::{
     handshake_responder, is_remote_transfer_cancellation, RemoteTransferCancelled,
 };
+use crate::internet::channel::IrohAuthenticatedChannel;
+use crate::internet::session::EstablishedInternetSession;
 use crate::state::app_state::AppState;
 use crate::state::device::DeviceIdentity;
 use crate::transfer::cancellation::TransferRegistry;
+use crate::transfer::channel::{
+    AuthenticatedChannel, ChannelCloseReason, TransferReceiveStream, TransferSendStream,
+};
 use crate::transfer::quic::create_endpoint;
 use crate::transfer::receiver::receive_transfer_with_cancellation;
 
@@ -28,6 +33,12 @@ pub struct IncomingTransferRequest {
 
 /// Accept/reject decision channel per transfer.
 type AcceptDecision = bool;
+type TransferStartedHook = Box<dyn FnOnce() -> bool + Send>;
+
+struct AuthenticatedIncoming {
+    connection: IncomingConnection,
+    on_transfer_started: Option<TransferStartedHook>,
+}
 
 /// Active pending incoming transfer.
 struct PendingIncoming {
@@ -40,6 +51,41 @@ struct IncomingTransferError {
     error: String,
 }
 
+#[derive(Clone)]
+enum IncomingConnection {
+    Lan(quinn::Connection),
+    Internet(IrohAuthenticatedChannel),
+}
+
+impl IncomingConnection {
+    async fn attach(&self, control: &crate::transfer::cancellation::TransferCancellation) -> bool {
+        match self {
+            Self::Lan(connection) => control.attach_connection(connection.clone()).await,
+            Self::Internet(_) => !control.is_cancelled(),
+        }
+    }
+
+    async fn closed(&self) -> bool {
+        match self {
+            Self::Lan(connection) => {
+                let reason = connection.closed().await;
+                is_remote_transfer_cancellation(&reason)
+            }
+            Self::Internet(channel) => {
+                channel.closed().await;
+                false
+            }
+        }
+    }
+
+    fn close(&self, reason: ChannelCloseReason) {
+        match self {
+            Self::Lan(connection) => connection.close(reason.code().into(), reason.reason()),
+            Self::Internet(channel) => channel.close(reason),
+        }
+    }
+}
+
 /// Desktop adapter for the same receiving pipeline used by the CLI.
 async fn handle_incoming(
     app_handle: AppHandle,
@@ -48,15 +94,47 @@ async fn handle_incoming(
     incoming: quinn::Incoming,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let conn = incoming.await?;
-    let transfer_connection = conn.clone();
     let (mut send, mut recv) = conn.accept_bi().await?;
-    let mut noise = handshake_responder(&mut send, &mut recv).await?;
+    let noise = handshake_responder(&mut send, &mut recv).await?;
+    handle_authenticated_incoming(
+        app_handle,
+        pending,
+        registry,
+        AuthenticatedIncoming {
+            connection: IncomingConnection::Lan(conn),
+            on_transfer_started: None,
+        },
+        send,
+        recv,
+        noise,
+    )
+    .await
+}
+
+async fn handle_authenticated_incoming<S, R>(
+    app_handle: AppHandle,
+    pending: Arc<Mutex<std::collections::HashMap<String, PendingIncoming>>>,
+    registry: Arc<TransferRegistry>,
+    incoming: AuthenticatedIncoming,
+    mut send: S,
+    mut recv: R,
+    mut noise: snow::TransportState,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>>
+where
+    S: TransferSendStream,
+    R: TransferReceiveStream,
+{
+    let AuthenticatedIncoming {
+        connection,
+        on_transfer_started,
+    } = incoming;
     let destination = PathBuf::from(
         app_handle
             .state::<AppState>()
             .get_settings()
             .destination_dir,
     );
+    tokio::fs::create_dir_all(&destination).await?;
     let approval_handle = app_handle.clone();
     let progress_handle = app_handle.clone();
     let active_transfer = Arc::new(Mutex::new(None));
@@ -83,12 +161,16 @@ async fn handle_incoming(
             }
         }
     };
+    let transfer_connection = connection.clone();
     let result = receive_transfer_with_cancellation(
         &mut send,
         &mut recv,
         &mut noise,
         &destination,
         move |header, peer_cancelled| async move {
+            if on_transfer_started.is_some_and(|on_transfer_started| !on_transfer_started()) {
+                return false;
+            }
             let transfer_id = header.transfer_id.clone();
             let approval_connection = transfer_connection.clone();
             let control = match registry_for_approval.register(transfer_id.clone()).await {
@@ -98,7 +180,7 @@ async fn handle_incoming(
                     return false;
                 }
             };
-            if !control.attach_connection(transfer_connection).await {
+            if !approval_connection.attach(&control).await {
                 registry_for_approval.remove(&transfer_id, &control).await;
                 return false;
             }
@@ -149,8 +231,8 @@ async fn handle_incoming(
                     was_remote_cancelled_for_approval.store(true, Ordering::Release);
                     None
                 },
-                reason = approval_connection.closed() => {
-                    if is_remote_transfer_cancellation(&reason) {
+                remote_cancelled = approval_connection.closed() => {
+                    if remote_cancelled {
                         was_remote_cancelled_for_approval.store(true, Ordering::Release);
                     }
                     None
@@ -223,7 +305,14 @@ async fn handle_incoming(
             }
         }
     }
-    conn.close(0u32.into(), b"done");
+    let close_reason = match &result {
+        Ok(_) => ChannelCloseReason::Completed,
+        Err(error) if was_cancelled || is_remote_transfer_cancellation(error.as_ref()) => {
+            ChannelCloseReason::Cancelled
+        }
+        Err(_) => ChannelCloseReason::ProtocolError,
+    };
+    connection.close(close_reason);
     result.map(|_| ())
 }
 
@@ -290,6 +379,33 @@ impl TransferServer {
         });
 
         Ok((server, bound_port))
+    }
+
+    pub async fn receive_internet_session<F>(
+        &self,
+        app_handle: AppHandle,
+        mut session: EstablishedInternetSession,
+        on_transfer_started: F,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>
+    where
+        F: FnOnce() -> bool + Send + 'static,
+    {
+        let (channel, send, receive, noise) = session
+            .take_transfer_parts()
+            .ok_or("internet session transfer stream was already consumed")?;
+        handle_authenticated_incoming(
+            app_handle,
+            self.pending.clone(),
+            self.registry.clone(),
+            AuthenticatedIncoming {
+                connection: IncomingConnection::Internet(channel),
+                on_transfer_started: Some(Box::new(on_transfer_started)),
+            },
+            send,
+            receive,
+            noise,
+        )
+        .await
     }
 
     /// Respond to a pending incoming transfer.
