@@ -280,7 +280,7 @@ function RemotePeerEntry() {
 				<TextField class="min-w-0 flex-1">
 					<TextFieldLabel>{t("remoteInvitationLabel")}</TextFieldLabel>
 					<TextFieldInput
-						type="password"
+						type="text"
 						autocomplete="off"
 						spellcheck={false}
 						value={invitation()}

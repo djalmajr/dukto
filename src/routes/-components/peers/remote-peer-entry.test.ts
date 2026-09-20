@@ -61,8 +61,9 @@ describe("ephemeral invitation sharing contract", () => {
 		expect(entrySource).not.toContain("history.");
 	});
 
-	test("keeps bearer input obscured and clears it after consumption", () => {
-		expect(entrySource).toContain('type="password"');
+	test("shows the invitation link, protects the pairing code, and clears both", () => {
+		expect(entrySource).toMatch(/remoteInvitationLabel[\s\S]*?<TextFieldInput\s+type="text"/);
+		expect(entrySource).toMatch(/pairingCodeLabel[\s\S]*?<TextFieldInput\s+type="password"/);
 		expect(entrySource).toContain('autocomplete="off"');
 		expect(entrySource).toContain('setInvitation("")');
 		expect(entrySource).toContain("manual_code");
