@@ -1,4 +1,5 @@
 use dashmap::DashMap;
+use iroh::SecretKey;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -25,6 +26,7 @@ pub struct AppState {
     pub data_dir: PathBuf,
     pub transfer_registry: Arc<TransferRegistry>,
     pub remote_sessions: Arc<RemoteSessionRegistry>,
+    pub internet_secret_key: SecretKey,
     pub internet_endpoint: tokio::sync::OnceCell<InternetEndpoint>,
 }
 
@@ -47,6 +49,7 @@ impl AppState {
             data_dir,
             transfer_registry: Arc::new(TransferRegistry::default()),
             remote_sessions: Arc::new(RemoteSessionRegistry::default()),
+            internet_secret_key: SecretKey::generate(),
             internet_endpoint: tokio::sync::OnceCell::new(),
         }
     }

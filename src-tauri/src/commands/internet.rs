@@ -246,7 +246,8 @@ async fn endpoint_for(state: &AppState) -> Result<&InternetEndpoint, String> {
     state
         .internet_endpoint
         .get_or_try_init(|| async {
-            let config = InternetEndpointConfig::from_environment()?;
+            let config = InternetEndpointConfig::from_environment()?
+                .with_secret_key(state.internet_secret_key.clone());
             InternetEndpoint::bind(config).await
         })
         .await
@@ -535,33 +536,30 @@ pub async fn create_internet_invite(
     app_handle: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<InternetInviteShareView, String> {
-    let endpoint = endpoint_for(&state).await?;
-    if endpoint.relay_enabled() {
-        endpoint
-            .wait_until_online()
-            .await
-            .map_err(|error| error.to_string())?;
-    }
-    let address = endpoint.address();
+    let address = if let Some(endpoint) = state.internet_endpoint.get() {
+        endpoint.address()
+    } else {
+        let config =
+            InternetEndpointConfig::from_environment().map_err(|error| error.to_string())?;
+        if config.relay_enabled() {
+            config.bootstrap_address(state.internet_secret_key.public())
+        } else {
+            endpoint_for(&state).await?.address()
+        }
+    };
     let addresses = address.addrs.iter().map(ToString::to_string).collect();
     let now_unix = unix_now()?;
     let (view, invite) = create_invite_in_registry(
         &state.remote_sessions,
-        &endpoint.endpoint_id().to_string(),
+        &address.id.to_string(),
         addresses,
         now_unix,
     )?;
     let prepared = async {
-        let share = create_share_view(&state.remote_sessions, view, &invite)?;
         if let Some(transport) = rendezvous_transport()? {
             let payload = RendezvousPayload::generate(
-                endpoint.endpoint_id().to_string(),
-                endpoint
-                    .address()
-                    .addrs
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect(),
+                address.id.to_string(),
+                address.addrs.iter().map(ToString::to_string).collect(),
             )
             .map_err(|error| error.to_string())?;
             let client = RendezvousClient::new(&transport, MAX_RENDEZVOUS_ENVELOPE_BYTES)
@@ -571,21 +569,27 @@ pub async fn create_internet_invite(
                 .await
                 .map_err(|error| error.to_string())?;
         }
-        Ok::<_, String>(share)
+        let endpoint = endpoint_for(&state).await?;
+        if endpoint.relay_enabled() {
+            endpoint
+                .wait_until_online()
+                .await
+                .map_err(|error| error.to_string())?;
+        }
+        Ok::<_, String>((
+            create_share_view(&state.remote_sessions, view, &invite)?,
+            endpoint.clone(),
+        ))
     }
     .await;
-    let share = match prepared {
-        Ok(share) => share,
+    let (share, endpoint) = match prepared {
+        Ok(prepared) => prepared,
         Err(error) => {
             state.remote_sessions.cancel(invite.session_id());
             return Err(error);
         }
     };
-    ensure_accept_loop(
-        app_handle,
-        Arc::clone(&state.remote_sessions),
-        endpoint.clone(),
-    );
+    ensure_accept_loop(app_handle, Arc::clone(&state.remote_sessions), endpoint);
     Ok(share)
 }
 
@@ -598,11 +602,21 @@ pub async fn import_internet_invite<R: tauri::Runtime>(
     let connect_immediately = invitation.starts_with("dukto://connect#");
     let now_unix = unix_now()?;
     let invite = decode_invite(invitation, now_unix)?;
-    let addresses = if let Some(transport) = rendezvous_transport()? {
+    let transport = rendezvous_transport()?;
+    let addresses = if let Some(transport) = transport {
         let client = RendezvousClient::new(&transport, MAX_RENDEZVOUS_ENVELOPE_BYTES)
             .map_err(|error| error.to_string())?;
         let payload = client
-            .consume(&invite, now_unix)
+            .consume(
+                &invite,
+                &state
+                    .internet_endpoint
+                    .get()
+                    .map(InternetEndpoint::endpoint_id)
+                    .unwrap_or_else(|| state.internet_secret_key.public())
+                    .to_string(),
+                now_unix,
+            )
             .await
             .map_err(|error| error.to_string())?;
         if payload.endpoint_id() != invite.endpoint_id() {
@@ -617,6 +631,12 @@ pub async fn import_internet_invite<R: tauri::Runtime>(
         return Ok(view);
     }
     let endpoint = endpoint_for(&state).await?;
+    if endpoint.relay_enabled() {
+        endpoint
+            .wait_until_online()
+            .await
+            .map_err(|error| error.to_string())?;
+    }
     let result = connect_internet_session_in_registry(
         &state.remote_sessions,
         endpoint,

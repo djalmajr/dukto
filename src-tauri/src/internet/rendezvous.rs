@@ -1,5 +1,6 @@
 use std::{fmt, future::Future, pin::Pin};
 
+use dukto_admission::{AdmissionCapability, AdmissionRegistration, ConsumeRequest, PublishRequest};
 use futures_util::StreamExt;
 use ring::{
     aead::{Aad, LessSafeKey, Nonce, UnboundKey, AES_256_GCM},
@@ -22,6 +23,8 @@ const MAX_ADDRESS_COUNT: usize = 16;
 const MAX_ADDRESS_LEN: usize = 512;
 const MAX_HTTP_RESPONSE_BYTES: usize = 20 * 1024;
 const RENDEZVOUS_URL_ENV: &str = "DUKTO_RENDEZVOUS_URL";
+const DISABLE_OPERATED_SERVICES_ENV: &str = "DUKTO_DISABLE_OPERATED_SERVICES";
+const OFFICIAL_RENDEZVOUS_URL: &str = "https://rendezvous.djalmajr.dev/v1";
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum RendezvousError {
@@ -53,6 +56,8 @@ pub enum RendezvousError {
     RateLimited,
     #[error("rendezvous service is unavailable")]
     Unavailable,
+    #[error("rendezvous admission was denied")]
+    AdmissionDenied,
 }
 
 #[derive(Clone, PartialEq, Eq)]
@@ -202,12 +207,13 @@ pub trait RendezvousTransport: Send + Sync {
     fn publish<'a>(
         &'a self,
         slot: &'a str,
-        envelope: RendezvousEnvelope,
+        request: PublishRequest<RendezvousEnvelope>,
     ) -> Pin<Box<dyn Future<Output = Result<(), RendezvousError>> + Send + 'a>>;
 
     fn consume<'a>(
         &'a self,
         slot: &'a str,
+        request: ConsumeRequest,
     ) -> Pin<Box<dyn Future<Output = Result<RendezvousEnvelope, RendezvousError>> + Send + 'a>>;
 }
 
@@ -228,12 +234,9 @@ impl fmt::Debug for HttpRendezvousTransport {
 
 impl HttpRendezvousTransport {
     pub fn configured_from_environment() -> Result<Option<Self>, RendezvousError> {
-        match std::env::var(RENDEZVOUS_URL_ENV) {
-            Ok(url) if !url.trim().is_empty() => Self::new(url.trim()).map(Some),
-            Ok(_) => Err(RendezvousError::InvalidConfiguration),
-            Err(std::env::VarError::NotPresent) => Ok(None),
-            Err(std::env::VarError::NotUnicode(_)) => Err(RendezvousError::InvalidConfiguration),
-        }
+        let url = optional_unicode_environment(RENDEZVOUS_URL_ENV)?;
+        let disabled = optional_unicode_environment(DISABLE_OPERATED_SERVICES_ENV)?;
+        Self::configured_from_values(url.as_deref(), disabled.as_deref())
     }
 
     pub fn new(base_url: &str) -> Result<Self, RendezvousError> {
@@ -269,6 +272,23 @@ impl HttpRendezvousTransport {
             .build()
             .map_err(|_| RendezvousError::InvalidConfiguration)?;
         Ok(Self { client, base_url })
+    }
+
+    fn configured_from_values(
+        url: Option<&str>,
+        disable_operated_services: Option<&str>,
+    ) -> Result<Option<Self>, RendezvousError> {
+        let disabled = match disable_operated_services {
+            None | Some("0" | "false") => false,
+            Some("1" | "true") => true,
+            Some(_) => return Err(RendezvousError::InvalidConfiguration),
+        };
+        match url {
+            Some(url) if !url.trim().is_empty() => Self::new(url.trim()).map(Some),
+            Some(_) => Err(RendezvousError::InvalidConfiguration),
+            None if disabled => Ok(None),
+            None => Self::new(OFFICIAL_RENDEZVOUS_URL).map(Some),
+        }
     }
 
     fn slot_url(&self, slot: &str, consume: bool) -> Result<reqwest::Url, RendezvousError> {
@@ -310,18 +330,26 @@ impl HttpRendezvousTransport {
     }
 }
 
+fn optional_unicode_environment(name: &str) -> Result<Option<String>, RendezvousError> {
+    match std::env::var(name) {
+        Ok(value) => Ok(Some(value)),
+        Err(std::env::VarError::NotPresent) => Ok(None),
+        Err(std::env::VarError::NotUnicode(_)) => Err(RendezvousError::InvalidConfiguration),
+    }
+}
+
 impl RendezvousTransport for HttpRendezvousTransport {
     fn publish<'a>(
         &'a self,
         slot: &'a str,
-        envelope: RendezvousEnvelope,
+        request: PublishRequest<RendezvousEnvelope>,
     ) -> Pin<Box<dyn Future<Output = Result<(), RendezvousError>> + Send + 'a>> {
         Box::pin(async move {
             let response = self
                 .client
                 .put(self.slot_url(slot, false)?)
                 .header(reqwest::header::CACHE_CONTROL, "no-store")
-                .json(&envelope)
+                .json(&request)
                 .send()
                 .await
                 .map_err(|_| RendezvousError::Network)?;
@@ -340,6 +368,7 @@ impl RendezvousTransport for HttpRendezvousTransport {
     fn consume<'a>(
         &'a self,
         slot: &'a str,
+        request: ConsumeRequest,
     ) -> Pin<Box<dyn Future<Output = Result<RendezvousEnvelope, RendezvousError>> + Send + 'a>>
     {
         Box::pin(async move {
@@ -347,6 +376,7 @@ impl RendezvousTransport for HttpRendezvousTransport {
                 .client
                 .post(self.slot_url(slot, true)?)
                 .header(reqwest::header::CACHE_CONTROL, "no-store")
+                .json(&request)
                 .send()
                 .await
                 .map_err(|_| RendezvousError::Network)?;
@@ -355,6 +385,7 @@ impl RendezvousTransport for HttpRendezvousTransport {
                 reqwest::StatusCode::NOT_FOUND => Err(RendezvousError::NotFound),
                 reqwest::StatusCode::CONFLICT => Err(RendezvousError::AlreadyConsumed),
                 reqwest::StatusCode::GONE => Err(RendezvousError::Expired),
+                reqwest::StatusCode::FORBIDDEN => Err(RendezvousError::AdmissionDenied),
                 reqwest::StatusCode::PAYLOAD_TOO_LARGE => Err(RendezvousError::EnvelopeTooLarge),
                 reqwest::StatusCode::TOO_MANY_REQUESTS => Err(RendezvousError::RateLimited),
                 reqwest::StatusCode::SERVICE_UNAVAILABLE => Err(RendezvousError::Unavailable),
@@ -391,17 +422,45 @@ impl<'a, T: RendezvousTransport + ?Sized> RendezvousClient<'a, T> {
         let slot = invite_slot(invite)?;
         let envelope = seal(invite, &slot, payload)?;
         self.ensure_size(&envelope)?;
-        self.transport.publish(slot.expose(), envelope).await
+        let capability = AdmissionCapability::derive(invite.secret_bytes(), invite.session_id())
+            .map_err(|_| RendezvousError::Encryption)?;
+        self.transport
+            .publish(
+                slot.expose(),
+                PublishRequest {
+                    envelope,
+                    admission: AdmissionRegistration {
+                        endpoint_id: payload.endpoint_id().to_owned(),
+                        capability: capability.encode(),
+                    },
+                },
+            )
+            .await
     }
 
     pub async fn consume(
         &self,
         invite: &InternetInvite,
+        joining_endpoint_id: &str,
         now_unix: u64,
     ) -> Result<RendezvousPayload, RendezvousError> {
         validate_invite(invite, now_unix)?;
         let slot = invite_slot(invite)?;
-        let envelope = self.transport.consume(slot.expose()).await?;
+        let capability = AdmissionCapability::derive(invite.secret_bytes(), invite.session_id())
+            .map_err(|_| RendezvousError::Decryption)?;
+        let proof = capability
+            .join_proof(slot.expose(), joining_endpoint_id, invite.expires_at_unix())
+            .map_err(|_| RendezvousError::InvalidEnvelope)?;
+        let envelope = self
+            .transport
+            .consume(
+                slot.expose(),
+                ConsumeRequest {
+                    endpoint_id: joining_endpoint_id.to_owned(),
+                    proof,
+                },
+            )
+            .await?;
         self.ensure_size(&envelope)?;
         if envelope.version != RENDEZVOUS_ENVELOPE_VERSION
             || envelope.expires_at_unix != invite.expires_at_unix()
@@ -535,6 +594,9 @@ mod tests {
         sync::{Arc, Mutex},
     };
 
+    use dukto_admission::{
+        AdmissionCapability, AdmissionRegistration, ConsumeRequest, PublishRequest,
+    };
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     use super::{
@@ -545,6 +607,20 @@ mod tests {
     use crate::internet::invite::InternetInvite;
 
     const NOW: u64 = 1_800_000_000;
+    const OWNER: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    const JOINER: &str = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
+
+    #[test]
+    fn normal_runtime_uses_operated_rendezvous_with_an_explicit_disable_escape() {
+        let normal = HttpRendezvousTransport::configured_from_values(None, None).unwrap();
+        assert!(normal.is_some());
+        let disabled = HttpRendezvousTransport::configured_from_values(None, Some("true")).unwrap();
+        assert!(disabled.is_none());
+        assert_eq!(
+            HttpRendezvousTransport::configured_from_values(None, Some("yes")).unwrap_err(),
+            RendezvousError::InvalidConfiguration
+        );
+    }
 
     #[tokio::test]
     async fn server_observes_only_opaque_slot_and_ciphertext_then_consumes_once() {
@@ -567,10 +643,10 @@ mod tests {
         assert!(!observed_json.contains("pairing"));
         assert!(format!("{slot:?}").contains("[REDACTED]"));
 
-        let consumed = client.consume(&invite, NOW + 1).await.unwrap();
+        let consumed = client.consume(&invite, JOINER, NOW + 1).await.unwrap();
         assert_eq!(consumed, payload);
         assert_eq!(
-            client.consume(&invite, NOW + 2).await,
+            client.consume(&invite, JOINER, NOW + 2).await,
             Err(RendezvousError::AlreadyConsumed)
         );
     }
@@ -586,7 +662,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(
-            client.consume(&short_invite, NOW + 2).await,
+            client.consume(&short_invite, JOINER, NOW + 2).await,
             Err(RendezvousError::Expired)
         );
 
@@ -607,7 +683,7 @@ mod tests {
             .unwrap();
         server.tamper(&tampered_slot);
         assert_eq!(
-            client.consume(&tampered_invite, NOW + 1).await,
+            client.consume(&tampered_invite, JOINER, NOW + 1).await,
             Err(RendezvousError::Decryption)
         );
     }
@@ -630,13 +706,40 @@ mod tests {
         let client = RendezvousClient::new(&transport, 16 * 1024).unwrap();
 
         client.publish(&invite, &payload, NOW).await.unwrap();
-        assert_eq!(client.consume(&invite, NOW + 1).await.unwrap(), payload);
         assert_eq!(
-            transport.publish(slot.expose(), envelope.clone()).await,
+            client.consume(&invite, JOINER, NOW + 1).await.unwrap(),
+            payload
+        );
+        let capability =
+            AdmissionCapability::derive(invite.secret_bytes(), invite.session_id()).unwrap();
+        assert_eq!(
+            transport
+                .publish(
+                    slot.expose(),
+                    PublishRequest {
+                        envelope: envelope.clone(),
+                        admission: AdmissionRegistration {
+                            endpoint_id: OWNER.to_owned(),
+                            capability: capability.encode(),
+                        },
+                    },
+                )
+                .await,
             Err(RendezvousError::RateLimited)
         );
+        let proof = capability
+            .join_proof(slot.expose(), JOINER, invite.expires_at_unix())
+            .unwrap();
         assert_eq!(
-            transport.consume(slot.expose()).await,
+            transport
+                .consume(
+                    slot.expose(),
+                    ConsumeRequest {
+                        endpoint_id: JOINER.to_owned(),
+                        proof,
+                    },
+                )
+                .await,
             Err(RendezvousError::AlreadyConsumed)
         );
         server.await.unwrap();
@@ -644,7 +747,7 @@ mod tests {
         let requests = requests.lock().await;
         let publish = String::from_utf8_lossy(&requests[0]);
         assert!(publish.starts_with(&format!("PUT /v1/slots/{} ", slot.expose())));
-        assert!(!publish.contains("endpoint-public-key"));
+        assert!(publish.contains(OWNER));
         assert!(!publish.contains("203.0.113.7"));
         assert!(!publish.contains(&hex_encode(invite.secret_bytes())));
         assert!(String::from_utf8_lossy(&requests[1])
@@ -657,9 +760,16 @@ mod tests {
         let oversized = vec![b'x'; MAX_HTTP_RESPONSE_BYTES + 1];
         let (base_url, _, server) = http_fixture(vec![http_response(200, &oversized)]).await;
         let transport = HttpRendezvousTransport::new_for_test(&base_url).unwrap();
+        let capability = AdmissionCapability::derive(&[9; 32], "session-a").unwrap();
+        let request = ConsumeRequest {
+            endpoint_id: JOINER.to_owned(),
+            proof: capability
+                .join_proof(slot.expose(), JOINER, NOW + 300)
+                .unwrap(),
+        };
 
         assert_eq!(
-            transport.consume(slot.expose()).await,
+            transport.consume(slot.expose(), request).await,
             Err(RendezvousError::EnvelopeTooLarge)
         );
         server.await.unwrap();
@@ -739,7 +849,7 @@ mod tests {
 
     fn invite(slot: &RendezvousSlot, ttl: u64) -> InternetInvite {
         InternetInvite::new(
-            "endpoint-public-key",
+            OWNER,
             vec!["ip:203.0.113.7:4242".to_owned()],
             Some(slot.expose().to_owned()),
             NOW,
@@ -749,12 +859,7 @@ mod tests {
     }
 
     fn payload() -> RendezvousPayload {
-        RendezvousPayload::new(
-            "endpoint-public-key",
-            vec!["ip:203.0.113.7:4242".to_owned()],
-            [0x51; 32],
-        )
-        .unwrap()
+        RendezvousPayload::new(OWNER, vec!["ip:203.0.113.7:4242".to_owned()], [0x51; 32]).unwrap()
     }
 
     #[derive(Default)]
@@ -764,7 +869,7 @@ mod tests {
 
     #[derive(Default)]
     struct ServerState {
-        records: HashMap<String, RendezvousEnvelope>,
+        records: HashMap<String, (RendezvousEnvelope, AdmissionCapability)>,
         consumed: HashSet<String>,
         observed: Option<(String, RendezvousEnvelope)>,
     }
@@ -781,6 +886,7 @@ mod tests {
                 .records
                 .get_mut(slot.expose())
                 .unwrap()
+                .0
                 .tamper_for_test();
         }
     }
@@ -789,15 +895,19 @@ mod tests {
         fn publish<'a>(
             &'a self,
             slot: &'a str,
-            envelope: RendezvousEnvelope,
+            request: PublishRequest<RendezvousEnvelope>,
         ) -> Pin<Box<dyn Future<Output = Result<(), RendezvousError>> + Send + 'a>> {
             Box::pin(async move {
                 let mut state = self.state.lock().unwrap();
                 if state.records.contains_key(slot) || state.consumed.contains(slot) {
                     return Err(RendezvousError::SlotUnavailable);
                 }
-                state.observed = Some((slot.to_owned(), envelope.clone()));
-                state.records.insert(slot.to_owned(), envelope);
+                let capability = AdmissionCapability::decode(&request.admission.capability)
+                    .map_err(|_| RendezvousError::AdmissionDenied)?;
+                state.observed = Some((slot.to_owned(), request.envelope.clone()));
+                state
+                    .records
+                    .insert(slot.to_owned(), (request.envelope, capability));
                 Ok(())
             })
         }
@@ -805,6 +915,7 @@ mod tests {
         fn consume<'a>(
             &'a self,
             slot: &'a str,
+            request: ConsumeRequest,
         ) -> Pin<Box<dyn Future<Output = Result<RendezvousEnvelope, RendezvousError>> + Send + 'a>>
         {
             Box::pin(async move {
@@ -812,7 +923,17 @@ mod tests {
                 if state.consumed.contains(slot) {
                     return Err(RendezvousError::AlreadyConsumed);
                 }
-                let envelope = state
+                let (envelope, capability) =
+                    state.records.get(slot).ok_or(RendezvousError::NotFound)?;
+                capability
+                    .verify_join_proof(
+                        slot,
+                        &request.endpoint_id,
+                        envelope.expires_at_unix,
+                        &request.proof,
+                    )
+                    .map_err(|_| RendezvousError::AdmissionDenied)?;
+                let (envelope, _) = state
                     .records
                     .remove(slot)
                     .ok_or(RendezvousError::NotFound)?;

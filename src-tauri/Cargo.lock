@@ -1645,6 +1645,7 @@ dependencies = [
  "clap",
  "dashmap",
  "dirs",
+ "dukto-admission",
  "futures-util",
  "iroh",
  "libc",
@@ -1677,6 +1678,17 @@ dependencies = [
  "uuid",
  "whoami",
  "zeroconf",
+ "zeroize",
+]
+
+[[package]]
+name = "dukto-admission"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "ring",
+ "serde",
+ "thiserror 2.0.18",
  "zeroize",
 ]
 

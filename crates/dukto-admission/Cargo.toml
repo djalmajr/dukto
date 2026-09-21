@@ -1,0 +1,12 @@
+[package]
+name = "dukto-admission"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+base64 = "0.22"
+ring = "0.17"
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+zeroize = { version = "1", features = ["zeroize_derive"] }

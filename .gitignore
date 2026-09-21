@@ -18,6 +18,8 @@ src-proto/dist
 # Rust
 src-tauri/target
 src-tauri/gen
+crates/*/target
+services/*/target
 
 # Database
 *.db
