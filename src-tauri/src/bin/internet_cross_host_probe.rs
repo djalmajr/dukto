@@ -21,6 +21,7 @@ use tokio::time::timeout;
 const INVITE_TTL_SECS: u64 = 10 * 60;
 const MAX_ENVELOPE_BYTES: usize = 16 * 1024;
 const FIXTURE_BYTES: usize = 128 * 1024;
+const JOINER_ARRIVAL_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 const OPERATION_TIMEOUT: Duration = Duration::from_secs(90);
 const DIRECT_SETTLE_TIMEOUT: Duration = Duration::from_secs(20);
 
@@ -91,7 +92,7 @@ async fn run_owner(exchange_path: PathBuf) -> Result<(), String> {
     println!("PROBE owner invite_ready");
 
     endpoint.wait_until_online().await.map_err(display_error)?;
-    let channel = timeout(OPERATION_TIMEOUT, endpoint.accept())
+    let channel = timeout(JOINER_ARRIVAL_TIMEOUT, endpoint.accept())
         .await
         .map_err(|_| "timed out waiting for the joining endpoint".to_owned())?
         .map_err(display_error)?;
