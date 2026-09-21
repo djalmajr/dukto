@@ -80,6 +80,7 @@ mod app_runner {
             commands::internet::import_internet_invite,
             commands::internet::send_to_internet_session,
             commands::internet::cancel_internet_invite,
+            commands::internet::disconnect_internet_session,
             commands::internet::confirm_internet_pairing_code,
             commands::updater::download_app_update,
             commands::updater::install_app_update,
@@ -106,6 +107,7 @@ mod app_runner {
             commands::internet::import_internet_invite,
             commands::internet::send_to_internet_session,
             commands::internet::cancel_internet_invite,
+            commands::internet::disconnect_internet_session,
             commands::internet::confirm_internet_pairing_code,
         ]);
 

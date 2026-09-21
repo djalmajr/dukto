@@ -28,6 +28,7 @@ interface PeerListProps {
 function PeerList(props: PeerListProps) {
 	const [saving, setSaving] = createSignal(false);
 	const [orderError, setOrderError] = createSignal(false);
+	const [remotePeerConnected, setRemotePeerConnected] = createSignal(false);
 	const peerEntries = (): PeerIdentity[] => {
 		const discovered = Object.values(peers);
 		const discoveredIds = discovered.map((peer) => peer.device_id);
@@ -56,9 +57,9 @@ function PeerList(props: PeerListProps) {
 
 	return (
 		<div class="flex w-full flex-1 flex-col space-y-2">
-			<RemotePeerEntry />
+			<RemotePeerEntry onConnectedChange={setRemotePeerConnected} />
 			<Show
-				when={peerEntries().length > 0}
+				when={peerEntries().length > 0 || remotePeerConnected()}
 				fallback={
 					<div class="flex flex-1 items-center justify-center">
 						<EmptyState title={t("noDevices")} description={t("noDevicesHint")} />

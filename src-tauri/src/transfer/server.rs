@@ -19,7 +19,7 @@ use crate::transfer::channel::{
     AuthenticatedChannel, ChannelCloseReason, TransferReceiveStream, TransferSendStream,
 };
 use crate::transfer::quic::create_endpoint;
-use crate::transfer::receiver::receive_transfer_with_cancellation;
+use crate::transfer::receiver::{is_transfer_rejected, receive_transfer_with_cancellation};
 
 /// Event emitted to the frontend when an incoming transfer request arrives.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -58,6 +58,10 @@ enum IncomingConnection {
 }
 
 impl IncomingConnection {
+    fn is_internet(&self) -> bool {
+        matches!(self, Self::Internet(_))
+    }
+
     async fn attach(&self, control: &crate::transfer::cancellation::TransferCancellation) -> bool {
         match self {
             Self::Lan(connection) => control.attach_connection(connection.clone()).await,
@@ -312,7 +316,16 @@ where
         }
         Err(_) => ChannelCloseReason::ProtocolError,
     };
-    connection.close(close_reason);
+    let reusable_internet_transfer = connection.is_internet()
+        && (result.is_ok()
+            || was_cancelled
+            || result.as_ref().is_err_and(|error| {
+                is_remote_transfer_cancellation(error.as_ref())
+                    || is_transfer_rejected(error.as_ref())
+            }));
+    if !reusable_internet_transfer {
+        connection.close(close_reason);
+    }
     result.map(|_| ())
 }
 
@@ -384,15 +397,13 @@ impl TransferServer {
     pub async fn receive_internet_session<F>(
         &self,
         app_handle: AppHandle,
-        mut session: EstablishedInternetSession,
+        session: EstablishedInternetSession,
         on_transfer_started: F,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>
     where
         F: FnOnce() -> bool + Send + 'static,
     {
-        let (channel, send, receive, noise) = session
-            .take_transfer_parts()
-            .ok_or("internet session transfer stream was already consumed")?;
+        let (channel, send, receive, noise) = session.next_transfer_parts().await?;
         handle_authenticated_incoming(
             app_handle,
             self.pending.clone(),

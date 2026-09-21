@@ -25,6 +25,7 @@ use crate::state::internet_session::{
     RemoteSessionRegistry, RemoteSessionSecret, RemoteSessionStatus,
 };
 use crate::transfer::channel::{AuthenticatedChannel, ChannelCloseReason};
+use crate::transfer::receiver::is_transfer_rejected;
 use crate::transfer::sender::{send_transfer_with_cancellation, CancellableSendCallbacks};
 use crate::transfer::server::TransferServer;
 
@@ -367,47 +368,104 @@ async fn receive_ready_internet_session(
     ready: InternetInviteView,
 ) -> Result<(), String> {
     let established = registry
-        .take_established(&ready.session_id)
+        .established(&ready.session_id)
         .map_err(|_| "internet session transfer channel is unavailable".to_owned())?;
     let route = established.route_kind();
-    let transferring = with_status(&ready, RemoteSessionStatus::Transferring { route });
-    let transfer_registry = Arc::clone(&registry);
-    let transfer_session_id = ready.session_id.clone();
-    let transfer_handle = app_handle.clone();
-
     let server = app_handle.state::<Arc<TransferServer>>().inner().clone();
-    let result = server
-        .receive_internet_session(app_handle.clone(), established, move || {
-            let Ok(now_unix) = unix_now() else {
-                return false;
-            };
-            if transfer_registry
+    loop {
+        let transferring = with_status(&ready, RemoteSessionStatus::Transferring { route });
+        let transfer_registry = Arc::clone(&registry);
+        let transfer_session_id = ready.session_id.clone();
+        let transfer_handle = app_handle.clone();
+        let result = server
+            .receive_internet_session(app_handle.clone(), established.clone(), move || {
+                let Ok(now_unix) = unix_now() else {
+                    return false;
+                };
+                if transfer_registry
+                    .transition(
+                        &transfer_session_id,
+                        RemoteSessionStatus::Transferring { route },
+                        now_unix,
+                    )
+                    .is_err()
+                {
+                    return false;
+                }
+                let _ = transfer_handle.emit("internet:session-updated", &transferring);
+                true
+            })
+            .await;
+
+        if transfer_keeps_session_ready(&result, false) {
+            if registry
                 .transition(
-                    &transfer_session_id,
-                    RemoteSessionStatus::Transferring { route },
-                    now_unix,
+                    &ready.session_id,
+                    RemoteSessionStatus::Ready { route },
+                    unix_now()?,
                 )
                 .is_err()
             {
-                return false;
+                return Ok(());
             }
-            let _ = transfer_handle.emit("internet:session-updated", &transferring);
-            true
-        })
-        .await;
-    let terminal = match &result {
-        Ok(()) => RemoteSessionStatus::Completed,
-        Err(error)
-            if error.is::<crate::crypto::noise::TransferCancelled>()
-                || crate::crypto::noise::is_remote_transfer_cancellation(error.as_ref()) =>
-        {
-            RemoteSessionStatus::Cancelled
+            let _ = app_handle.emit(
+                "internet:session-updated",
+                with_status(&ready, RemoteSessionStatus::Ready { route }),
+            );
+            continue;
         }
-        Err(_) => RemoteSessionStatus::Failed,
+
+        established.close(ChannelCloseReason::ProtocolError);
+        if registry
+            .transition(&ready.session_id, RemoteSessionStatus::Failed, unix_now()?)
+            .is_ok()
+        {
+            let _ = app_handle.emit(
+                "internet:session-updated",
+                with_status(&ready, RemoteSessionStatus::Failed),
+            );
+        }
+        return result.map_err(|error| error.to_string());
+    }
+}
+
+fn transfer_keeps_session_ready<T>(
+    result: &Result<T, Box<dyn std::error::Error + Send + Sync>>,
+    locally_cancelled: bool,
+) -> bool {
+    result.is_ok()
+        || locally_cancelled
+        || result.as_ref().is_err_and(|error| {
+            error.is::<crate::crypto::noise::TransferCancelled>()
+                || crate::crypto::noise::is_remote_transfer_cancellation(error.as_ref())
+                || is_transfer_rejected(error.as_ref())
+        })
+}
+
+fn monitor_internet_session<R: tauri::Runtime>(
+    app_handle: tauri::AppHandle<R>,
+    registry: Arc<RemoteSessionRegistry>,
+    ready: InternetInviteView,
+) {
+    let Ok(established) = registry.established(&ready.session_id) else {
+        return;
     };
-    let _ = registry.transition(&ready.session_id, terminal.clone(), unix_now()?);
-    let _ = app_handle.emit("internet:session-updated", with_status(&ready, terminal));
-    result.map_err(|error| error.to_string())
+    tauri::async_runtime::spawn(async move {
+        established.closed().await;
+        if registry
+            .transition(
+                &ready.session_id,
+                RemoteSessionStatus::Failed,
+                unix_now().unwrap_or(0),
+            )
+            .is_ok()
+        {
+            let _ = app_handle.emit(
+                "internet:session-updated",
+                with_status(&ready, RemoteSessionStatus::Failed),
+            );
+        }
+    });
 }
 
 fn ensure_accept_loop(
@@ -439,6 +497,11 @@ fn ensure_accept_loop(
                 match result {
                     Ok(view) => {
                         let _ = handle.emit("internet:session-updated", &view);
+                        monitor_internet_session(
+                            handle.clone(),
+                            Arc::clone(&registry),
+                            view.clone(),
+                        );
                         if let Err(error) =
                             receive_ready_internet_session(handle, Arc::clone(&registry), view)
                                 .await
@@ -527,7 +590,8 @@ pub async fn create_internet_invite(
 }
 
 #[tauri::command]
-pub async fn import_internet_invite(
+pub async fn import_internet_invite<R: tauri::Runtime>(
+    app_handle: tauri::AppHandle<R>,
     state: State<'_, AppState>,
     invitation: String,
 ) -> Result<InternetInviteView, String> {
@@ -563,6 +627,13 @@ pub async fn import_internet_invite(
     if result.is_err() {
         state.remote_sessions.cancel(&view.session_id);
     }
+    if let Ok(ready) = &result {
+        monitor_internet_session(
+            app_handle,
+            Arc::clone(&state.remote_sessions),
+            ready.clone(),
+        );
+    }
     result
 }
 
@@ -593,18 +664,11 @@ pub async fn send_to_internet_session<R: tauri::Runtime>(
         .transfer_registry
         .register(transfer_id.clone())
         .await?;
-    let mut established = match state.remote_sessions.take_established(&session_id) {
+    let established = match state.remote_sessions.established(&session_id) {
         Ok(established) => established,
         Err(_) => {
             state.transfer_registry.remove(&transfer_id, &control).await;
             return Err("internet session transfer channel is unavailable".to_owned());
-        }
-    };
-    let (channel, mut send, mut receive, mut noise) = match established.take_transfer_parts() {
-        Some(parts) => parts,
-        None => {
-            state.transfer_registry.remove(&transfer_id, &control).await;
-            return Err("internet session transfer channel was already consumed".to_owned());
         }
     };
     if state
@@ -617,9 +681,27 @@ pub async fn send_to_internet_session<R: tauri::Runtime>(
         .is_err()
     {
         state.transfer_registry.remove(&transfer_id, &control).await;
-        channel.close(ChannelCloseReason::ProtocolError);
         return Err("internet session could not start sending".to_owned());
     }
+
+    let (channel, mut send, mut receive, mut noise) = match established.next_transfer_parts().await
+    {
+        Ok(parts) => parts,
+        Err(_) => {
+            state.transfer_registry.remove(&transfer_id, &control).await;
+            established.close(ChannelCloseReason::ProtocolError);
+            let _ = state.remote_sessions.transition(
+                &session_id,
+                RemoteSessionStatus::Failed,
+                unix_now().unwrap_or(0),
+            );
+            let _ = app_handle.emit(
+                "internet:session-updated",
+                with_status(&ready, RemoteSessionStatus::Failed),
+            );
+            return Err("internet session transfer channel is unavailable".to_owned());
+        }
+    };
 
     let transferring = with_status(&ready, RemoteSessionStatus::Transferring { route });
     let _ = app_handle.emit("internet:session-updated", &transferring);
@@ -667,27 +749,20 @@ pub async fn send_to_internet_session<R: tauri::Runtime>(
         )
         .await;
 
-        let terminal = if result.is_ok() {
-            RemoteSessionStatus::Completed
-        } else if control.is_cancelled()
-            || result.as_ref().is_err_and(|error| {
-                crate::crypto::noise::is_remote_transfer_cancellation(error.as_ref())
-            })
-        {
-            RemoteSessionStatus::Cancelled
+        transfer_registry.remove(&tid, &control).await;
+        let reusable = transfer_keeps_session_ready(&result, control.is_cancelled());
+        let next_status = if reusable {
+            RemoteSessionStatus::Ready { route }
         } else {
+            channel.close(ChannelCloseReason::ProtocolError);
             RemoteSessionStatus::Failed
         };
-        channel.close(if terminal == RemoteSessionStatus::Cancelled {
-            ChannelCloseReason::Cancelled
-        } else if result.is_ok() {
-            ChannelCloseReason::Completed
-        } else {
-            ChannelCloseReason::ProtocolError
-        });
-        transfer_registry.remove(&tid, &control).await;
-        let _ = remote_sessions.transition(&session_id, terminal.clone(), unix_now().unwrap_or(0));
-        let _ = handle.emit("internet:session-updated", with_status(&ready, terminal));
+        if remote_sessions
+            .transition(&session_id, next_status.clone(), unix_now().unwrap_or(0))
+            .is_ok()
+        {
+            let _ = handle.emit("internet:session-updated", with_status(&ready, next_status));
+        }
 
         #[cfg(target_os = "android")]
         if let Err(error) = super::release_android_selected_files(&handle, &selected_paths).await {
@@ -736,7 +811,16 @@ pub fn cancel_internet_invite(
 }
 
 #[tauri::command]
-pub async fn confirm_internet_pairing_code(
+pub fn disconnect_internet_session(
+    state: State<'_, AppState>,
+    session_id: String,
+) -> Result<(), String> {
+    cancel_invite_in_registry(&state.remote_sessions, &session_id)
+}
+
+#[tauri::command]
+pub async fn confirm_internet_pairing_code<R: tauri::Runtime>(
+    app_handle: tauri::AppHandle<R>,
     state: State<'_, AppState>,
     session_id: String,
     code: String,
@@ -754,6 +838,13 @@ pub async fn confirm_internet_pairing_code(
     if result.is_err() {
         state.remote_sessions.cancel(&session_id);
     }
+    if let Ok(ready) = &result {
+        monitor_internet_session(
+            app_handle,
+            Arc::clone(&state.remote_sessions),
+            ready.clone(),
+        );
+    }
     result
 }
 
@@ -761,22 +852,44 @@ pub async fn confirm_internet_pairing_code(
 mod tests {
     use std::{path::PathBuf, sync::Arc, time::Duration};
 
+    use crate::crypto::noise::TransferCancelled;
     use crate::internet::endpoint::{InternetEndpoint, InternetEndpointConfig};
     use crate::internet::pairing::{
         ManualCodePairing, ManualPairingCode, PairingOrigin, PairingRole, PairingTranscript,
     };
     use crate::state::device::DeviceIdentity;
     use crate::state::internet_session::{RemoteSessionRegistry, RemoteSessionStatus};
-    use crate::transfer::channel::AuthenticatedChannel;
-    use crate::transfer::{receiver::receive_transfer, sender::send_transfer};
+    use crate::transfer::{
+        receiver::{receive_transfer, receive_transfer_with_cancellation, TransferRejected},
+        sender::{send_transfer, send_transfer_with_cancellation, CancellableSendCallbacks},
+    };
 
     use super::{
         accept_one_internet_session, cancel_invite_in_registry, confirm_pairing_code_in_registry,
         connect_internet_session_in_registry, create_invite_in_registry, create_share_view,
-        import_invite_in_registry,
+        import_invite_in_registry, transfer_keeps_session_ready,
     };
 
     const NOW: u64 = 1_800_000_000;
+
+    #[test]
+    fn only_per_transfer_outcomes_keep_the_authenticated_session_ready() {
+        // Mutation captured: classifying rejection or cancellation as a connection failure
+        // removes a healthy peer, while treating arbitrary I/O failures as reusable hides loss.
+        let success: Result<(), Box<dyn std::error::Error + Send + Sync>> = Ok(());
+        let cancelled: Result<(), Box<dyn std::error::Error + Send + Sync>> =
+            Err(Box::new(TransferCancelled));
+        let rejected: Result<(), Box<dyn std::error::Error + Send + Sync>> =
+            Err(Box::new(TransferRejected));
+        let failed: Result<(), Box<dyn std::error::Error + Send + Sync>> =
+            Err(std::io::Error::other("connection lost").into());
+
+        assert!(transfer_keeps_session_ready(&success, false));
+        assert!(transfer_keeps_session_ready(&cancelled, false));
+        assert!(transfer_keeps_session_ready(&rejected, false));
+        assert!(transfer_keeps_session_ready(&failed, true));
+        assert!(!transfer_keeps_session_ready(&failed, false));
+    }
 
     #[test]
     fn create_import_and_cancel_return_only_redacted_views() {
@@ -993,16 +1106,14 @@ mod tests {
             joiner_endpoint.endpoint_id().to_string()
         );
         assert_eq!(owner_ready.session_id, owner_view.session_id);
+        assert!(joiner_registry.established(&joiner_view.session_id).is_ok());
+        assert!(owner_registry.established(&owner_ready.session_id).is_ok());
         assert!(joiner_registry
-            .take_established(&joiner_view.session_id)
-            .unwrap()
-            .take_transfer_parts()
-            .is_some());
+            .with_secret(&joiner_view.session_id, |_| ())
+            .is_none());
         assert!(owner_registry
-            .take_established(&owner_ready.session_id)
-            .unwrap()
-            .take_transfer_parts()
-            .is_some());
+            .with_secret(&owner_ready.session_id, |_| ())
+            .is_none());
 
         owner_endpoint.close().await;
         joiner_endpoint.close().await;
@@ -1089,98 +1200,185 @@ mod tests {
             }
         );
         let route = expected_route;
-        owner_registry
-            .transition(
-                &owner_ready.session_id,
-                RemoteSessionStatus::Transferring { route },
-                NOW + 3,
-            )
+        let owner_session = owner_registry.established(&owner_ready.session_id).unwrap();
+        let joiner_session = joiner_registry
+            .established(&joiner_ready.session_id)
             .unwrap();
-        joiner_registry
-            .transition(
-                &joiner_ready.session_id,
-                RemoteSessionStatus::Transferring { route },
-                NOW + 3,
-            )
-            .unwrap();
-
-        let mut owner_session = owner_registry
-            .take_established(&owner_ready.session_id)
-            .unwrap();
-        let (owner_channel, mut owner_send, mut owner_receive, mut owner_noise) =
-            owner_session.take_transfer_parts().unwrap();
-        let mut joiner_session = joiner_registry
-            .take_established(&joiner_ready.session_id)
-            .unwrap();
-        let (joiner_channel, mut joiner_send, mut joiner_receive, mut joiner_noise) =
-            joiner_session.take_transfer_parts().unwrap();
-
         let source_dir = test_dir("internet-command-source");
         let destination_dir = test_dir("internet-command-destination");
         tokio::fs::create_dir_all(&source_dir).await.unwrap();
         tokio::fs::create_dir_all(&destination_dir).await.unwrap();
-        let source_path = source_dir.join("verified.bin");
-        let payload: Vec<u8> = (0..128 * 1024).map(|index| (index % 251) as u8).collect();
-        tokio::fs::write(&source_path, &payload).await.unwrap();
-
-        let receiving_destination = destination_dir.clone();
-        let receiving = tokio::spawn(async move {
-            receive_transfer(
-                &mut owner_send,
-                &mut owner_receive,
-                &mut owner_noise,
-                &receiving_destination,
-                true,
-            )
-            .await
-        });
         let sender = DeviceIdentity {
             device_id: "runtime-sender".to_owned(),
             display_name: "Runtime sender".to_owned(),
             hostname: "runtime-sender.local".to_owned(),
             platform: "test".to_owned(),
         };
-        let bytes_sent = send_transfer(
-            &mut joiner_send,
-            &mut joiner_receive,
-            &mut joiner_noise,
-            &[source_path],
-            "runtime-transfer",
-            &sender,
-            |_| {},
-        )
-        .await
-        .unwrap();
-        let receipt = receiving.await.unwrap().unwrap();
-        let received = tokio::fs::read(destination_dir.join("verified.bin"))
-            .await
-            .unwrap();
-        assert_eq!(bytes_sent, payload.len() as u64);
-        assert_eq!(receipt.bytes_received, bytes_sent);
-        assert_eq!(
-            ring::digest::digest(&ring::digest::SHA256, &received).as_ref(),
-            ring::digest::digest(&ring::digest::SHA256, &payload).as_ref()
-        );
 
         owner_registry
             .transition(
                 &owner_ready.session_id,
-                RemoteSessionStatus::Completed,
-                NOW + 400,
+                RemoteSessionStatus::Transferring { route },
+                NOW + 3,
             )
             .unwrap();
         joiner_registry
             .transition(
                 &joiner_ready.session_id,
-                RemoteSessionStatus::Completed,
-                NOW + 400,
+                RemoteSessionStatus::Transferring { route },
+                NOW + 3,
             )
             .unwrap();
+        let (owner_parts, joiner_parts) = tokio::join!(
+            owner_session.next_transfer_parts(),
+            joiner_session.next_transfer_parts()
+        );
+        let (_, mut owner_send, mut owner_receive, mut owner_noise) = owner_parts.unwrap();
+        let (_, mut joiner_send, mut joiner_receive, mut joiner_noise) = joiner_parts.unwrap();
+        let cancelled_source = source_dir.join("cancelled.bin");
+        tokio::fs::write(&cancelled_source, vec![0xCA; 128 * 1024])
+            .await
+            .unwrap();
+        let cancellation_destination = destination_dir.clone();
+        let receiving_cancel = tokio::spawn(async move {
+            receive_transfer_with_cancellation(
+                &mut owner_send,
+                &mut owner_receive,
+                &mut owner_noise,
+                &cancellation_destination,
+                |_, _| std::future::pending::<bool>(),
+                |_| {},
+                std::future::pending::<()>(),
+            )
+            .await
+        });
+        let sending_cancel = send_transfer_with_cancellation(
+            &mut joiner_send,
+            &mut joiner_receive,
+            &mut joiner_noise,
+            &[cancelled_source],
+            "runtime-cancelled-transfer",
+            &sender,
+            CancellableSendCallbacks {
+                cancelled: tokio::time::sleep(Duration::from_millis(25)),
+                on_progress: |_: &crate::protocol::types::TransferProgress| {},
+                on_accepted: || {},
+            },
+        )
+        .await;
+        let receiving_cancel = receiving_cancel.await.unwrap();
+        assert!(sending_cancel.is_err());
+        assert!(receiving_cancel.is_err());
+        owner_registry
+            .transition(
+                &owner_ready.session_id,
+                RemoteSessionStatus::Ready { route },
+                NOW + 4,
+            )
+            .unwrap();
+        joiner_registry
+            .transition(
+                &joiner_ready.session_id,
+                RemoteSessionStatus::Ready { route },
+                NOW + 4,
+            )
+            .unwrap();
+
+        // Mutation captured: closing the authenticated channel after cancellation or the first
+        // completed transfer makes the subsequent fresh Noise stream fail.
+        for sequence in 1_u64..=2 {
+            owner_registry
+                .transition(
+                    &owner_ready.session_id,
+                    RemoteSessionStatus::Transferring { route },
+                    NOW + sequence + 2,
+                )
+                .unwrap();
+            joiner_registry
+                .transition(
+                    &joiner_ready.session_id,
+                    RemoteSessionStatus::Transferring { route },
+                    NOW + sequence + 2,
+                )
+                .unwrap();
+
+            let (owner_parts, joiner_parts) = tokio::join!(
+                owner_session.next_transfer_parts(),
+                joiner_session.next_transfer_parts()
+            );
+            let (_, mut owner_send, mut owner_receive, mut owner_noise) = owner_parts.unwrap();
+            let (_, mut joiner_send, mut joiner_receive, mut joiner_noise) = joiner_parts.unwrap();
+            let file_name = format!("verified-{sequence}.bin");
+            let source_path = source_dir.join(&file_name);
+            let payload: Vec<u8> = (0..128 * 1024)
+                .map(|index| ((index + sequence as usize) % 251) as u8)
+                .collect();
+            tokio::fs::write(&source_path, &payload).await.unwrap();
+            let receiving_destination = destination_dir.clone();
+            let receiving = tokio::spawn(async move {
+                receive_transfer(
+                    &mut owner_send,
+                    &mut owner_receive,
+                    &mut owner_noise,
+                    &receiving_destination,
+                    true,
+                )
+                .await
+            });
+            let bytes_sent = send_transfer(
+                &mut joiner_send,
+                &mut joiner_receive,
+                &mut joiner_noise,
+                &[source_path],
+                &format!("runtime-transfer-{sequence}"),
+                &sender,
+                |_| {},
+            )
+            .await
+            .unwrap();
+            let receipt = receiving.await.unwrap().unwrap();
+            let received = tokio::fs::read(destination_dir.join(file_name))
+                .await
+                .unwrap();
+            assert_eq!(bytes_sent, payload.len() as u64);
+            assert_eq!(receipt.bytes_received, bytes_sent);
+            assert_eq!(
+                ring::digest::digest(&ring::digest::SHA256, &received).as_ref(),
+                ring::digest::digest(&ring::digest::SHA256, &payload).as_ref()
+            );
+
+            owner_registry
+                .transition(
+                    &owner_ready.session_id,
+                    RemoteSessionStatus::Ready { route },
+                    NOW + sequence + 10,
+                )
+                .unwrap();
+            joiner_registry
+                .transition(
+                    &joiner_ready.session_id,
+                    RemoteSessionStatus::Ready { route },
+                    NOW + sequence + 10,
+                )
+                .unwrap();
+            assert!(matches!(
+                owner_registry.view(&owner_ready.session_id).unwrap().status,
+                RemoteSessionStatus::Ready { .. }
+            ));
+            assert!(matches!(
+                joiner_registry
+                    .view(&joiner_ready.session_id)
+                    .unwrap()
+                    .status,
+                RemoteSessionStatus::Ready { .. }
+            ));
+        }
+
+        assert!(owner_registry.cancel(&owner_ready.session_id));
+        assert!(joiner_registry.cancel(&joiner_ready.session_id));
         assert!(owner_registry.view(&owner_ready.session_id).is_none());
         assert!(joiner_registry.view(&joiner_ready.session_id).is_none());
 
-        owner_channel.close(crate::transfer::channel::ChannelCloseReason::Completed);
-        joiner_channel.close(crate::transfer::channel::ChannelCloseReason::Completed);
         owner_endpoint.close().await;
         joiner_endpoint.close().await;
         tokio::fs::remove_dir_all(source_dir).await.unwrap();
@@ -1241,9 +1439,7 @@ mod tests {
 
         assert!(joining.is_err());
         assert!(owning.is_err());
-        assert!(joiner_registry
-            .take_established(&imported.session_id)
-            .is_err());
+        assert!(joiner_registry.established(&imported.session_id).is_err());
 
         owner_endpoint.close().await;
         joiner_endpoint.close().await;

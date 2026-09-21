@@ -1,27 +1,29 @@
-# Dukto 0.2.0
+# Dukto 0.2.2
 
 Dukto is a cross-platform app and command-line tool for direct, encrypted file transfers across macOS, Windows, Linux, Android, and iOS.
 
-## Changes in 0.2.0
+## Changes since 0.2.0
 
-- Add Android and iOS platform support to the shared Tauri application, including bidirectional interoperability coverage with the desktop protocol.
-- Keep desktop update controls off mobile builds and add a privacy-policy link to the application settings.
-- Adopt `app.dukto` as the application identifier for future desktop and mobile distribution.
-- Update the website for all five supported platforms, direct-device terminology, improved documentation navigation, and clearer inline command and download links.
-- Add repeatable Android project configuration for multicast discovery permissions and SDK validation.
+- Add experimental, account-free internet transfers with ephemeral invitations, direct peer-to-peer connectivity when available, and encrypted relay fallback.
+- Keep an authenticated internet peer available for multiple sequential transfers until either app closes, the connection fails, or the user explicitly disconnects it.
+- Reuse the existing encrypted transfer protocol, approval flow, progress reporting, cancellation, directory handling, and partial-file cleanup for internet peers.
+- Add a platform-aware title-bar action and a focused invitation dialog for creating or joining an internet connection.
+- Improve Settings organization, update feedback, responsive dialog sizing, and language controls.
+- Improve Android file selection, destination handling, launcher artwork, and Google Play preparation.
+- Remove stale LAN peers promptly while preserving peers that reappear during short network-interface changes.
+- Harden invitation parsing, session capacity, secret redaction, endpoint verification, and path-safe error reporting.
 
 ## Downloads
 
-This GitHub release provides signed desktop installers and CLI archives for the supported macOS, Windows, and Linux architectures. Mobile packages are distributed separately through their platform release channels when available.
+This GitHub release provides updater-signed desktop installers and CLI archives for the supported macOS, Windows, and Linux architectures. macOS desktop applications are additionally Developer ID signed and notarized when the release workflow completes with notarization enabled. Mobile packages are distributed separately through their platform release channels when available.
 
-Because the application identifier changed to `app.dukto`, an existing 0.1.x desktop installation may require a manual install of 0.2.0 instead of an in-app update.
-
-Update the sender and receiver together. Protocol 0.1 applications are not compatible with the protocol 0.2 completion receipt.
+Update the sender and receiver together. Internet transfer support is experimental and peers should use the same Dukto version.
 
 ## Current limitations
 
-- Automatic discovery uses the local network. The CLI can connect directly to a known receiver address when discovery is unavailable; internet relay and remote discovery are not available yet.
-- Networks that block multicast may require a direct receiver address in the CLI.
+- The published desktop binaries do not include a Dukto-operated relay or rendezvous service. Internet transfer evaluation requires explicit runtime configuration: without relay URLs the transport is direct-only, and without rendezvous the invitation's embedded routes are used.
+- Direct connectivity depends on both networks. Dukto falls back to the configured encrypted relay when a direct path cannot be established.
+- Internet invitations are temporary and intentionally do not create an account or persist trusted devices.
 - Interrupted transfers are not resumable. Fully received files in a multi-file transfer remain available if a later item fails.
-- Persistent device pairing and trusted-device auto-accept are not available.
+- Windows installers are not Authenticode-signed. The updater payload remains cryptographically signed by Dukto's updater key.
 - The CLI and graphical app use separate device identities and settings.

@@ -88,7 +88,7 @@ impl Drop for RemoteSessionSecret {
 
 struct RemoteSession {
     view: RemoteSessionView,
-    secret: RemoteSessionSecret,
+    secret: Option<RemoteSessionSecret>,
     manual_code: Option<Zeroizing<String>>,
     share_link: Option<Zeroizing<String>>,
     role: InternetSessionRole,
@@ -183,7 +183,7 @@ impl RemoteSessionRegistry {
                     expires_at_unix,
                     status: RemoteSessionStatus::Invited,
                 },
-                secret,
+                secret: Some(secret),
                 manual_code: None,
                 share_link: None,
                 role,
@@ -242,7 +242,13 @@ impl RemoteSessionRegistry {
             addresses: session.addresses.clone(),
             expires_at_unix: session.view.expires_at_unix,
             role: session.role,
-            secret: Zeroizing::new(session.secret.0),
+            secret: Zeroizing::new(
+                session
+                    .secret
+                    .as_ref()
+                    .ok_or(RemoteSessionError::InvalidSession)?
+                    .0,
+            ),
             manual_code,
         })
     }
@@ -268,20 +274,23 @@ impl RemoteSessionRegistry {
         }
         session.view.peer_id = peer_id;
         session.view.status = RemoteSessionStatus::Ready { route };
+        session.secret = None;
+        session.manual_code = None;
         session.share_link = None;
+        session.addresses.clear();
         session.established = Some(established);
         Ok(session.view.clone())
     }
 
-    pub fn take_established(
+    pub fn established(
         &self,
         session_id: &str,
     ) -> Result<EstablishedInternetSession, RemoteSessionError> {
         self.sessions
             .lock()
             .unwrap()
-            .get_mut(session_id)
-            .and_then(|session| session.established.take())
+            .get(session_id)
+            .and_then(|session| session.established.clone())
             .ok_or(RemoteSessionError::NotFound)
     }
 
@@ -321,7 +330,16 @@ impl RemoteSessionRegistry {
     }
 
     pub fn cancel(&self, session_id: &str) -> bool {
-        self.sessions.lock().unwrap().remove(session_id).is_some()
+        self.sessions
+            .lock()
+            .unwrap()
+            .remove(session_id)
+            .map(|session| {
+                if let Some(established) = session.established {
+                    established.close(crate::transfer::channel::ChannelCloseReason::Cancelled);
+                }
+            })
+            .is_some()
     }
 
     pub fn expire(&self, now_unix: u64) -> usize {
@@ -351,7 +369,8 @@ impl RemoteSessionRegistry {
             .lock()
             .unwrap()
             .get(session_id)
-            .map(|session| derive(&session.secret.0))
+            .and_then(|session| session.secret.as_ref())
+            .map(|secret| derive(&secret.0))
     }
 
     pub fn set_manual_code(
@@ -448,7 +467,7 @@ fn is_valid_transition(current: &RemoteSessionStatus, next: &RemoteSessionStatus
             )
             | (
                 RemoteSessionStatus::Transferring { .. },
-                RemoteSessionStatus::Completed
+                RemoteSessionStatus::Ready { .. } | RemoteSessionStatus::Completed
             )
     ) || (!current.is_terminal()
         && matches!(
@@ -485,7 +504,8 @@ mod tests {
     const NOW: u64 = 1_800_000_000;
 
     #[test]
-    fn lifecycle_is_ordered_and_terminal_states_drop_the_secret() {
+    fn completed_transfer_returns_authenticated_session_to_ready_until_disconnect() {
+        // Mutation captured: treating transfer completion as a terminal session state removes the peer.
         let registry = RemoteSessionRegistry::default();
         registry
             .insert(
@@ -521,8 +541,30 @@ mod tests {
         );
 
         registry
-            .transition("session-1", RemoteSessionStatus::Completed, NOW + 3)
+            .transition(
+                "session-1",
+                RemoteSessionStatus::Transferring {
+                    route: RouteKind::Direct,
+                },
+                NOW + 3,
+            )
             .unwrap();
+        registry
+            .transition(
+                "session-1",
+                RemoteSessionStatus::Ready {
+                    route: RouteKind::Direct,
+                },
+                NOW + 4,
+            )
+            .unwrap();
+        assert_eq!(
+            registry.view("session-1").unwrap().status,
+            RemoteSessionStatus::Ready {
+                route: RouteKind::Direct
+            }
+        );
+        assert!(registry.cancel("session-1"));
         assert!(registry.view("session-1").is_none());
         assert!(registry
             .with_secret("session-1", |secret| secret[0])
@@ -572,7 +614,8 @@ mod tests {
     }
 
     #[test]
-    fn authenticated_sessions_are_not_expired_by_the_invitation_sweep() {
+    fn authenticated_sessions_remain_ready_after_the_invitation_and_transfer_finish() {
+        // Mutation captured: removing ready sessions at the invitation deadline or after one transfer loses the peer.
         let registry = RemoteSessionRegistry::default();
         registry
             .insert(
@@ -608,9 +651,20 @@ mod tests {
             )
             .unwrap();
         registry
-            .transition("ready", RemoteSessionStatus::Completed, NOW + 4)
+            .transition(
+                "ready",
+                RemoteSessionStatus::Ready {
+                    route: RouteKind::Direct,
+                },
+                NOW + 4,
+            )
             .unwrap();
-        assert!(registry.view("ready").is_none());
+        assert_eq!(
+            registry.view("ready").unwrap().status,
+            RemoteSessionStatus::Ready {
+                route: RouteKind::Direct
+            }
+        );
     }
 
     #[test]

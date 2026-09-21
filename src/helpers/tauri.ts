@@ -48,6 +48,10 @@ export async function cancelInternetInvite(sessionId: string): Promise<void> {
 	return invoke<void>("cancel_internet_invite", { sessionId });
 }
 
+export async function disconnectInternetSession(sessionId: string): Promise<void> {
+	return invoke<void>("disconnect_internet_session", { sessionId });
+}
+
 export async function confirmInternetPairingCode(
 	sessionId: string,
 	code: string,

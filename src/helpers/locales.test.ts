@@ -42,6 +42,7 @@ test("internet transfer copy is localized and compact at the stacked breakpoint"
 		"connectWithInvitation",
 		"copyInvitationLink",
 		"cancelInvitation",
+		"disconnectInternetSession",
 		"confirmPairingCode",
 	] as const;
 	for (const locale of [en, pt, es]) {

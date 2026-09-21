@@ -10,6 +10,7 @@ This document defines the community-facing interaction and layout contract for t
 - Keep the title bar 45 pixels high with a muted surface and bottom border.
 - Center the local device name and hostname.
 - Place the settings gear on the right on macOS, iOS, Android, and Linux, and on the left on Windows.
+- Place the circular add-peer action immediately to the left of settings on macOS and immediately to the right of settings on every other platform.
 - Preserve space for native macOS traffic lights. Windows uses custom minimize, disabled-maximize, and close controls on the right when native decorations are disabled.
 
 ## Content and host cards
@@ -51,7 +52,13 @@ Show a preview of the host card under the pointer and reorder the list as the pr
 
 ## Dialog behavior
 
+Settings and the internet-peer invitation dialog each occupy 80% of the available window width, with no component-specific maximum-width cap.
+
 Settings has an overlay and closes through its close control or a click on the overlay. Incoming transfer requests require an explicit accept or reject action and do not dismiss through the overlay.
+
+Place the outlined Check for updates action directly below the language control. Keep the Settings footer informational, with the current version aligned left and Privacy aligned right. A successful manual check that finds no update appears as a transient toast; never persist that message in the dialog or show it after an automatic startup check.
+
+Create and join internet invitations in a dismissible dialog opened from the title bar. After authentication, close the dialog and show the internet peer in the host list until the connection fails, either app exits, or the user explicitly disconnects it.
 
 Use native file selection and drag and drop while keeping all actions accessible by keyboard.
 

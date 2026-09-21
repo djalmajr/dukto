@@ -14,6 +14,7 @@ use crate::protocol::types::*;
 use crate::state::device::DeviceIdentity;
 use crate::transfer::channel::{TransferReceiveStream, TransferSendStream};
 use crate::transfer::fs::{walk_directory, WalkItem};
+use crate::transfer::receiver::TransferRejected;
 
 // Noise max message is 65535. Keep chunks under the limit with overhead.
 const CHUNK_SIZE: usize = 32 * 1024; // 32 KB
@@ -101,7 +102,7 @@ where
     }
     let response: AcceptRejectResponse = serde_json::from_slice(payload)?;
     if !response.accepted {
-        return Err("Transfer rejected by receiver".into());
+        return Err(Box::new(TransferRejected));
     }
 
     on_accepted();

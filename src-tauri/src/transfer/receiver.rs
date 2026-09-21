@@ -14,6 +14,21 @@ use crate::transfer::fs::resolve_conflict;
 use crate::transfer::partial_file::create_partial_file;
 use crate::transfer::safe_destination::resolve_safe_destination_path;
 
+#[derive(Debug, thiserror::Error)]
+#[error("Transfer rejected")]
+pub struct TransferRejected;
+
+pub fn is_transfer_rejected(error: &(dyn std::error::Error + 'static)) -> bool {
+    let mut current = Some(error);
+    while let Some(error) = current {
+        if error.is::<TransferRejected>() {
+            return true;
+        }
+        current = error.source();
+    }
+    false
+}
+
 /// Result of a completed transfer.
 #[derive(Debug, serde::Serialize)]
 pub struct ReceiveResult {
@@ -142,7 +157,7 @@ where
         send.finish_transfer()?;
         let _ =
             tokio::time::timeout(std::time::Duration::from_secs(5), send.stopped_transfer()).await;
-        return Err("Transfer rejected".into());
+        return Err(Box::new(TransferRejected));
     }
 
     tokio::fs::create_dir_all(destination_dir).await?;

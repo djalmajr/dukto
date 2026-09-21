@@ -8,12 +8,11 @@ use dukto_lib::internet::{
     },
 };
 use dukto_lib::state::{
-    app_state::AppState, device::DeviceIdentity, internet_session::RemoteSessionSecret,
+    app_state::AppState,
+    device::DeviceIdentity,
+    internet_session::{RemoteSessionSecret, RemoteSessionStatus},
 };
-use dukto_lib::transfer::{
-    channel::{AuthenticatedChannel, ChannelCloseReason},
-    receiver::receive_transfer_with_accept,
-};
+use dukto_lib::transfer::receiver::receive_transfer_with_accept;
 use dukto_lib::{internet::invite::InternetInvite, internet::rendezvous::RendezvousSlot};
 use serde_json::json;
 use tauri::{test, Manager, WebviewWindowBuilder};
@@ -155,7 +154,7 @@ fn send_command_transfers_verified_bytes_through_the_tauri_ipc_boundary() {
     let expires_at_unix = now_unix + 300;
     let session_id = uuid::Uuid::new_v4().to_string();
     let session_secret = [0x6D; 32];
-    let (server, client, mut receiver_session, sender_session) =
+    let (server, client, receiver_session, sender_session) =
         tauri::async_runtime::block_on(async {
             let server = InternetEndpoint::bind(
                 InternetEndpointConfig::default().with_bind_addr("127.0.0.1:0".parse().unwrap()),
@@ -253,8 +252,8 @@ fn send_command_transfers_verified_bytes_through_the_tauri_ipc_boundary() {
         .unwrap();
 
     let receiver = tauri::async_runtime::spawn(async move {
-        let (channel, mut send, mut receive, mut noise) =
-            receiver_session.take_transfer_parts().unwrap();
+        let (_channel, mut send, mut receive, mut noise) =
+            receiver_session.next_transfer_parts().await.unwrap();
         let receipt = receive_transfer_with_accept(
             &mut send,
             &mut receive,
@@ -264,14 +263,14 @@ fn send_command_transfers_verified_bytes_through_the_tauri_ipc_boundary() {
             |_| {},
         )
         .await;
-        channel.close(ChannelCloseReason::Completed);
         receipt
     });
 
     let app = test::mock_builder()
         .manage(app_state)
         .invoke_handler(tauri::generate_handler![
-            dukto_lib::commands::internet::send_to_internet_session
+            dukto_lib::commands::internet::send_to_internet_session,
+            dukto_lib::commands::internet::disconnect_internet_session
         ])
         .build(test::mock_context(test::noop_assets()))
         .unwrap();
@@ -308,17 +307,31 @@ fn send_command_transfers_verified_bytes_through_the_tauri_ipc_boundary() {
     );
     tauri::async_runtime::block_on(async {
         tokio::time::timeout(std::time::Duration::from_secs(5), async {
-            while app
-                .state::<AppState>()
-                .remote_sessions
-                .view(&session_id)
-                .is_some()
-            {
+            while !matches!(
+                app.state::<AppState>()
+                    .remote_sessions
+                    .view(&session_id)
+                    .map(|view| view.status),
+                Some(RemoteSessionStatus::Ready { .. })
+            ) {
                 tokio::time::sleep(std::time::Duration::from_millis(10)).await;
             }
         })
         .await
         .unwrap();
+        let cancelled = test::get_ipc_response(
+            &webview,
+            request(
+                "disconnect_internet_session",
+                json!({ "sessionId": session_id }),
+            ),
+        );
+        assert!(cancelled.unwrap().deserialize::<()>().is_ok());
+        assert!(app
+            .state::<AppState>()
+            .remote_sessions
+            .view(&session_id)
+            .is_none());
         client.close().await;
         server.close().await;
     });

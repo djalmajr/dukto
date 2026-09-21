@@ -1,11 +1,11 @@
-use std::{fmt, time::Duration};
+use std::{fmt, sync::Arc, time::Duration};
 
 use iroh::endpoint::{RecvStream, SendStream};
 use ring::rand::SecureRandom;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use snow::TransportState;
 use thiserror::Error;
-use tokio::time::timeout;
+use tokio::{sync::Mutex, time::timeout};
 use zeroize::Zeroizing;
 
 use crate::{
@@ -59,36 +59,67 @@ impl fmt::Debug for InternetSessionCredentials {
     }
 }
 
-pub struct EstablishedInternetSession {
+type InternetTransferParts = (SendStream, RecvStream, TransportState);
+
+struct EstablishedInternetSessionInner {
+    binding: Zeroizing<[u8; 32]>,
     channel: IrohAuthenticatedChannel,
-    send: Option<SendStream>,
-    receive: Option<RecvStream>,
-    noise: Option<TransportState>,
+    initial_transfer: Mutex<Option<InternetTransferParts>>,
+    role: InternetSessionRole,
+}
+
+#[derive(Clone)]
+pub struct EstablishedInternetSession {
+    inner: Arc<EstablishedInternetSessionInner>,
 }
 
 impl EstablishedInternetSession {
     pub fn peer_id(&self) -> &str {
-        self.channel.peer_id()
+        self.inner.channel.peer_id()
     }
 
     pub fn route_kind(&self) -> RouteKind {
-        self.channel.route_kind()
+        self.inner.channel.route_kind()
     }
 
-    pub fn take_transfer_parts(
-        &mut self,
-    ) -> Option<(
-        IrohAuthenticatedChannel,
-        SendStream,
-        RecvStream,
-        TransportState,
-    )> {
-        Some((
-            self.channel.clone(),
-            self.send.take()?,
-            self.receive.take()?,
-            self.noise.take()?,
-        ))
+    pub async fn next_transfer_parts(
+        &self,
+    ) -> Result<
+        (
+            IrohAuthenticatedChannel,
+            SendStream,
+            RecvStream,
+            TransportState,
+        ),
+        InternetSessionError,
+    > {
+        if let Some((send, receive, noise)) = self.inner.initial_transfer.lock().await.take() {
+            return Ok((self.inner.channel.clone(), send, receive, noise));
+        }
+
+        let (mut send, mut receive) = match self.inner.role {
+            InternetSessionRole::InvitationJoiner => self.inner.channel.open_bi().await,
+            InternetSessionRole::InvitationOwner => self.inner.channel.accept_bi().await,
+        }
+        .map_err(|_| InternetSessionError::Transport)?;
+        let noise = match self.inner.role {
+            InternetSessionRole::InvitationJoiner => {
+                handshake_initiator_bound(&mut send, &mut receive, &self.inner.binding).await
+            }
+            InternetSessionRole::InvitationOwner => {
+                handshake_responder_bound(&mut send, &mut receive, &self.inner.binding).await
+            }
+        }
+        .map_err(|_| InternetSessionError::AuthenticationFailed)?;
+        Ok((self.inner.channel.clone(), send, receive, noise))
+    }
+
+    pub async fn closed(&self) {
+        self.inner.channel.closed().await;
+    }
+
+    pub fn close(&self, reason: ChannelCloseReason) {
+        self.inner.channel.close(reason);
     }
 }
 
@@ -98,8 +129,26 @@ impl fmt::Debug for EstablishedInternetSession {
             .debug_struct("EstablishedInternetSession")
             .field("peer_id", &self.peer_id())
             .field("route", &self.route_kind())
-            .field("has_transfer_stream", &self.send.is_some())
+            .field("role", &self.inner.role)
             .finish()
+    }
+}
+
+fn established_session(
+    binding: [u8; 32],
+    channel: IrohAuthenticatedChannel,
+    noise: TransportState,
+    receive: RecvStream,
+    role: InternetSessionRole,
+    send: SendStream,
+) -> EstablishedInternetSession {
+    EstablishedInternetSession {
+        inner: Arc::new(EstablishedInternetSessionInner {
+            binding: Zeroizing::new(binding),
+            channel,
+            initial_transfer: Mutex::new(Some((send, receive, noise))),
+            role,
+        }),
     }
 }
 
@@ -255,12 +304,14 @@ async fn authenticate_initiator_inner(
     let noise = handshake_initiator_bound(&mut send, &mut receive, keys.noise_binding())
         .await
         .map_err(|_| InternetSessionError::AuthenticationFailed)?;
-    Ok(EstablishedInternetSession {
+    Ok(established_session(
+        *keys.noise_binding(),
         channel,
-        send: Some(send),
-        receive: Some(receive),
-        noise: Some(noise),
-    })
+        noise,
+        receive,
+        InternetSessionRole::InvitationJoiner,
+        send,
+    ))
 }
 
 pub async fn authenticate_responder<F>(
@@ -362,12 +413,14 @@ where
     let session_id = credentials.session_id;
     Ok((
         session_id,
-        EstablishedInternetSession {
+        established_session(
+            *keys.noise_binding(),
             channel,
-            send: Some(send),
-            receive: Some(receive),
-            noise: Some(noise),
-        },
+            noise,
+            receive,
+            InternetSessionRole::InvitationOwner,
+            send,
+        ),
     ))
 }
 

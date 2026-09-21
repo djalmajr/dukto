@@ -22,6 +22,7 @@ import {
 	updateDisplayName,
 } from "~/stores/settings";
 import { formatDeviceHostname } from "~/utils/device-hostname";
+import LucideCirclePlus from "~icons/lucide/circle-plus";
 import LucideSettings from "~icons/lucide/settings";
 
 function isInteractiveTarget(target: HTMLElement) {
@@ -47,7 +48,10 @@ function RootLayout() {
 	const isMobile = currentPlatform === "android" || currentPlatform === "ios";
 	const navigate = useNavigate();
 	const search = useSearch({ strict: false });
-	const showSettings = () => (search() as { settings?: boolean }).settings === true;
+	const showSettings = () =>
+		(search() as { internet?: boolean; settings?: boolean }).settings === true;
+	const showInternetPeer = () =>
+		(search() as { internet?: boolean; settings?: boolean }).internet === true;
 
 	let stopNotifications: UnlistenFn | undefined;
 	let disposed = false;
@@ -107,6 +111,24 @@ function RootLayout() {
 		updateDisplayName(updated.display_name);
 	}
 
+	const addInternetPeerButton = () => (
+		<Button
+			variant="ghost"
+			size="icon"
+			class="h-6 w-6 text-muted-foreground"
+			onClick={() =>
+				navigate({
+					to: "/",
+					search: { internet: showInternetPeer() ? undefined : true, settings: undefined },
+				})
+			}
+			title={t("addInternetPeer")}
+			aria-label={t("addInternetPeer")}
+		>
+			<LucideCirclePlus width={16} height={16} />
+		</Button>
+	);
+
 	return (
 		<div class="flex h-screen w-full flex-col overflow-hidden bg-background text-foreground">
 			<header
@@ -129,6 +151,7 @@ function RootLayout() {
 						? `${device()?.display_name} · ${formatDeviceHostname(device()?.hostname ?? "")}`
 						: "Dukto"}
 				</p>
+				{isMac && addInternetPeerButton()}
 				<Button
 					variant="ghost"
 					size="icon"
@@ -136,7 +159,7 @@ function RootLayout() {
 					onClick={() =>
 						navigate({
 							to: "/",
-							search: { settings: showSettings() ? undefined : true },
+							search: { internet: undefined, settings: showSettings() ? undefined : true },
 						})
 					}
 					title={t("settings")}
@@ -144,6 +167,7 @@ function RootLayout() {
 				>
 					<LucideSettings width={16} height={16} />
 				</Button>
+				{!isMac && addInternetPeerButton()}
 				<Show when={isWindows}>
 					<WindowControls />
 				</Show>
@@ -169,8 +193,8 @@ function RootLayout() {
 				onChangeDisplayName={handleChangeDisplayName}
 				onChangeTheme={setTheme}
 				onChangeLanguage={changeLanguage}
-				onCheckForUpdates={() => void appUpdates.checkForUpdates(false)}
-				onClose={() => navigate({ to: "/", search: { settings: undefined } })}
+				onCheckForUpdates={() => appUpdates.checkForUpdates(false)}
+				onClose={() => navigate({ to: "/", search: { internet: undefined, settings: undefined } })}
 			/>
 			<UpdateAvailableDialog />
 		</div>

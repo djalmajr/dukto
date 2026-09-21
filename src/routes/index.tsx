@@ -179,6 +179,7 @@ function HomePage() {
 export const Route = createFileRoute("/")({
 	component: HomePage,
 	validateSearch: (search: Record<string, unknown>) => ({
+		internet: search.internet === true || search.internet === "true" || undefined,
 		settings: search.settings === true || search.settings === "true" || undefined,
 	}),
 });

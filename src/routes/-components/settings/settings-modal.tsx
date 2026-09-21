@@ -1,4 +1,5 @@
-import { Show, createEffect, createSignal } from "solid-js";
+import { Show, createEffect, createSignal, onCleanup } from "solid-js";
+import { Portal } from "solid-js/web";
 import { Button } from "~/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "~/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger } from "~/components/ui/tabs";
@@ -30,7 +31,7 @@ interface SettingsModalProps {
 	onChangeDestination: () => Promise<void>;
 	onChangeTheme: (theme: ThemeMode) => void;
 	onChangeLanguage?: (lang: string) => void;
-	onCheckForUpdates: () => void;
+	onCheckForUpdates: () => Promise<void>;
 	onClose: () => void;
 }
 
@@ -41,6 +42,8 @@ function SettingsModal(props: SettingsModalProps) {
 	const [changingDestination, setChangingDestination] = createSignal(false);
 	const [destinationError, setDestinationError] = createSignal<string | null>(null);
 	const [privacyError, setPrivacyError] = createSignal(false);
+	const [upToDateToastVisible, setUpToDateToastVisible] = createSignal(false);
+	let toastTimer: ReturnType<typeof setTimeout> | undefined;
 
 	createEffect(() => {
 		if (!props.open) return;
@@ -85,33 +88,12 @@ function SettingsModal(props: SettingsModalProps) {
 		void openPrivacyPolicy(props.currentPlatform).catch(() => setPrivacyError(true));
 	};
 
-	const statusMessage = () => {
-		switch (props.updateStatus) {
-			case "checking":
-				return t("checkingForUpdates");
-			case "upToDate":
-				return t("upToDate");
-			case "available":
-			case "downloadError":
-				return t("updateAvailableVersion", { version: props.availableVersion ?? "" });
-			case "downloading":
-				return t("updateDownloading");
-			case "downloaded":
-				return t("updateDownloaded");
-			case "preparingInstall":
-				return t("updatePreparingInstall");
-			case "waitingForTransfers":
-				return t("updateWaitingForTransfers");
-			case "installing":
-				return t("updateInstalling");
-			case "installError":
-				return t("updateInstallFailed");
-			case "restarting":
-				return t("updateRestarting");
-			case "restartFailed":
-				return t("updateRestartManually");
-			default:
-				return t("updateNotChecked");
+	const handleCheckForUpdates = async () => {
+		await props.onCheckForUpdates();
+		if (props.updateStatus === "upToDate") {
+			setUpToDateToastVisible(true);
+			if (toastTimer) clearTimeout(toastTimer);
+			toastTimer = setTimeout(() => setUpToDateToastVisible(false), 3500);
 		}
 	};
 
@@ -135,155 +117,170 @@ function SettingsModal(props: SettingsModalProps) {
 		return null;
 	};
 
+	onCleanup(() => {
+		if (toastTimer) clearTimeout(toastTimer);
+	});
+
 	return (
-		<Dialog open={props.open} onOpenChange={(open) => !open && props.onClose()}>
-			<DialogContent
-				class="max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-xs gap-4 rounded-lg p-5"
-				overlayClass="bg-black/40"
-				onEscapeKeyDown={(event: Event) => event.preventDefault()}
-			>
-				<DialogTitle class="text-sm font-semibold">{t("settings")}</DialogTitle>
-				<div class="space-y-3">
-					<div class="space-y-1">
-						<p class="text-xs font-medium text-muted-foreground">{t("userName")}</p>
-						<div class="flex items-center gap-1.5">
-							<TextField class="min-w-0 flex-1">
-								<TextFieldInput
-									value={displayName()}
-									maxlength={64}
-									onInput={(event) => setDisplayName(event.currentTarget.value)}
-									onKeyDown={(event) => {
-										if (event.key === "Enter") {
-											event.preventDefault();
-											void saveDisplayName();
-										}
-									}}
-								/>
-							</TextField>
-							<Button
-								variant="outline"
-								disabled={
-									savingDisplayName() ||
-									!displayName().trim() ||
-									displayName().trim() === props.displayName
-								}
-								onClick={() => void saveDisplayName()}
-							>
-								{savingDisplayName() ? t("saving") : t("save")}
-							</Button>
-						</div>
-						<Show when={displayNameError()}>
-							{(message) => <output class="block text-xs text-destructive">{message()}</output>}
-						</Show>
-					</div>
-					<div class="space-y-1">
-						<p class="text-xs font-medium text-muted-foreground">{t("saveFilesTo")}</p>
-						<div class="flex items-center gap-1.5">
-							<TextField class="min-w-0 flex-1">
-								<TextFieldInput disabled value={props.destinationDir} class="bg-muted" />
-							</TextField>
-							<Button
-								variant="outline"
-								disabled={changingDestination()}
-								onClick={() => void changeDestination()}
-							>
-								{changingDestination() ? t("saving") : t("change")}
-							</Button>
-						</div>
-						<Show when={destinationError()}>
-							{(message) => <output class="block text-xs text-destructive">{message()}</output>}
-						</Show>
-					</div>
-					<div class="space-y-1">
-						<p class="text-xs font-medium text-muted-foreground">{t("appearance")}</p>
-						<Tabs value={props.theme} onChange={(value) => props.onChangeTheme(value as ThemeMode)}>
-							<TabsList class="h-8">
-								<TabsTrigger value="light" class="capitalize">
-									{t("light")}
-								</TabsTrigger>
-								<TabsTrigger value="dark" class="capitalize">
-									{t("dark")}
-								</TabsTrigger>
-								<TabsTrigger value="system" class="capitalize">
-									{t("system")}
-								</TabsTrigger>
-							</TabsList>
-						</Tabs>
-					</div>
-					<Show when={props.onChangeLanguage}>
+		<>
+			<Dialog open={props.open} onOpenChange={(open) => !open && props.onClose()}>
+				<DialogContent
+					class="max-h-[calc(100dvh-2rem)] w-4/5 max-w-none gap-4 rounded-lg p-5"
+					overlayClass="bg-black/40"
+					onEscapeKeyDown={(event: Event) => event.preventDefault()}
+				>
+					<DialogTitle class="text-sm font-semibold">{t("settings")}</DialogTitle>
+					<div class="space-y-3">
 						<div class="space-y-1">
-							<p class="text-xs font-medium text-muted-foreground">{t("language")}</p>
+							<p class="text-xs font-medium text-muted-foreground">{t("userName")}</p>
+							<div class="flex items-center gap-1.5">
+								<TextField class="min-w-0 flex-1">
+									<TextFieldInput
+										value={displayName()}
+										maxlength={64}
+										onInput={(event) => setDisplayName(event.currentTarget.value)}
+										onKeyDown={(event) => {
+											if (event.key === "Enter") {
+												event.preventDefault();
+												void saveDisplayName();
+											}
+										}}
+									/>
+								</TextField>
+								<Button
+									variant="outline"
+									disabled={
+										savingDisplayName() ||
+										!displayName().trim() ||
+										displayName().trim() === props.displayName
+									}
+									onClick={() => void saveDisplayName()}
+								>
+									{savingDisplayName() ? t("saving") : t("save")}
+								</Button>
+							</div>
+							<Show when={displayNameError()}>
+								{(message) => <output class="block text-xs text-destructive">{message()}</output>}
+							</Show>
+						</div>
+						<div class="space-y-1">
+							<p class="text-xs font-medium text-muted-foreground">{t("saveFilesTo")}</p>
+							<div class="flex items-center gap-1.5">
+								<TextField class="min-w-0 flex-1">
+									<TextFieldInput disabled value={props.destinationDir} class="bg-muted" />
+								</TextField>
+								<Button
+									variant="outline"
+									disabled={changingDestination()}
+									onClick={() => void changeDestination()}
+								>
+									{changingDestination() ? t("saving") : t("change")}
+								</Button>
+							</div>
+							<Show when={destinationError()}>
+								{(message) => <output class="block text-xs text-destructive">{message()}</output>}
+							</Show>
+						</div>
+						<div class="space-y-1">
+							<p class="text-xs font-medium text-muted-foreground">{t("appearance")}</p>
 							<Tabs
-								value={props.language ?? "pt"}
-								onChange={(value) => props.onChangeLanguage?.(value)}
+								value={props.theme}
+								onChange={(value) => props.onChangeTheme(value as ThemeMode)}
 							>
 								<TabsList class="h-8">
-									<TabsTrigger value="en">English</TabsTrigger>
-									<TabsTrigger value="pt">Português</TabsTrigger>
-									<TabsTrigger value="es">Español</TabsTrigger>
+									<TabsTrigger value="light" class="capitalize">
+										{t("light")}
+									</TabsTrigger>
+									<TabsTrigger value="dark" class="capitalize">
+										{t("dark")}
+									</TabsTrigger>
+									<TabsTrigger value="system" class="capitalize">
+										{t("system")}
+									</TabsTrigger>
 								</TabsList>
 							</Tabs>
 						</div>
-					</Show>
-					<footer class="space-y-1.5 border-t border-border pt-3" aria-label={t("about")}>
-						<div class="flex flex-wrap items-center gap-1">
-							<span
-								class="shrink-0 whitespace-nowrap text-xs text-muted-foreground"
-								aria-label={t("currentVersion", { version: props.currentVersion ?? "..." })}
-							>
-								v{props.currentVersion ?? "..."}
-							</span>
-							<Button
-								variant="ghost"
-								class="h-6 shrink-0 gap-1 px-1.5 text-xs font-normal text-muted-foreground hover:text-foreground"
-								onClick={handleOpenPrivacyPolicy}
-							>
-								{t("privacyPolicy")}
-								<LucideExternalLink class="size-4" />
-							</Button>
-							<Show when={props.showAppUpdates}>
+						<Show when={props.onChangeLanguage}>
+							<div class="space-y-1">
+								<p class="text-xs font-medium text-muted-foreground">{t("language")}</p>
+								<Tabs
+									value={props.language ?? "pt"}
+									onChange={(value) => props.onChangeLanguage?.(value)}
+								>
+									<TabsList class="h-8">
+										<TabsTrigger value="en">English</TabsTrigger>
+										<TabsTrigger value="pt">Português</TabsTrigger>
+										<TabsTrigger value="es">Español</TabsTrigger>
+									</TabsList>
+								</Tabs>
+							</div>
+						</Show>
+						<Show when={props.showAppUpdates}>
+							<div class="space-y-1.5">
 								<Button
-									variant="ghost"
-									class="ml-auto h-6 shrink-0 gap-1.5 px-1.5 text-xs font-normal text-muted-foreground hover:text-foreground"
+									variant="outline"
+									class="w-full gap-1.5"
 									disabled={props.updateBusy}
-									onClick={props.onCheckForUpdates}
+									onClick={() => void handleCheckForUpdates()}
 								>
 									<LucideRefreshCw
 										class="size-4"
 										classList={{ "motion-safe:animate-spin": props.updateStatus === "checking" }}
 									/>
-									{props.availableVersion ? t("viewUpdate") : t("checkForUpdates")}
+									{props.updateStatus === "checking"
+										? t("checkingForUpdates")
+										: props.availableVersion
+											? t("viewUpdate")
+											: t("checkForUpdates")}
 								</Button>
-							</Show>
-						</div>
-						<Show when={privacyError()}>
-							<output class="block text-xs leading-relaxed text-destructive">
-								{t("operationFailed")}
-							</output>
+								<Show when={errorMessage()}>
+									{(message) => (
+										<output class="block break-words text-xs leading-relaxed text-destructive">
+											{message()}
+										</output>
+									)}
+								</Show>
+							</div>
 						</Show>
-						<Show
-							when={
-								props.showAppUpdates &&
-								props.updateStatus !== "idle" &&
-								props.updateStatus !== "checking" &&
-								!errorMessage()
-							}
-						>
-							<output class="block text-xs leading-relaxed text-muted-foreground">
-								{statusMessage()}
-							</output>
-						</Show>
-						<Show when={errorMessage()}>
-							{(message) => (
-								<output class="block break-words text-xs leading-relaxed text-destructive">
-									{message()}
+						<footer class="space-y-1.5 border-t border-border pt-3" aria-label={t("about")}>
+							<div class="flex items-center justify-between gap-3">
+								<span
+									class="shrink-0 whitespace-nowrap text-xs text-muted-foreground"
+									aria-label={t("currentVersion", { version: props.currentVersion ?? "..." })}
+								>
+									v{props.currentVersion ?? "..."}
+								</span>
+								<Button
+									variant="ghost"
+									class="h-6 shrink-0 gap-1 px-1.5 text-xs font-normal text-muted-foreground hover:text-foreground"
+									onClick={handleOpenPrivacyPolicy}
+								>
+									{t("privacyPolicy")}
+									<LucideExternalLink class="size-4" />
+								</Button>
+							</div>
+							<Show when={privacyError()}>
+								<output class="block text-xs leading-relaxed text-destructive">
+									{t("operationFailed")}
 								</output>
-							)}
-						</Show>
-					</footer>
-				</div>
-			</DialogContent>
-		</Dialog>
+							</Show>
+						</footer>
+					</div>
+				</DialogContent>
+			</Dialog>
+			<Show when={upToDateToastVisible()}>
+				<Portal>
+					<div class="pointer-events-none fixed inset-x-4 bottom-[calc(1rem+env(safe-area-inset-bottom))] z-[60] flex justify-center">
+						<output
+							class="max-w-sm rounded-md bg-foreground px-3 py-2 text-xs text-background shadow-lg"
+							aria-live="polite"
+						>
+							{t("upToDate")}
+						</output>
+					</div>
+				</Portal>
+			</Show>
+		</>
 	);
 }
 

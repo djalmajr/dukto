@@ -4,9 +4,9 @@ Dukto's source tree includes an experimental account-free internet transfer path
 
 ## User flow
 
-The receiving device creates a short-lived invitation and can share it as a QR code or through an explicit copy-link action. The sender scans or pastes that deep link, or imports the invitation and confirms the displayed eight-digit code for manual pairing. After the devices authenticate the invitation and each other's transport endpoint, the sender selects files or folders. The receiver still accepts or rejects the transfer before file bytes flow.
+The receiving device creates a short-lived invitation and can share it as a QR code or through an explicit copy-link action. The sender scans or pastes that deep link, or imports the invitation and confirms the displayed eight-digit code for manual pairing. After the devices authenticate the invitation and each other's transport endpoint, the sender selects files or folders. The receiver still accepts or rejects each transfer before file bytes flow.
 
-An invitation is ephemeral and is consumed by one authenticated session. Dukto does not create an account, trusted-device list, transfer history, or asynchronous download link.
+An invitation is ephemeral and is consumed by one authenticated session. Once connected, the remote device stays available like a LAN peer and the authenticated connection can carry multiple sequential transfers. Completing, rejecting, or canceling one transfer does not disconnect that peer. The connection ends when either app closes, the transport fails, or a user explicitly selects **Disconnect**. Dukto discards the invitation secret, pairing code, copied link, and advertised invitation routes after authentication; it does not create an account, trusted-device list, transfer history, or asynchronous download link.
 
 ## Connectivity
 
@@ -22,7 +22,7 @@ The rendezvous client rejects redirects, applies bounded connection and request 
 
 ## Security and privacy
 
-The invitation contains a random secret. A typed code is used through SPAKE2 rather than as a bearer token or direct encryption key. Pairing binds the session ID, roles, expiration, fresh nonces, protocol version, ALPN, and both transport endpoint IDs. The first transfer stream then establishes a transcript-bound Noise session before any transfer header is accepted.
+The invitation contains a random secret. A typed code is used through SPAKE2 rather than as a bearer token or direct encryption key. Pairing binds the session ID, roles, expiration, fresh nonces, protocol version, ALPN, and both transport endpoint IDs. Every transfer uses a fresh bidirectional stream and a fresh transcript-bound Noise handshake before any transfer header is accepted, while the underlying authenticated iroh connection remains reusable.
 
 The rendezvous service receives an opaque slot and an encrypted address envelope. It does not need file names, relative paths, approval decisions, or file contents. A relay forwards encrypted traffic, but it can still observe network metadata such as source IP, timing, connection duration, and byte volume. End-to-end encryption does not hide that metadata.
 
