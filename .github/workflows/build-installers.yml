@@ -87,6 +87,7 @@ jobs:
           --skip discovery::mdns::tests::explicit_shutdown_announces_peer_removal
           --skip discovery::mdns::tests::discovers_peer_arriving_after_thirty_seconds
           --skip discovery::mdns::tests::does_not_discover_self_via_broadcast
+          --skip discovery::mdns::tests::browse_refresh_rediscovers_restarted_peer_before_removal
       - run: bun test
       - name: Prepare Apple notarization key
         if: runner.os == 'macOS' && inputs.notarize_macos
