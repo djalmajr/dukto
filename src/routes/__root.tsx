@@ -3,11 +3,13 @@ import { type UnlistenFn, listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { sendNotification } from "@tauri-apps/plugin-notification";
 import { platform } from "@tauri-apps/plugin-os";
-import { Show, createEffect, onCleanup, onMount } from "solid-js";
+import { Show, createEffect, createSignal, onCleanup, onMount } from "solid-js";
 import { Button } from "~/components/ui/button";
+import Toast from "~/components/ui/toast";
 import WindowControls from "~/components/window-controls";
 import { pickDestinationDirectory } from "~/helpers/destination-directory";
 import { changeLanguage, language, t } from "~/helpers/i18n";
+import { openDestinationDirectory } from "~/helpers/open-destination-directory";
 import SettingsModal from "~/routes/-components/settings/settings-modal";
 import UpdateAvailableDialog from "~/routes/-components/settings/update-available-dialog";
 import { type IncomingRequest, incomingRequest } from "~/routes/-stores/transfers";
@@ -22,8 +24,9 @@ import {
 	updateDisplayName,
 } from "~/stores/settings";
 import { formatDeviceHostname } from "~/utils/device-hostname";
-import LucideCirclePlus from "~icons/lucide/circle-plus";
-import LucideSettings from "~icons/lucide/settings";
+import CarbonDirectLink from "~icons/carbon/direct-link";
+import CarbonFolderOpen from "~icons/carbon/folder-open";
+import CarbonSettings from "~icons/carbon/settings";
 
 function isInteractiveTarget(target: HTMLElement) {
 	return target.closest("button,[role='button'],a,input,select,textarea,[data-no-window-drag]");
@@ -52,6 +55,8 @@ function RootLayout() {
 		(search() as { internet?: boolean; settings?: boolean }).settings === true;
 	const showInternetPeer = () =>
 		(search() as { internet?: boolean; settings?: boolean }).internet === true;
+	const [destinationOpenFailed, setDestinationOpenFailed] = createSignal(false);
+	let destinationOpenTimer: ReturnType<typeof setTimeout> | undefined;
 
 	let stopNotifications: UnlistenFn | undefined;
 	let disposed = false;
@@ -78,6 +83,7 @@ function RootLayout() {
 	onCleanup(() => {
 		disposed = true;
 		stopNotifications?.();
+		clearTimeout(destinationOpenTimer);
 	});
 
 	createEffect(() => {
@@ -111,6 +117,18 @@ function RootLayout() {
 		updateDisplayName(updated.display_name);
 	}
 
+	async function handleOpenDestination() {
+		const path = settings()?.destination_dir;
+		if (!path) return;
+		try {
+			await openDestinationDirectory(path);
+		} catch {
+			setDestinationOpenFailed(true);
+			clearTimeout(destinationOpenTimer);
+			destinationOpenTimer = setTimeout(() => setDestinationOpenFailed(false), 3500);
+		}
+	}
+
 	const addInternetPeerButton = () => (
 		<Button
 			variant="ghost"
@@ -125,7 +143,19 @@ function RootLayout() {
 			title={t("addInternetPeer")}
 			aria-label={t("addInternetPeer")}
 		>
-			<LucideCirclePlus width={16} height={16} />
+			<CarbonDirectLink width={16} height={16} />
+		</Button>
+	);
+	const openDestinationButton = () => (
+		<Button
+			variant="ghost"
+			size="icon"
+			class="h-6 w-6 text-muted-foreground hover:bg-muted-foreground/10"
+			onClick={() => void handleOpenDestination()}
+			title={t("openDestinationFolder")}
+			aria-label={t("openDestinationFolder")}
+		>
+			<CarbonFolderOpen width={16} height={16} />
 		</Button>
 	);
 
@@ -151,6 +181,7 @@ function RootLayout() {
 						? `${device()?.display_name} · ${formatDeviceHostname(device()?.hostname ?? "")}`
 						: "Dukto"}
 				</p>
+				{isMac && !isMobile && openDestinationButton()}
 				{isMac && addInternetPeerButton()}
 				<Button
 					variant="ghost"
@@ -165,9 +196,10 @@ function RootLayout() {
 					title={t("settings")}
 					aria-label={t("settings")}
 				>
-					<LucideSettings width={16} height={16} />
+					<CarbonSettings width={16} height={16} />
 				</Button>
 				{!isMac && addInternetPeerButton()}
+				{!isMac && !isMobile && openDestinationButton()}
 				<Show when={isWindows}>
 					<WindowControls />
 				</Show>
@@ -197,6 +229,7 @@ function RootLayout() {
 				onClose={() => navigate({ to: "/", search: { internet: undefined, settings: undefined } })}
 			/>
 			<UpdateAvailableDialog />
+			<Toast open={destinationOpenFailed()}>{t("destinationFolderOpenFailed")}</Toast>
 		</div>
 	);
 }

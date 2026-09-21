@@ -11,6 +11,9 @@ This document defines the community-facing interaction and layout contract for t
 - Center the local device name and hostname.
 - Place the settings gear on the right on macOS, iOS, Android, and Linux, and on the left on Windows.
 - Place the circular add-peer action immediately to the left of settings on macOS and immediately to the right of settings on every other platform.
+- Use Carbon icons throughout the application UI. The internet-peer action and internet platform marker use `carbon:direct-link`.
+- On desktop, place an open-folder action beside the internet-peer action. It opens the configured receive destination in the native file manager and is omitted on mobile.
+- Title-bar icon buttons stay transparent at rest and use the same subtle neutral hover surface as dialog close controls.
 - Preserve space for native macOS traffic lights. Windows uses custom minimize, disabled-maximize, and close controls on the right when native decorations are disabled.
 
 ## Content and host cards
@@ -58,7 +61,9 @@ Settings has an overlay and closes through its close control or a click on the o
 
 Place the outlined Check for updates action directly below the language control. Keep the Settings footer informational, with the current version aligned left and Privacy aligned right. A successful manual check that finds no update appears as a transient toast; never persist that message in the dialog or show it after an automatic startup check.
 
-Create and join internet invitations in a dismissible dialog opened from the title bar. After authentication, close the dialog and show the internet peer in the host list until the connection fails, either app exits, or the user explicitly disconnects it.
+Create and join internet invitations in a dismissible dialog opened from the title bar. Create and Connect retain a leading icon at rest and replace it with an inline spinner while their operation is pending. Cancel invite uses the outlined button treatment, and successful link copying appears as a transient toast.
+
+After authentication, close the dialog and show the internet peer in the host list until the connection fails, either app exits, or the user explicitly disconnects it. Invitation expiry only limits admission and must never expire an authenticated session. Show Direct or Relay as a compact badge beside the peer name, not as a separate status row, and place Disconnect in the peer ellipsis menu.
 
 Use native file selection and drag and drop while keeping all actions accessible by keyboard.
 

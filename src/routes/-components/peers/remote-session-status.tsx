@@ -18,10 +18,7 @@ export function describeRemoteSession(
 	expiresAtUnix: number,
 	nowUnix: number,
 ): RemoteStatusDescription {
-	if (
-		nowUnix >= expiresAtUnix &&
-		!(["completed", "cancelled", "expired", "failed"] as string[]).includes(status.state)
-	) {
+	if (nowUnix >= expiresAtUnix && ["invited", "pairing"].includes(status.state)) {
 		return { labelKey: "remoteStatusExpired", tone: "muted" };
 	}
 

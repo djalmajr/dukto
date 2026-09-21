@@ -4,9 +4,9 @@ import { Button } from "~/components/ui/button";
 import { t } from "~/helpers/i18n";
 import { formatDeviceHostname } from "~/utils/device-hostname";
 import { formatBytes, sortFileItems } from "~/utils/format";
-import LucideFile from "~icons/lucide/file";
-import LucideFolder from "~icons/lucide/folder";
-import LucideX from "~icons/lucide/x";
+import CarbonClose from "~icons/carbon/close";
+import CarbonDocument from "~icons/carbon/document";
+import CarbonFolder from "~icons/carbon/folder";
 
 export interface FileItem {
 	name: string;
@@ -61,7 +61,7 @@ function SendPreview(props: SendPreviewProps) {
 						aria-label={t("cancel")}
 						onClick={props.onCancel}
 					>
-						<LucideX width={16} height={16} />
+						<CarbonClose width={16} height={16} />
 					</Button>
 				</div>
 			</Show>
@@ -78,9 +78,9 @@ function SendPreview(props: SendPreviewProps) {
 						<li class="group flex items-center gap-2.5 px-4 py-2 transition-colors hover:bg-muted/50">
 							<Show
 								when={file.is_dir}
-								fallback={<LucideFile class="h-4 w-4 shrink-0 text-muted-foreground" />}
+								fallback={<CarbonDocument class="h-4 w-4 shrink-0 text-muted-foreground" />}
 							>
-								<LucideFolder class="h-4 w-4 shrink-0 text-muted-foreground" />
+								<CarbonFolder class="h-4 w-4 shrink-0 text-muted-foreground" />
 							</Show>
 							<span class="min-w-0 flex-1 truncate text-xs">{file.name}</span>
 							<span class="shrink-0 text-xs tabular-nums text-muted-foreground">
@@ -95,7 +95,7 @@ function SendPreview(props: SendPreviewProps) {
 									title={t("remove")}
 									aria-label={t("removeFile", { name: file.name })}
 								>
-									<LucideX width={16} height={16} />
+									<CarbonClose width={16} height={16} />
 								</Button>
 							)}
 						</li>

@@ -12,12 +12,13 @@ import { t } from "~/helpers/i18n";
 import { nativeErrorKey } from "~/helpers/native-error";
 import { formatDeviceHostname } from "~/utils/device-hostname";
 import { formatBytes } from "~/utils/format";
-import LucideBan from "~icons/lucide/ban";
-import LucideEllipsisVertical from "~icons/lucide/ellipsis-vertical";
-import LucideFilePlus from "~icons/lucide/file-plus";
-import LucideFolderPlus from "~icons/lucide/folder-plus";
-import LucideImages from "~icons/lucide/images";
-import LucideX from "~icons/lucide/x";
+import CarbonClose from "~icons/carbon/close";
+import CarbonDocumentAdd from "~icons/carbon/document-add";
+import CarbonFolderAdd from "~icons/carbon/folder-add";
+import CarbonImage from "~icons/carbon/image";
+import CarbonLogout from "~icons/carbon/logout";
+import CarbonOverflowMenuVertical from "~icons/carbon/overflow-menu-vertical";
+import CarbonStopOutline from "~icons/carbon/stop-outline";
 
 export interface TransferSlot {
 	id: string;
@@ -32,6 +33,8 @@ export interface TransferSlot {
 }
 
 export interface PeerCardProps {
+	badge?: string;
+	badgeTitle?: string;
 	peer: {
 		device_id: string;
 		display_name: string;
@@ -48,20 +51,37 @@ export interface PeerCardProps {
 	onAddFolders?: () => void;
 	onAddMedia?: () => void;
 	onClick?: () => void;
+	onDisconnect?: () => void;
 	onAbortTransfer?: (transferId: string) => void;
 	onDismissTransfer?: (transferId: string) => void;
 }
 
 const AUTO_DISMISS_SECS = 3;
 
-function PeerIdentity(props: { peer: PeerCardProps["peer"] }) {
+function PeerIdentity(props: {
+	badge?: string;
+	badgeTitle?: string;
+	peer: PeerCardProps["peer"];
+}) {
 	return (
 		<>
 			<span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
 				<PlatformIcon platform={props.peer.platform} class="h-[22px] w-[22px]" />
 			</span>
 			<div class="min-w-0 flex-1">
-				<p class="truncate text-sm font-semibold tracking-[-0.15px]">{props.peer.display_name}</p>
+				<div class="flex min-w-0 items-center gap-2">
+					<p class="truncate text-sm font-semibold tracking-[-0.15px]">{props.peer.display_name}</p>
+					<Show when={props.badge}>
+						{(badge) => (
+							<span
+								class="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium leading-none text-muted-foreground"
+								title={props.badgeTitle}
+							>
+								{badge()}
+							</span>
+						)}
+					</Show>
+				</div>
 				<p class="truncate text-xs text-muted-foreground">
 					{formatDeviceHostname(props.peer.hostname)}
 				</p>
@@ -140,7 +160,7 @@ function TransferRow(props: {
 									props.onDismiss?.();
 								}}
 							>
-								<LucideX width={16} height={16} />
+								<CarbonClose width={16} height={16} />
 							</Button>
 						}
 					>
@@ -159,7 +179,7 @@ function TransferRow(props: {
 								props.onAbort?.();
 							}}
 						>
-							<LucideBan width={16} height={16} />
+							<CarbonStopOutline width={16} height={16} />
 						</Button>
 					</Show>
 				</span>
@@ -192,7 +212,8 @@ function TransferRow(props: {
 
 function PeerCard(props: PeerCardProps) {
 	const slots = () => props.transfers ?? [];
-	const hasActions = () => Boolean(props.onAddFiles || props.onAddFolders || props.onAddMedia);
+	const hasActions = () =>
+		Boolean(props.onAddFiles || props.onAddFolders || props.onAddMedia || props.onDisconnect);
 	const actionsUnavailable = () => props.actionsDisabled || !hasActions();
 	const hasActive = () =>
 		slots().some((s) => s.status === "active" || s.status === "waiting_approval");
@@ -225,7 +246,7 @@ function PeerCard(props: PeerCardProps) {
 					when={props.onClick}
 					fallback={
 						<div class="flex min-w-0 flex-1 items-center gap-3">
-							<PeerIdentity peer={props.peer} />
+							<PeerIdentity badge={props.badge} badgeTitle={props.badgeTitle} peer={props.peer} />
 						</div>
 					}
 				>
@@ -234,7 +255,7 @@ function PeerCard(props: PeerCardProps) {
 						class="h-auto min-w-0 flex-1 justify-start gap-3 rounded-none p-0 text-left text-foreground transition-colors hover:bg-accent/50"
 						onClick={props.onClick}
 					>
-						<PeerIdentity peer={props.peer} />
+						<PeerIdentity badge={props.badge} badgeTitle={props.badgeTitle} peer={props.peer} />
 					</Button>
 				</Show>
 				<Show when={hasActions() || props.actionsDisabled}>
@@ -250,7 +271,7 @@ function PeerCard(props: PeerCardProps) {
 								host: formatDeviceHostname(props.peer.hostname),
 							})}
 						>
-							<LucideEllipsisVertical class="size-4" />
+							<CarbonOverflowMenuVertical class="size-4" />
 						</DropdownMenuTrigger>
 						<DropdownMenuPortal>
 							<DropdownMenuContent class="peer-actions-menu">
@@ -260,7 +281,7 @@ function PeerCard(props: PeerCardProps) {
 										disabled={actionsUnavailable()}
 										onSelect={() => props.onAddFiles?.()}
 									>
-										<LucideFilePlus class="size-4" />
+										<CarbonDocumentAdd class="size-4" />
 										{t("addFiles")}
 									</DropdownMenuItem>
 								</Show>
@@ -270,7 +291,7 @@ function PeerCard(props: PeerCardProps) {
 										disabled={actionsUnavailable()}
 										onSelect={() => props.onAddFolders?.()}
 									>
-										<LucideFolderPlus class="size-4" />
+										<CarbonFolderAdd class="size-4" />
 										{t("addFolders")}
 									</DropdownMenuItem>
 								</Show>
@@ -280,8 +301,18 @@ function PeerCard(props: PeerCardProps) {
 										disabled={actionsUnavailable()}
 										onSelect={() => props.onAddMedia?.()}
 									>
-										<LucideImages class="size-4" />
+										<CarbonImage class="size-4" />
 										{t("addPhotosAndVideos")}
+									</DropdownMenuItem>
+								</Show>
+								<Show when={props.onDisconnect}>
+									<DropdownMenuItem
+										class="peer-actions-menu-item"
+										disabled={actionsUnavailable()}
+										onSelect={() => props.onDisconnect?.()}
+									>
+										<CarbonLogout class="size-4" />
+										{t("disconnectInternetSession")}
 									</DropdownMenuItem>
 								</Show>
 							</DropdownMenuContent>

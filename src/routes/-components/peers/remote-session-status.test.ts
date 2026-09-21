@@ -13,6 +13,16 @@ describe("remote session status descriptions", () => {
 		).toBe("remoteStatusTransferringRelay");
 	});
 
+	test("keeps an authenticated session active after its invitation expires", () => {
+		// Mutation captured: applying the invitation deadline to ready sessions renders a live peer as expired.
+		expect(describeRemoteSession({ state: "ready", route: "relay" }, NOW, NOW).labelKey).toBe(
+			"remoteStatusReadyRelay",
+		);
+		expect(
+			describeRemoteSession({ state: "transferring", route: "direct" }, NOW, NOW).labelKey,
+		).toBe("remoteStatusTransferringDirect");
+	});
+
 	test("surfaces pairing, cancellation, expiry, and recoverable failure", () => {
 		expect(describeRemoteSession({ state: "connecting" }, NOW + 30, NOW).labelKey).toBe(
 			"remoteStatusConnecting",

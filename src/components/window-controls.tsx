@@ -1,9 +1,9 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Button } from "~/components/ui/button";
 import { t } from "~/helpers/i18n";
-import Minus from "~icons/lucide/minus";
-import Square from "~icons/lucide/square";
-import X from "~icons/lucide/x";
+import CarbonClose from "~icons/carbon/close";
+import CarbonMaximize from "~icons/carbon/maximize";
+import CarbonSubtract from "~icons/carbon/subtract";
 
 export default function WindowControls() {
 	return (
@@ -15,7 +15,7 @@ export default function WindowControls() {
 				title={t("minimizeWindow")}
 				onClick={() => void getCurrentWindow().minimize()}
 			>
-				<Minus class="size-4" />
+				<CarbonSubtract class="size-4" />
 			</Button>
 			<Button
 				variant="ghost"
@@ -24,7 +24,7 @@ export default function WindowControls() {
 				aria-label={t("maximizeWindow")}
 				title={t("maximizeWindow")}
 			>
-				<Square class="size-4" />
+				<CarbonMaximize class="size-4" />
 			</Button>
 			<Button
 				variant="ghost"
@@ -33,7 +33,7 @@ export default function WindowControls() {
 				title={t("closeWindow")}
 				onClick={() => void getCurrentWindow().close()}
 			>
-				<X class="size-4" />
+				<CarbonClose class="size-4" />
 			</Button>
 		</div>
 	);

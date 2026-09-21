@@ -41,6 +41,14 @@ describe("PeerCard unavailable action contract", () => {
 		expect(peerListSource).toContain("onAddFolders={addFolders()}");
 		expect(homePageSource).toContain("supportsFolderSelection(currentPlatform)");
 	});
+
+	test("keeps connection metadata and disconnect in the host header actions", () => {
+		// Mutation captured: moving disconnect back into expanded content leaves the existing popover incomplete.
+		expect(peerCardSource).toContain("badge?: string");
+		expect(peerCardSource).toContain("when={props.badge}");
+		expect(peerCardSource).toContain("when={props.onDisconnect}");
+		expect(peerCardSource).toContain('{t("disconnectInternetSession")}');
+	});
 });
 
 describe("PeerCard expanded presentation contract", () => {

@@ -2,6 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
 const source = readFileSync(new URL("./settings-modal.tsx", import.meta.url), "utf8");
+const toastSource = readFileSync(
+	new URL("../../../components/ui/toast.tsx", import.meta.url),
+	"utf8",
+);
 
 describe("settings modal organization", () => {
 	test("uses 80 percent of the available window width", () => {
@@ -40,9 +44,10 @@ describe("settings modal organization", () => {
 		// Mutation captured: rendering upToDate directly from updateStatus makes a startup check leave persistent copy.
 		expect(source).toContain("await props.onCheckForUpdates()");
 		expect(source).toContain('props.updateStatus === "upToDate"');
-		expect(source).toContain("<Portal>");
-		expect(source).toContain("<output");
-		expect(source).toContain('aria-live="polite"');
+		expect(source).toContain("<Toast");
+		expect(source).toContain("open={upToDateToastVisible()}");
+		expect(toastSource).toContain("<output");
+		expect(toastSource).toContain('aria-live="polite"');
 		expect(source).toContain('t("upToDate")');
 		expect(source).not.toContain('case "upToDate"');
 	});

@@ -1,15 +1,15 @@
 import { Show, createEffect, createSignal, onCleanup } from "solid-js";
-import { Portal } from "solid-js/web";
 import { Button } from "~/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "~/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { TextField, TextFieldInput } from "~/components/ui/text-field";
+import Toast from "~/components/ui/toast";
 import type { AppUpdateErrorCode, AppUpdateStatus } from "~/helpers/app-update-controller";
 import { t } from "~/helpers/i18n";
 import { nativeErrorKey } from "~/helpers/native-error";
 import { openPrivacyPolicy } from "~/helpers/privacy-policy";
-import LucideExternalLink from "~icons/lucide/external-link";
-import LucideRefreshCw from "~icons/lucide/refresh-cw";
+import CarbonLaunch from "~icons/carbon/launch";
+import CarbonRenew from "~icons/carbon/renew";
 
 export type ThemeMode = "light" | "dark" | "system";
 
@@ -223,7 +223,7 @@ function SettingsModal(props: SettingsModalProps) {
 									disabled={props.updateBusy}
 									onClick={() => void handleCheckForUpdates()}
 								>
-									<LucideRefreshCw
+									<CarbonRenew
 										class="size-4"
 										classList={{ "motion-safe:animate-spin": props.updateStatus === "checking" }}
 									/>
@@ -256,7 +256,7 @@ function SettingsModal(props: SettingsModalProps) {
 									onClick={handleOpenPrivacyPolicy}
 								>
 									{t("privacyPolicy")}
-									<LucideExternalLink class="size-4" />
+									<CarbonLaunch class="size-4" />
 								</Button>
 							</div>
 							<Show when={privacyError()}>
@@ -268,18 +268,7 @@ function SettingsModal(props: SettingsModalProps) {
 					</div>
 				</DialogContent>
 			</Dialog>
-			<Show when={upToDateToastVisible()}>
-				<Portal>
-					<div class="pointer-events-none fixed inset-x-4 bottom-[calc(1rem+env(safe-area-inset-bottom))] z-[60] flex justify-center">
-						<output
-							class="max-w-sm rounded-md bg-foreground px-3 py-2 text-xs text-background shadow-lg"
-							aria-live="polite"
-						>
-							{t("upToDate")}
-						</output>
-					</div>
-				</Portal>
-			</Show>
+			<Toast open={upToDateToastVisible()}>{t("upToDate")}</Toast>
 		</>
 	);
 }

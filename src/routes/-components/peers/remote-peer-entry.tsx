@@ -12,6 +12,7 @@ import {
 	DialogTitle,
 } from "~/components/ui/dialog";
 import { TextField, TextFieldInput, TextFieldLabel } from "~/components/ui/text-field";
+import Toast from "~/components/ui/toast";
 import { t } from "~/helpers/i18n";
 import { nativeErrorKey } from "~/helpers/native-error";
 import {
@@ -35,9 +36,21 @@ import {
 import SendPreview from "~/routes/-components/transfers/send-preview";
 import { startSendTransfer } from "~/routes/-stores/transfers";
 import type { PeerIdentity } from "~/stores/peers";
-import LucideGlobe2 from "~icons/lucide/globe-2";
+import CarbonCircleDash from "~icons/carbon/circle-dash";
+import CarbonDirectLink from "~icons/carbon/direct-link";
+import CarbonLink from "~icons/carbon/link";
 import PeerCard, { type TransferSlot } from "./peer-card";
 import RemoteSessionStatus from "./remote-session-status";
+
+type PendingAction =
+	| "cancel"
+	| "connect"
+	| "copy"
+	| "create"
+	| "disconnect"
+	| "pick"
+	| "send"
+	| null;
 
 interface RemotePeerEntryProps {
 	onConnectedChange?: (connected: boolean) => void;
@@ -62,10 +75,12 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 	const [share, setShare] = createSignal<InternetInviteShareView | null>(null);
 	const [pairingCode, setPairingCode] = createSignal("");
 	const [linkCopied, setLinkCopied] = createSignal(false);
-	const [pending, setPending] = createSignal(false);
-	const [connecting, setConnecting] = createSignal(false);
+	const [pendingAction, setPendingAction] = createSignal<PendingAction>(null);
 	const [selectedFiles, setSelectedFiles] = createSignal<FileMetadataInfo[]>([]);
 	const [error, setError] = createSignal<string | null>(null);
+	const pending = () => pendingAction() !== null;
+	const connecting = () => pendingAction() === "connect";
+	let linkCopiedTimer: ReturnType<typeof setTimeout> | undefined;
 	const isConnected = () =>
 		session()?.status.state === "ready" || session()?.status.state === "transferring";
 	const remotePeer = (): PeerIdentity | null => {
@@ -95,6 +110,16 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 		const message = error();
 		return message ? t(nativeErrorKey(message)) : null;
 	};
+	const routeLabel = () => {
+		const route = session()?.status.route;
+		if (!isConnected() || !route) return undefined;
+		return route === "direct" ? t("internetRouteDirect") : t("internetRouteRelay");
+	};
+	const routeTitle = () => {
+		const route = session()?.status.route;
+		if (!isConnected() || !route) return undefined;
+		return route === "direct" ? t("remoteStatusReadyDirect") : t("remoteStatusReadyRelay");
+	};
 	const closeInternetDialog = () =>
 		navigate({ to: "/", search: { internet: undefined, settings: undefined } });
 	function applySession(next: InternetInviteView) {
@@ -115,7 +140,7 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 				continue;
 			}
 			try {
-				setConnecting(true);
+				setPendingAction("connect");
 				clearSelectedFiles();
 				await navigate({ to: "/", search: { internet: true, settings: undefined } });
 				applySession(await importInternetInvite(url));
@@ -127,7 +152,7 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 			} catch (reason) {
 				setError(String(reason));
 			} finally {
-				setConnecting(false);
+				setPendingAction(null);
 			}
 		}
 	}
@@ -136,8 +161,7 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 		const current = session();
 		const code = pairingCode().trim();
 		if (pending() || !current || !/^\d{8}$/.test(code)) return;
-		setPending(true);
-		setConnecting(true);
+		setPendingAction("connect");
 		setError(null);
 		try {
 			applySession(await confirmInternetPairingCode(current.session_id, code));
@@ -145,8 +169,7 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 		} catch (reason) {
 			setError(String(reason));
 		} finally {
-			setConnecting(false);
-			setPending(false);
+			setPendingAction(null);
 		}
 	}
 
@@ -163,7 +186,12 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 		});
 		void listen<InternetInviteView>("internet:session-updated", ({ payload }) => {
 			if (!active || session()?.session_id !== payload.session_id) return;
-			if (["failed", "cancelled", "expired"].includes(payload.status.state)) {
+			const inviteExpiredBeforeConnection = payload.status.state === "expired" && !isConnected();
+			if (
+				payload.status.state === "failed" ||
+				payload.status.state === "cancelled" ||
+				inviteExpiredBeforeConnection
+			) {
 				clearSelectedFiles();
 				setSession(null);
 				setShare(null);
@@ -186,6 +214,7 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 			unlisten?.();
 			unlistenSession?.();
 			releaseFiles(selectedFiles());
+			clearTimeout(linkCopiedTimer);
 		});
 	});
 
@@ -196,7 +225,7 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 	async function pickItems(directory: boolean, media = false) {
 		const current = session();
 		if (pending() || current?.status.state !== "ready" || !current.can_send || share()) return;
-		setPending(true);
+		setPendingAction("pick");
 		setError(null);
 		try {
 			const picked = await pickSendItems(currentPlatform, directory, media);
@@ -208,7 +237,7 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 		} catch (reason) {
 			setError(String(reason));
 		} finally {
-			setPending(false);
+			setPendingAction(null);
 		}
 	}
 
@@ -229,7 +258,7 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 		const files = selectedFiles();
 		if (pending() || current?.status.state !== "ready" || !current.can_send || files.length === 0)
 			return;
-		setPending(true);
+		setPendingAction("send");
 		setError(null);
 		try {
 			const transferId = await sendToInternetSession(
@@ -248,13 +277,13 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 		} catch (reason) {
 			setError(String(reason));
 		} finally {
-			setPending(false);
+			setPendingAction(null);
 		}
 	}
 
 	async function createInvitation() {
 		if (pending() || session()) return;
-		setPending(true);
+		setPendingAction("create");
 		setError(null);
 		try {
 			clearSelectedFiles();
@@ -266,15 +295,14 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 		} catch (reason) {
 			setError(String(reason));
 		} finally {
-			setPending(false);
+			setPendingAction(null);
 		}
 	}
 
 	async function connect() {
 		const value = invitation().trim();
 		if (pending() || session() || !value) return;
-		setPending(true);
-		setConnecting(true);
+		setPendingAction("connect");
 		setError(null);
 		try {
 			clearSelectedFiles();
@@ -286,30 +314,31 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 		} catch (reason) {
 			setError(String(reason));
 		} finally {
-			setConnecting(false);
-			setPending(false);
+			setPendingAction(null);
 		}
 	}
 
 	async function copyInvitationLink() {
 		if (pending() || !session() || !share() || !invitation()) return;
-		setPending(true);
+		setPendingAction("copy");
 		setError(null);
 		setLinkCopied(false);
 		try {
 			await navigator.clipboard.writeText(invitation());
 			setLinkCopied(true);
+			clearTimeout(linkCopiedTimer);
+			linkCopiedTimer = setTimeout(() => setLinkCopied(false), 3500);
 		} catch (reason) {
 			setError(String(reason));
 		} finally {
-			setPending(false);
+			setPendingAction(null);
 		}
 	}
 
 	async function cancelInvitation() {
 		const current = session();
 		if (pending() || !current) return;
-		setPending(true);
+		setPendingAction("cancel");
 		setError(null);
 		try {
 			await cancelInternetInvite(current.session_id);
@@ -322,14 +351,14 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 		} catch (reason) {
 			setError(String(reason));
 		} finally {
-			setPending(false);
+			setPendingAction(null);
 		}
 	}
 
 	async function disconnect() {
 		const current = session();
 		if (pending() || !current) return;
-		setPending(true);
+		setPendingAction("disconnect");
 		setError(null);
 		try {
 			await disconnectInternetSession(current.session_id);
@@ -341,7 +370,7 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 		} catch (reason) {
 			setError(String(reason));
 		} finally {
-			setPending(false);
+			setPendingAction(null);
 		}
 	}
 
@@ -357,7 +386,7 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 					<DialogHeader class="pr-8">
 						<div class="flex items-start gap-3 text-left">
 							<span class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-								<LucideGlobe2 aria-hidden="true" class="size-[22px]" />
+								<CarbonDirectLink aria-hidden="true" class="size-[22px]" />
 							</span>
 							<div class="min-w-0 space-y-1">
 								<DialogTitle>{t("internetTransferTitle")}</DialogTitle>
@@ -379,7 +408,15 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 								disabled={pending() || Boolean(session())}
 								onClick={() => void createInvitation()}
 							>
-								{t("createInternetInvitation")}
+								<Show
+									when={pendingAction() === "create"}
+									fallback={<CarbonLink aria-hidden="true" class="size-4" />}
+								>
+									<CarbonCircleDash aria-hidden="true" class="size-4 motion-safe:animate-spin" />
+								</Show>
+								{pendingAction() === "create"
+									? t("creatingInternetInvitation")
+									: t("createInternetInvitation")}
 							</Button>
 							<div class="flex flex-col gap-2 sm:flex-row sm:items-end">
 								<TextField class="min-w-0 flex-1">
@@ -405,7 +442,13 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 									disabled={pending() || Boolean(session()) || !invitation().trim()}
 									onClick={() => void connect()}
 								>
-									{t("connectWithInvitation")}
+									<Show
+										when={pendingAction() === "connect"}
+										fallback={<CarbonDirectLink aria-hidden="true" class="size-4" />}
+									>
+										<CarbonCircleDash aria-hidden="true" class="size-4 motion-safe:animate-spin" />
+									</Show>
+									{connecting() ? t("internetPeerConnecting") : t("connectWithInvitation")}
 								</Button>
 							</div>
 							<Show when={share()}>
@@ -435,18 +478,13 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 												</Button>
 												<Button
 													type="button"
-													variant="ghost"
+													variant="outline"
 													disabled={pending()}
 													onClick={() => void cancelInvitation()}
 												>
 													{t("cancelInvitation")}
 												</Button>
 											</div>
-											<Show when={linkCopied()}>
-												<output aria-live="polite" class="text-xs text-muted-foreground">
-													{t("invitationLinkCopied")}
-												</output>
-											</Show>
 										</div>
 									</div>
 								)}
@@ -478,7 +516,13 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 										disabled={pending() || !/^\d{8}$/.test(pairingCode())}
 										onClick={() => void confirmPairingCode()}
 									>
-										{t("confirmPairingCode")}
+										<Show when={connecting()}>
+											<CarbonCircleDash
+												aria-hidden="true"
+												class="size-4 motion-safe:animate-spin"
+											/>
+										</Show>
+										{connecting() ? t("internetPeerConnecting") : t("confirmPairingCode")}
 									</Button>
 								</div>
 							</Show>
@@ -516,6 +560,8 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 				{(peer) => (
 					<PeerCard
 						peer={peer()}
+						badge={routeLabel()}
+						badgeTitle={routeTitle()}
 						transfers={isConnected() ? props.getTransfers?.(peer().device_id) : undefined}
 						actionsDisabled={pending() || connecting() || !isConnected()}
 						onAddFiles={session()?.can_send ? () => void pickItems(false) : undefined}
@@ -529,41 +575,12 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 								? () => void pickItems(false, true)
 								: undefined
 						}
+						onDisconnect={isConnected() ? () => void disconnect() : undefined}
 						onAbortTransfer={props.onAbortTransfer}
 						onDismissTransfer={props.onDismissTransfer}
 						expandedContent={
-							<div class="space-y-3" aria-busy={pending() || connecting()}>
-								<div class="flex items-center gap-3">
-									<Show
-										when={!connecting() && session()}
-										fallback={
-											<RemoteSessionStatus
-												status={{ state: "connecting" }}
-												expiresAtUnix={Number.MAX_SAFE_INTEGER}
-											/>
-										}
-									>
-										{(current) => (
-											<RemoteSessionStatus
-												status={current().status}
-												expiresAtUnix={current().expires_at_unix}
-												error={localizedError()}
-											/>
-										)}
-									</Show>
-									<Show when={isConnected()}>
-										<Button
-											type="button"
-											variant="ghost"
-											class="ml-auto"
-											disabled={pending()}
-											onClick={() => void disconnect()}
-										>
-											{t("disconnectInternetSession")}
-										</Button>
-									</Show>
-								</div>
-								<Show when={selectedFiles().length > 0}>
+							<Show when={selectedFiles().length > 0}>
+								<div aria-busy={pending()}>
 									<SendPreview
 										embedded
 										peer={peer()}
@@ -572,12 +589,13 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 										onCancel={clearSelectedFiles}
 										onRemoveFile={removeSelectedFile}
 									/>
-								</Show>
-							</div>
+								</div>
+							</Show>
 						}
 					/>
 				)}
 			</Show>
+			<Toast open={linkCopied()}>{t("invitationLinkCopied")}</Toast>
 		</>
 	);
 }

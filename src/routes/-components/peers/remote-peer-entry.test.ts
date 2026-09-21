@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
 const entrySource = readFileSync(new URL("./remote-peer-entry.tsx", import.meta.url), "utf8");
+const peerCardSource = readFileSync(new URL("./peer-card.tsx", import.meta.url), "utf8");
 const statusSource = readFileSync(new URL("./remote-session-status.tsx", import.meta.url), "utf8");
 const listSource = readFileSync(new URL("./peer-list.tsx", import.meta.url), "utf8");
 const tauriSource = readFileSync(new URL("../../../helpers/tauri.ts", import.meta.url), "utf8");
@@ -29,8 +30,10 @@ describe("remote peer entry contract", () => {
 	test("opens invitation actions from a platform-aware title bar control", () => {
 		const titleBarClass = rootSource.match(/<header\s+class="([^"]+)"/)?.[1];
 
-		expect(rootSource).toContain("~icons/lucide/circle-plus");
+		expect(rootSource).toContain("~icons/carbon/direct-link");
+		expect(rootSource).toContain("~icons/carbon/folder-open");
 		expect(rootSource).toContain('t("addInternetPeer")');
+		expect(rootSource).toContain('t("openDestinationFolder")');
 		expect(titleBarClass).toContain("gap-1.5");
 		expect(rootSource).not.toContain("bg-background/70");
 		expect(rootSource.match(/hover:bg-muted-foreground\/10/g)?.length ?? 0).toBeGreaterThanOrEqual(
@@ -40,10 +43,10 @@ describe("remote peer entry contract", () => {
 		expect(rootSource).toContain("{isMac && addInternetPeerButton()}");
 		expect(rootSource).toContain("{!isMac && addInternetPeerButton()}");
 		expect(rootSource.indexOf("{isMac && addInternetPeerButton()}")).toBeLessThan(
-			rootSource.indexOf("<LucideSettings width={16} height={16} />"),
+			rootSource.indexOf("<CarbonSettings width={16} height={16} />"),
 		);
 		expect(rootSource.indexOf("{!isMac && addInternetPeerButton()}")).toBeGreaterThan(
-			rootSource.indexOf("<LucideSettings width={16} height={16} />"),
+			rootSource.indexOf("<CarbonSettings width={16} height={16} />"),
 		);
 	});
 
@@ -83,10 +86,19 @@ describe("remote peer entry contract", () => {
 	});
 
 	test("shows an immediate peer-card connection state instead of the empty list", () => {
-		expect(entrySource).toContain("const [connecting, setConnecting]");
+		expect(entrySource).toContain("const connecting = () =>");
 		expect(entrySource).toContain("isConnected() || connecting()");
 		expect(entrySource).toContain('status={{ state: "connecting" }}');
 		expect(entrySource).toContain('t("internetPeerConnecting")');
+	});
+
+	test("shows icons and inline loading feedback on invitation actions", () => {
+		// Mutation captured: reverting to disabled text-only buttons hides all progress during network work.
+		expect(entrySource).toContain("CarbonLink");
+		expect(entrySource.match(/<CarbonDirectLink/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
+		expect(entrySource).toContain("CarbonCircleDash");
+		expect(entrySource).toContain('pendingAction() === "create"');
+		expect(entrySource).toContain('pendingAction() === "connect"');
 	});
 
 	test("exposes named, keyboard-native create and connect controls", () => {
@@ -123,12 +135,23 @@ describe("remote peer entry contract", () => {
 		// Mutation captured: rendering completed as terminal used to remove the peer after one send.
 		expect(entrySource).toContain('listen<InternetInviteView>("internet:session-updated"');
 		expect(entrySource).toContain("applySession(payload)");
-		expect(entrySource).toContain('["failed", "cancelled", "expired"]');
-		expect(entrySource).toContain('t("disconnectInternetSession")');
+		expect(entrySource).toContain('payload.status.state === "failed"');
+		expect(entrySource).toContain('payload.status.state === "cancelled"');
+		expect(entrySource).toContain('payload.status.state === "expired" && !isConnected()');
+		expect(peerCardSource).toContain('t("disconnectInternetSession")');
 		expect(entrySource).toContain("pending() || session()");
 		expect(entrySource).toContain("disabled={pending() || Boolean(session())}");
 		expect(entrySource).toContain("setShare(null)");
 		expect(entrySource).not.toContain("localStorage");
+	});
+
+	test("moves route and disconnect controls into the peer header", () => {
+		// Mutation captured: restoring the expanded status row duplicates connection state below the card header.
+		expect(entrySource).toContain("badge={routeLabel()}");
+		expect(entrySource).toContain(
+			"onDisconnect={isConnected() ? () => void disconnect() : undefined}",
+		);
+		expect(entrySource).not.toContain('class="ml-auto"');
 	});
 });
 
@@ -164,6 +187,9 @@ describe("ephemeral invitation sharing contract", () => {
 			"setInvitation(await getInternetInvitationLink(created.session_id))",
 		);
 		expect(entrySource).toContain("navigator.clipboard.writeText(invitation())");
+		expect(entrySource).toContain("<Toast");
+		expect(entrySource).toContain("open={linkCopied()}");
 		expect(entrySource).toContain('t("invitationLinkCopied")');
+		expect(entrySource).toMatch(/variant="outline"[\s\S]*?t\("cancelInvitation"\)/);
 	});
 });
