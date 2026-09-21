@@ -84,9 +84,9 @@ fn with_status(view: &InternetInviteView, status: RemoteSessionStatus) -> Intern
     }
 }
 
-fn view_for(invite: &InternetInvite, role: InternetSessionRole) -> InternetInviteView {
+fn view_for(invite: &InternetInvite, _role: InternetSessionRole) -> InternetInviteView {
     InternetInviteView {
-        can_send: role == InternetSessionRole::InvitationJoiner,
+        can_send: true,
         session_id: invite.session_id().to_owned(),
         peer_id: invite.endpoint_id().to_owned(),
         peer: None,
@@ -379,8 +379,8 @@ async fn accept_one_internet_session(
     .await
 }
 
-async fn receive_ready_internet_session(
-    app_handle: tauri::AppHandle,
+async fn receive_ready_internet_session<R: tauri::Runtime>(
+    app_handle: tauri::AppHandle<R>,
     registry: Arc<RemoteSessionRegistry>,
     ready: InternetInviteView,
 ) -> Result<(), String> {
@@ -444,6 +444,19 @@ async fn receive_ready_internet_session(
         }
         return result.map_err(|error| error.to_string());
     }
+}
+
+fn start_ready_internet_session<R: tauri::Runtime>(
+    app_handle: tauri::AppHandle<R>,
+    registry: Arc<RemoteSessionRegistry>,
+    ready: InternetInviteView,
+) {
+    monitor_internet_session(app_handle.clone(), Arc::clone(&registry), ready.clone());
+    tauri::async_runtime::spawn(async move {
+        if let Err(error) = receive_ready_internet_session(app_handle, registry, ready).await {
+            tracing::warn!(%error, "Incoming internet transfer failed");
+        }
+    });
 }
 
 fn transfer_keeps_session_ready<T>(
@@ -521,17 +534,7 @@ fn ensure_accept_loop(
                 match result {
                     Ok(view) => {
                         let _ = handle.emit("internet:session-updated", &view);
-                        monitor_internet_session(
-                            handle.clone(),
-                            Arc::clone(&registry),
-                            view.clone(),
-                        );
-                        if let Err(error) =
-                            receive_ready_internet_session(handle, Arc::clone(&registry), view)
-                                .await
-                        {
-                            tracing::warn!(%error, "Incoming internet transfer failed");
-                        }
+                        start_ready_internet_session(handle, Arc::clone(&registry), view);
                     }
                     Err(error) => {
                         tracing::warn!(%error, "Incoming internet session failed");
@@ -674,7 +677,7 @@ pub async fn import_internet_invite<R: tauri::Runtime>(
         state.remote_sessions.cancel(&view.session_id);
     }
     if let Ok(ready) = &result {
-        monitor_internet_session(
+        start_ready_internet_session(
             app_handle,
             Arc::clone(&state.remote_sessions),
             ready.clone(),
@@ -698,9 +701,6 @@ pub async fn send_to_internet_session<R: tauri::Runtime>(
         .view(&session_id)
         .map(InternetInviteView::from)
         .ok_or_else(|| "internet session was not found".to_owned())?;
-    if !ready.can_send {
-        return Err("internet invitation owner is receive-only".to_owned());
-    }
     let route = match ready.status {
         RemoteSessionStatus::Ready { route } => route,
         _ => return Err("internet session is not ready to send".to_owned()),
@@ -730,24 +730,24 @@ pub async fn send_to_internet_session<R: tauri::Runtime>(
         return Err("internet session could not start sending".to_owned());
     }
 
-    let (channel, mut send, mut receive, mut noise) = match established.next_transfer_parts().await
-    {
-        Ok(parts) => parts,
-        Err(_) => {
-            state.transfer_registry.remove(&transfer_id, &control).await;
-            established.close(ChannelCloseReason::ProtocolError);
-            let _ = state.remote_sessions.transition(
-                &session_id,
-                RemoteSessionStatus::Failed,
-                unix_now().unwrap_or(0),
-            );
-            let _ = app_handle.emit(
-                "internet:session-updated",
-                with_status(&ready, RemoteSessionStatus::Failed),
-            );
-            return Err("internet session transfer channel is unavailable".to_owned());
-        }
-    };
+    let (channel, mut send, mut receive, mut noise) =
+        match established.next_outgoing_transfer_parts().await {
+            Ok(parts) => parts,
+            Err(_) => {
+                state.transfer_registry.remove(&transfer_id, &control).await;
+                established.close(ChannelCloseReason::ProtocolError);
+                let _ = state.remote_sessions.transition(
+                    &session_id,
+                    RemoteSessionStatus::Failed,
+                    unix_now().unwrap_or(0),
+                );
+                let _ = app_handle.emit(
+                    "internet:session-updated",
+                    with_status(&ready, RemoteSessionStatus::Failed),
+                );
+                return Err("internet session transfer channel is unavailable".to_owned());
+            }
+        };
 
     let transferring = with_status(&ready, RemoteSessionStatus::Transferring { route });
     let _ = app_handle.emit("internet:session-updated", &transferring);
@@ -891,7 +891,7 @@ pub async fn confirm_internet_pairing_code<R: tauri::Runtime>(
         state.remote_sessions.cancel(&session_id);
     }
     if let Ok(ready) = &result {
-        monitor_internet_session(
+        start_ready_internet_session(
             app_handle,
             Arc::clone(&state.remote_sessions),
             ready.clone(),
@@ -961,8 +961,8 @@ mod tests {
             .map(|byte| format!("{byte:02x}"))
             .collect::<String>();
         let view_json = serde_json::to_string(&view).unwrap();
-        assert!(!view.can_send);
-        assert!(!creator_registry.view(&view.session_id).unwrap().can_send);
+        assert!(view.can_send);
+        assert!(creator_registry.view(&view.session_id).unwrap().can_send);
         assert!(!view_json.contains(&secret_hex));
         assert!(!view_json.contains("private"));
 
@@ -1306,8 +1306,8 @@ mod tests {
             )
             .unwrap();
         let (owner_parts, joiner_parts) = tokio::join!(
-            owner_session.next_transfer_parts(),
-            joiner_session.next_transfer_parts()
+            owner_session.next_incoming_transfer_parts(),
+            joiner_session.next_outgoing_transfer_parts()
         );
         let (_, mut owner_send, mut owner_receive, mut owner_noise) = owner_parts.unwrap();
         let (_, mut joiner_send, mut joiner_receive, mut joiner_noise) = joiner_parts.unwrap();
@@ -1379,8 +1379,8 @@ mod tests {
                 .unwrap();
 
             let (owner_parts, joiner_parts) = tokio::join!(
-                owner_session.next_transfer_parts(),
-                joiner_session.next_transfer_parts()
+                owner_session.next_incoming_transfer_parts(),
+                joiner_session.next_outgoing_transfer_parts()
             );
             let (_, mut owner_send, mut owner_receive, mut owner_noise) = owner_parts.unwrap();
             let (_, mut joiner_send, mut joiner_receive, mut joiner_noise) = joiner_parts.unwrap();
@@ -1449,6 +1449,61 @@ mod tests {
                 RemoteSessionStatus::Ready { .. }
             ));
         }
+
+        owner_registry
+            .transition(
+                &owner_ready.session_id,
+                RemoteSessionStatus::Transferring { route },
+                NOW + 20,
+            )
+            .unwrap();
+        joiner_registry
+            .transition(
+                &joiner_ready.session_id,
+                RemoteSessionStatus::Transferring { route },
+                NOW + 20,
+            )
+            .unwrap();
+        let (joiner_parts, owner_parts) = tokio::join!(
+            joiner_session.next_incoming_transfer_parts(),
+            owner_session.next_outgoing_transfer_parts()
+        );
+        let (_, mut joiner_send, mut joiner_receive, mut joiner_noise) = joiner_parts.unwrap();
+        let (_, mut owner_send, mut owner_receive, mut owner_noise) = owner_parts.unwrap();
+        let reverse_source = source_dir.join("verified-reverse.bin");
+        let reverse_payload: Vec<u8> = (0..96 * 1024).map(|index| (index % 239) as u8).collect();
+        tokio::fs::write(&reverse_source, &reverse_payload)
+            .await
+            .unwrap();
+        let reverse_destination = destination_dir.clone();
+        let reverse_receiving = tokio::spawn(async move {
+            receive_transfer(
+                &mut joiner_send,
+                &mut joiner_receive,
+                &mut joiner_noise,
+                &reverse_destination,
+                true,
+            )
+            .await
+        });
+        let reverse_bytes = send_transfer(
+            &mut owner_send,
+            &mut owner_receive,
+            &mut owner_noise,
+            &[reverse_source],
+            "runtime-transfer-reverse",
+            &test_device("owner"),
+            |_| {},
+        )
+        .await
+        .unwrap();
+        let reverse_receipt = reverse_receiving.await.unwrap().unwrap();
+        let reverse_received = tokio::fs::read(destination_dir.join("verified-reverse.bin"))
+            .await
+            .unwrap();
+        assert_eq!(reverse_bytes, reverse_payload.len() as u64);
+        assert_eq!(reverse_receipt.bytes_received, reverse_bytes);
+        assert_eq!(reverse_received, reverse_payload);
 
         assert!(owner_registry.cancel(&owner_ready.session_id));
         assert!(joiner_registry.cancel(&joiner_ready.session_id));

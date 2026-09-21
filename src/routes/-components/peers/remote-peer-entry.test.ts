@@ -6,6 +6,14 @@ const statusSource = readFileSync(new URL("./remote-session-status.tsx", import.
 const listSource = readFileSync(new URL("./peer-list.tsx", import.meta.url), "utf8");
 const tauriSource = readFileSync(new URL("../../../helpers/tauri.ts", import.meta.url), "utf8");
 const rootSource = readFileSync(new URL("../../__root.tsx", import.meta.url), "utf8");
+const internetCommandSource = readFileSync(
+	new URL("../../../../src-tauri/src/commands/internet.rs", import.meta.url),
+	"utf8",
+);
+const internetRegistrySource = readFileSync(
+	new URL("../../../../src-tauri/src/state/internet_session.rs", import.meta.url),
+	"utf8",
+);
 
 describe("remote peer entry contract", () => {
 	test("keeps internet actions separate from LAN discovery", () => {
@@ -88,12 +96,14 @@ describe("remote peer entry contract", () => {
 		expect(tauriSource).toContain('invoke<void>("disconnect_internet_session"');
 	});
 
-	test("offers sending only to the invitation joiner after the remote session is ready", () => {
-		// Mutation captured: dropping can_send from the ready block re-exposes owner send actions.
+	test("offers sending to both authenticated session peers after the remote session is ready", () => {
 		expect(entrySource).toContain('status.state === "ready"');
 		expect(entrySource).toContain("session()?.can_send");
 		expect(entrySource).toContain("!current.can_send");
 		expect(tauriSource).toContain("can_send: boolean");
+		expect(internetRegistrySource).toContain("can_send: true");
+		expect(internetCommandSource).not.toContain("internet invitation owner is receive-only");
+		expect(internetCommandSource.match(/start_ready_internet_session\(/g)?.length ?? 0).toBe(3);
 		expect(entrySource).toContain("pickSendItems");
 		expect(entrySource).toContain("supportsFolderSelection");
 		expect(entrySource).toContain("sendToInternetSession");

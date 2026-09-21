@@ -259,8 +259,10 @@ fn send_command_transfers_verified_bytes_through_the_tauri_ipc_boundary() {
         .unwrap();
 
     let receiver = tauri::async_runtime::spawn(async move {
-        let (_channel, mut send, mut receive, mut noise) =
-            receiver_session.next_transfer_parts().await.unwrap();
+        let (_channel, mut send, mut receive, mut noise) = receiver_session
+            .next_incoming_transfer_parts()
+            .await
+            .unwrap();
         let receipt = receive_transfer_with_accept(
             &mut send,
             &mut receive,

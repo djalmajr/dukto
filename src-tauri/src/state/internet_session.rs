@@ -179,7 +179,7 @@ impl RemoteSessionRegistry {
             session_id.clone(),
             RemoteSession {
                 view: RemoteSessionView {
-                    can_send: role == InternetSessionRole::InvitationJoiner,
+                    can_send: true,
                     session_id,
                     peer_id,
                     peer: None,

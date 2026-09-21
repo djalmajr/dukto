@@ -115,8 +115,8 @@ async fn handle_incoming(
     .await
 }
 
-async fn handle_authenticated_incoming<S, R>(
-    app_handle: AppHandle,
+async fn handle_authenticated_incoming<Runtime, S, R>(
+    app_handle: AppHandle<Runtime>,
     pending: Arc<Mutex<std::collections::HashMap<String, PendingIncoming>>>,
     registry: Arc<TransferRegistry>,
     incoming: AuthenticatedIncoming,
@@ -125,6 +125,7 @@ async fn handle_authenticated_incoming<S, R>(
     mut noise: snow::TransportState,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>
 where
+    Runtime: tauri::Runtime,
     S: TransferSendStream,
     R: TransferReceiveStream,
 {
@@ -394,16 +395,17 @@ impl TransferServer {
         Ok((server, bound_port))
     }
 
-    pub async fn receive_internet_session<F>(
+    pub async fn receive_internet_session<Runtime, F>(
         &self,
-        app_handle: AppHandle,
+        app_handle: AppHandle<Runtime>,
         session: EstablishedInternetSession,
         on_transfer_started: F,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>
     where
+        Runtime: tauri::Runtime,
         F: FnOnce() -> bool + Send + 'static,
     {
-        let (channel, send, receive, noise) = session.next_transfer_parts().await?;
+        let (channel, send, receive, noise) = session.next_incoming_transfer_parts().await?;
         handle_authenticated_incoming(
             app_handle,
             self.pending.clone(),

@@ -136,7 +136,7 @@ impl EstablishedInternetSession {
             .map_err(|_| InternetSessionError::InvalidControlMessage)
     }
 
-    pub async fn next_transfer_parts(
+    pub async fn next_outgoing_transfer_parts(
         &self,
     ) -> Result<
         (
@@ -147,24 +147,50 @@ impl EstablishedInternetSession {
         ),
         InternetSessionError,
     > {
-        if let Some((send, receive, noise)) = self.inner.initial_transfer.lock().await.take() {
-            return Ok((self.inner.channel.clone(), send, receive, noise));
+        if self.inner.role == InternetSessionRole::InvitationJoiner {
+            if let Some((send, receive, noise)) = self.inner.initial_transfer.lock().await.take() {
+                return Ok((self.inner.channel.clone(), send, receive, noise));
+            }
         }
 
-        let (mut send, mut receive) = match self.inner.role {
-            InternetSessionRole::InvitationJoiner => self.inner.channel.open_bi().await,
-            InternetSessionRole::InvitationOwner => self.inner.channel.accept_bi().await,
-        }
-        .map_err(|_| InternetSessionError::Transport)?;
-        let noise = match self.inner.role {
-            InternetSessionRole::InvitationJoiner => {
-                handshake_initiator_bound(&mut send, &mut receive, &self.inner.binding).await
+        let (mut send, mut receive) = self
+            .inner
+            .channel
+            .open_bi()
+            .await
+            .map_err(|_| InternetSessionError::Transport)?;
+        let noise = handshake_initiator_bound(&mut send, &mut receive, &self.inner.binding)
+            .await
+            .map_err(|_| InternetSessionError::AuthenticationFailed)?;
+        Ok((self.inner.channel.clone(), send, receive, noise))
+    }
+
+    pub async fn next_incoming_transfer_parts(
+        &self,
+    ) -> Result<
+        (
+            IrohAuthenticatedChannel,
+            SendStream,
+            RecvStream,
+            TransportState,
+        ),
+        InternetSessionError,
+    > {
+        if self.inner.role == InternetSessionRole::InvitationOwner {
+            if let Some((send, receive, noise)) = self.inner.initial_transfer.lock().await.take() {
+                return Ok((self.inner.channel.clone(), send, receive, noise));
             }
-            InternetSessionRole::InvitationOwner => {
-                handshake_responder_bound(&mut send, &mut receive, &self.inner.binding).await
-            }
         }
-        .map_err(|_| InternetSessionError::AuthenticationFailed)?;
+
+        let (mut send, mut receive) = self
+            .inner
+            .channel
+            .accept_bi()
+            .await
+            .map_err(|_| InternetSessionError::Transport)?;
+        let noise = handshake_responder_bound(&mut send, &mut receive, &self.inner.binding)
+            .await
+            .map_err(|_| InternetSessionError::AuthenticationFailed)?;
         Ok((self.inner.channel.clone(), send, receive, noise))
     }
 
