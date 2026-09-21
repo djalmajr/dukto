@@ -25,7 +25,10 @@ const OPERATION_TIMEOUT: Duration = Duration::from_secs(90);
 const DIRECT_SETTLE_TIMEOUT: Duration = Duration::from_secs(20);
 
 #[derive(Debug, Parser)]
-#[command(about = "Cross-host Dukto internet transport verification")]
+#[command(
+    name = "dukto-internet-cross-host-probe",
+    about = "Cross-host Dukto internet transport verification"
+)]
 struct Arguments {
     #[command(subcommand)]
     role: Role,
