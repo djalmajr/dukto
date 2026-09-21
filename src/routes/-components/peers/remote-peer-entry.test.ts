@@ -195,8 +195,15 @@ describe("ephemeral invitation sharing contract", () => {
 			"setInvitation(await getInternetInvitationLink(created.session_id))",
 		);
 		expect(entrySource).toContain("navigator.clipboard.writeText(invitation())");
+		expect(entrySource).toContain('new File([blob], "dukto-invitation-qr.png"');
+		expect(entrySource).toContain("navigator.canShare?.(shareData)");
+		expect(entrySource).toContain('new ClipboardItem({ "image/png": blob })');
+		expect(entrySource).toContain('t("shareInvitationQrCode")');
 		expect(entrySource).toContain("<Toast");
-		expect(entrySource).toContain("open={linkCopied()}");
+		expect(entrySource).toContain("open={invitationToast() !== null}");
+		expect(entrySource).toContain("open={Boolean(error())}");
+		expect(entrySource).not.toContain('<p role="alert">');
+		expect(entrySource).not.toContain("error={localizedError()}");
 		expect(entrySource).toContain('t("invitationLinkCopied")');
 		expect(entrySource).toMatch(/variant="outline"[\s\S]*?t\("cancelInvitation"\)/);
 	});

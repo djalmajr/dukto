@@ -37,8 +37,11 @@ import SendPreview from "~/routes/-components/transfers/send-preview";
 import { startSendTransfer } from "~/routes/-stores/transfers";
 import type { PeerIdentity } from "~/stores/peers";
 import CarbonCircleDash from "~icons/carbon/circle-dash";
+import CarbonClose from "~icons/carbon/close";
+import CarbonCopy from "~icons/carbon/copy";
 import CarbonDirectLink from "~icons/carbon/direct-link";
 import CarbonLink from "~icons/carbon/link";
+import CarbonShare from "~icons/carbon/share";
 import PeerCard, { type TransferSlot } from "./peer-card";
 import RemoteSessionStatus from "./remote-session-status";
 
@@ -50,7 +53,10 @@ type PendingAction =
 	| "disconnect"
 	| "pick"
 	| "send"
+	| "share"
 	| null;
+
+type InvitationToast = "invitationLinkCopied" | "invitationQrCopied" | "invitationQrShared";
 
 interface RemotePeerEntryProps {
 	onConnectedChange?: (connected: boolean) => void;
@@ -74,13 +80,18 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 	const [session, setSession] = createSignal<InternetInviteView | null>(null);
 	const [share, setShare] = createSignal<InternetInviteShareView | null>(null);
 	const [pairingCode, setPairingCode] = createSignal("");
-	const [linkCopied, setLinkCopied] = createSignal(false);
+	const [invitationToast, setInvitationToast] = createSignal<InvitationToast | null>(null);
 	const [pendingAction, setPendingAction] = createSignal<PendingAction>(null);
 	const [selectedFiles, setSelectedFiles] = createSignal<FileMetadataInfo[]>([]);
 	const [error, setError] = createSignal<string | null>(null);
 	const pending = () => pendingAction() !== null;
 	const connecting = () => pendingAction() === "connect";
-	let linkCopiedTimer: ReturnType<typeof setTimeout> | undefined;
+	let invitationToastTimer: ReturnType<typeof setTimeout> | undefined;
+	function showInvitationToast(message: InvitationToast) {
+		setInvitationToast(message);
+		clearTimeout(invitationToastTimer);
+		invitationToastTimer = setTimeout(() => setInvitationToast(null), 3500);
+	}
 	const isConnected = () =>
 		session()?.status.state === "ready" || session()?.status.state === "transferring";
 	const remotePeer = (): PeerIdentity | null => {
@@ -145,7 +156,7 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 				await navigate({ to: "/", search: { internet: true, settings: undefined } });
 				applySession(await importInternetInvite(url));
 				setShare(null);
-				setLinkCopied(false);
+				setInvitationToast(null);
 				setInvitation("");
 				setPairingCode("");
 				setError(null);
@@ -195,7 +206,7 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 				clearSelectedFiles();
 				setSession(null);
 				setShare(null);
-				setLinkCopied(false);
+				setInvitationToast(null);
 				setInvitation("");
 				if (payload.status.state === "failed") setError("connection lost");
 				return;
@@ -203,7 +214,7 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 			applySession(payload);
 			if (payload.status.state !== "invited" && payload.status.state !== "pairing") {
 				setShare(null);
-				setLinkCopied(false);
+				setInvitationToast(null);
 			}
 		}).then((stop) => {
 			if (active) unlistenSession = stop;
@@ -214,7 +225,7 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 			unlisten?.();
 			unlistenSession?.();
 			releaseFiles(selectedFiles());
-			clearTimeout(linkCopiedTimer);
+			clearTimeout(invitationToastTimer);
 		});
 	});
 
@@ -291,7 +302,7 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 			applySession(created);
 			setShare(created);
 			setInvitation(await getInternetInvitationLink(created.session_id));
-			setLinkCopied(false);
+			setInvitationToast(null);
 		} catch (reason) {
 			setError(String(reason));
 		} finally {
@@ -308,7 +319,7 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 			clearSelectedFiles();
 			applySession(await importInternetInvite(value));
 			setShare(null);
-			setLinkCopied(false);
+			setInvitationToast(null);
 			setInvitation("");
 			setPairingCode("");
 		} catch (reason) {
@@ -322,13 +333,55 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 		if (pending() || !session() || !share() || !invitation()) return;
 		setPendingAction("copy");
 		setError(null);
-		setLinkCopied(false);
+		setInvitationToast(null);
 		try {
 			await navigator.clipboard.writeText(invitation());
-			setLinkCopied(true);
-			clearTimeout(linkCopiedTimer);
-			linkCopiedTimer = setTimeout(() => setLinkCopied(false), 3500);
+			showInvitationToast("invitationLinkCopied");
 		} catch (reason) {
+			setError(String(reason));
+		} finally {
+			setPendingAction(null);
+		}
+	}
+
+	async function shareInvitationQrCode() {
+		const currentShare = share();
+		if (pending() || !session() || !currentShare) return;
+		setPendingAction("share");
+		setError(null);
+		setInvitationToast(null);
+		try {
+			const image = new Image();
+			image.decoding = "async";
+			await new Promise<void>((resolve, reject) => {
+				image.onload = () => resolve();
+				image.onerror = () => reject(new Error("QR code image could not be loaded."));
+				image.src = currentShare.qr_svg_data_url;
+			});
+			const canvas = document.createElement("canvas");
+			canvas.width = image.naturalWidth || 256;
+			canvas.height = image.naturalHeight || 256;
+			const context = canvas.getContext("2d");
+			if (!context) throw new Error("QR code image could not be created.");
+			context.drawImage(image, 0, 0, canvas.width, canvas.height);
+			const blob = await new Promise<Blob>((resolve, reject) =>
+				canvas.toBlob(
+					(value) =>
+						value ? resolve(value) : reject(new Error("QR code image could not be created.")),
+					"image/png",
+				),
+			);
+			const file = new File([blob], "dukto-invitation-qr.png", { type: "image/png" });
+			const shareData = { files: [file], title: t("internetTransferTitle") };
+			if (navigator.share && navigator.canShare?.(shareData)) {
+				await navigator.share(shareData);
+				showInvitationToast("invitationQrShared");
+			} else {
+				await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+				showInvitationToast("invitationQrCopied");
+			}
+		} catch (reason) {
+			if (reason instanceof DOMException && reason.name === "AbortError") return;
 			setError(String(reason));
 		} finally {
 			setPendingAction(null);
@@ -345,7 +398,7 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 			clearSelectedFiles();
 			setSession(null);
 			setShare(null);
-			setLinkCopied(false);
+			setInvitationToast(null);
 			setInvitation("");
 			setPairingCode("");
 		} catch (reason) {
@@ -365,7 +418,7 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 			clearSelectedFiles();
 			setSession(null);
 			setShare(null);
-			setLinkCopied(false);
+			setInvitationToast(null);
 			setPairingCode("");
 		} catch (reason) {
 			setError(String(reason));
@@ -474,7 +527,25 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 													disabled={pending()}
 													onClick={() => void copyInvitationLink()}
 												>
+													<CarbonCopy aria-hidden="true" class="size-4" />
 													{t("copyInvitationLink")}
+												</Button>
+												<Button
+													type="button"
+													variant="outline"
+													disabled={pending()}
+													onClick={() => void shareInvitationQrCode()}
+												>
+													<Show
+														when={pendingAction() === "share"}
+														fallback={<CarbonShare aria-hidden="true" class="size-4" />}
+													>
+														<CarbonCircleDash
+															aria-hidden="true"
+															class="size-4 motion-safe:animate-spin"
+														/>
+													</Show>
+													{t("shareInvitationQrCode")}
 												</Button>
 												<Button
 													type="button"
@@ -482,6 +553,7 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 													disabled={pending()}
 													onClick={() => void cancelInvitation()}
 												>
+													<CarbonClose aria-hidden="true" class="size-4" />
 													{t("cancelInvitation")}
 												</Button>
 											</div>
@@ -526,20 +598,12 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 									</Button>
 								</div>
 							</Show>
-							<Show
-								when={session()}
-								fallback={
-									<Show when={error()}>
-										{(message) => <p role="alert">{t(nativeErrorKey(message()))}</p>}
-									</Show>
-								}
-							>
+							<Show when={session()}>
 								{(current) => (
 									<Show when={current().status.state !== "invited"}>
 										<RemoteSessionStatus
 											status={current().status}
 											expiresAtUnix={current().expires_at_unix}
-											error={localizedError()}
 										/>
 									</Show>
 								)}
@@ -587,7 +651,10 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 					/>
 				)}
 			</Show>
-			<Toast open={linkCopied()}>{t("invitationLinkCopied")}</Toast>
+			<Toast open={invitationToast() !== null}>
+				{invitationToast() ? t(invitationToast() as InvitationToast) : null}
+			</Toast>
+			<Toast open={Boolean(error())}>{localizedError()}</Toast>
 		</>
 	);
 }

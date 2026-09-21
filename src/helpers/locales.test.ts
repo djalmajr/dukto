@@ -41,6 +41,7 @@ test("internet transfer copy is localized and compact at the stacked breakpoint"
 		"createInternetInvitation",
 		"connectWithInvitation",
 		"copyInvitationLink",
+		"shareInvitationQrCode",
 		"cancelInvitation",
 		"disconnectInternetSession",
 		"confirmPairingCode",
