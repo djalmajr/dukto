@@ -12,7 +12,9 @@ const DEFAULT_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 const MAX_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(60);
 const MAX_CONNECT_ATTEMPTS: usize = 8;
 const MAX_CONFIGURED_RELAYS: usize = 8;
+const MAX_RELAY_AUTH_TOKEN_LEN: usize = 512;
 const RELAY_URLS_ENV: &str = "DUKTO_RELAY_URLS";
+const RELAY_AUTH_TOKEN_ENV: &str = "DUKTO_RELAY_AUTH_TOKEN";
 const FORCE_RELAY_ONLY_ENV: &str = "DUKTO_FORCE_RELAY_ONLY";
 
 pub struct InternetEndpointConfig {
@@ -28,8 +30,13 @@ pub struct InternetEndpointConfig {
 impl InternetEndpointConfig {
     pub fn from_environment() -> Result<Self, InternetEndpointError> {
         let relay_urls = optional_unicode_environment(RELAY_URLS_ENV)?;
+        let relay_auth_token = optional_unicode_environment(RELAY_AUTH_TOKEN_ENV)?;
         let force_relay_only = optional_unicode_environment(FORCE_RELAY_ONLY_ENV)?;
-        config_from_values(relay_urls.as_deref(), force_relay_only.as_deref())
+        config_from_values(
+            relay_urls.as_deref(),
+            relay_auth_token.as_deref(),
+            force_relay_only.as_deref(),
+        )
     }
 
     pub fn with_secret_key(mut self, secret_key: SecretKey) -> Self {
@@ -75,11 +82,20 @@ fn optional_unicode_environment(name: &str) -> Result<Option<String>, InternetEn
 
 fn config_from_values(
     relay_urls: Option<&str>,
+    relay_auth_token: Option<&str>,
     force_relay_only: Option<&str>,
 ) -> Result<InternetEndpointConfig, InternetEndpointError> {
     let mut config = InternetEndpointConfig::default();
     if let Some(relay_urls) = relay_urls {
-        config = config.with_relay_map(relay_map_from_csv(relay_urls)?);
+        let relay_map = relay_map_from_csv(relay_urls)?;
+        let relay_map = match relay_auth_token {
+            Some(token) if is_valid_relay_auth_token(token) => relay_map.with_auth_token(token),
+            Some(_) => return Err(InternetEndpointError::InvalidConfiguration),
+            None => relay_map,
+        };
+        config = config.with_relay_map(relay_map);
+    } else if relay_auth_token.is_some() {
+        return Err(InternetEndpointError::InvalidConfiguration);
     }
 
     let force_relay_only = match force_relay_only {
@@ -94,6 +110,12 @@ fn config_from_values(
         config.direct_transports = false;
     }
     Ok(config)
+}
+
+fn is_valid_relay_auth_token(token: &str) -> bool {
+    !token.is_empty()
+        && token.len() <= MAX_RELAY_AUTH_TOKEN_LEN
+        && token.bytes().all(|byte| byte.is_ascii_graphic())
 }
 
 fn relay_map_from_csv(value: &str) -> Result<RelayMap, InternetEndpointError> {
@@ -330,7 +352,7 @@ mod tests {
 
     use super::{
         config_from_values, relay_map_from_csv, InternetEndpoint, InternetEndpointConfig,
-        InternetEndpointError, MAX_CONFIGURED_RELAYS,
+        InternetEndpointError, MAX_CONFIGURED_RELAYS, MAX_RELAY_AUTH_TOKEN_LEN,
     };
 
     #[test]
@@ -356,24 +378,60 @@ mod tests {
 
     #[test]
     fn relay_only_validation_mode_is_explicit_and_requires_a_relay() {
-        let direct = config_from_values(None, None).unwrap();
+        let direct = config_from_values(None, None, None).unwrap();
         assert!(direct.direct_transports);
         assert!(direct.relay_map.is_none());
 
-        let mixed = config_from_values(Some("https://relay.example"), Some("false")).unwrap();
+        let mixed = config_from_values(Some("https://relay.example"), None, Some("false")).unwrap();
         assert!(mixed.direct_transports);
         assert!(mixed.relay_map.is_some());
 
-        let relay_only = config_from_values(Some("https://relay.example"), Some("true")).unwrap();
+        let relay_only =
+            config_from_values(Some("https://relay.example"), None, Some("true")).unwrap();
         assert!(!relay_only.direct_transports);
         assert!(relay_only.relay_map.is_some());
 
         assert_eq!(
-            config_from_values(None, Some("true")).unwrap_err(),
+            config_from_values(None, None, Some("true")).unwrap_err(),
             InternetEndpointError::InvalidConfiguration
         );
         assert_eq!(
-            config_from_values(Some("https://relay.example"), Some("yes")).unwrap_err(),
+            config_from_values(Some("https://relay.example"), None, Some("yes")).unwrap_err(),
+            InternetEndpointError::InvalidConfiguration
+        );
+    }
+
+    #[test]
+    fn relay_auth_token_is_scoped_to_configured_relays_and_never_optional_when_present() {
+        let config = config_from_values(
+            Some("https://relay-a.example,https://relay-b.example"),
+            Some("temporary-service-token"),
+            None,
+        )
+        .unwrap();
+        let relays = config.relay_map.unwrap().relays::<Vec<_>>();
+        assert_eq!(relays.len(), 2);
+        assert!(relays
+            .iter()
+            .all(|relay| relay.auth_token.as_deref() == Some("temporary-service-token")));
+
+        for token in ["", "contains whitespace", "contains\nnewline"] {
+            assert_eq!(
+                config_from_values(Some("https://relay.example"), Some(token), None).unwrap_err(),
+                InternetEndpointError::InvalidConfiguration
+            );
+        }
+        assert_eq!(
+            config_from_values(
+                Some("https://relay.example"),
+                Some(&"x".repeat(MAX_RELAY_AUTH_TOKEN_LEN + 1)),
+                None,
+            )
+            .unwrap_err(),
+            InternetEndpointError::InvalidConfiguration
+        );
+        assert_eq!(
+            config_from_values(None, Some("orphan-token"), None).unwrap_err(),
             InternetEndpointError::InvalidConfiguration
         );
     }
@@ -523,16 +581,28 @@ mod tests {
         let relay_url = std::env::var("DUKTO_PUBLIC_RELAY_SMOKE_URL")
             .expect("set DUKTO_PUBLIC_RELAY_SMOKE_URL to run the public-relay smoke test");
         let server = InternetEndpoint::bind(
-            config_from_values(Some(&relay_url), Some("true"))
-                .expect("valid relay-only configuration")
-                .with_handshake_timeout(Duration::from_secs(30)),
+            config_from_values(
+                Some(&relay_url),
+                std::env::var("DUKTO_PUBLIC_RELAY_SMOKE_TOKEN")
+                    .ok()
+                    .as_deref(),
+                Some("true"),
+            )
+            .expect("valid relay-only configuration")
+            .with_handshake_timeout(Duration::from_secs(30)),
         )
         .await
         .expect("relay-only server endpoint");
         let client = InternetEndpoint::bind(
-            config_from_values(Some(&relay_url), Some("true"))
-                .expect("valid relay-only configuration")
-                .with_handshake_timeout(Duration::from_secs(30)),
+            config_from_values(
+                Some(&relay_url),
+                std::env::var("DUKTO_PUBLIC_RELAY_SMOKE_TOKEN")
+                    .ok()
+                    .as_deref(),
+                Some("true"),
+            )
+            .expect("valid relay-only configuration")
+            .with_handshake_timeout(Duration::from_secs(30)),
         )
         .await
         .expect("relay-only client endpoint");

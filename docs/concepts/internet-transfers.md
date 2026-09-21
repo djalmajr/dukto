@@ -15,6 +15,7 @@ Dukto tries an iroh direct path first. When direct connectivity is unavailable, 
 Development and operator builds can configure the transport before the app starts:
 
 - `DUKTO_RELAY_URLS` is a comma-separated list of one to eight HTTPS relay URLs. When it is absent, the internet endpoint is direct-only. An empty or invalid configured value is an error.
+- `DUKTO_RELAY_AUTH_TOKEN` is an optional operator-provided bearer token applied to every configured relay. It is rejected when no relay URL is configured, and it is never written to logs or serialized invitation views.
 - `DUKTO_RENDEZVOUS_URL` is the HTTPS base URL of the opaque invitation rendezvous API. When it is absent, the invitation's embedded routes are used. An empty or invalid configured value is an error.
 - `DUKTO_FORCE_RELAY_ONLY=1` disables direct transports for a controlled relay validation. It is rejected unless `DUKTO_RELAY_URLS` is also configured. Normal builds should leave it unset so direct connectivity remains preferred.
 
