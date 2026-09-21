@@ -132,7 +132,7 @@ function RootLayout() {
 	return (
 		<div class="flex h-screen w-full flex-col overflow-hidden bg-background text-foreground">
 			<header
-				class="app-drag-region relative flex h-[calc(45px+env(safe-area-inset-top))] shrink-0 items-center border-b border-border bg-muted pt-[env(safe-area-inset-top)]"
+				class="app-drag-region relative flex h-[calc(45px+env(safe-area-inset-top))] shrink-0 items-center gap-1.5 border-b border-border bg-muted pt-[env(safe-area-inset-top)]"
 				classList={{
 					"justify-start pl-3": isWindows,
 					"justify-end pr-3 pl-[78px]": isMac,

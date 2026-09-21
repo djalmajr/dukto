@@ -19,8 +19,11 @@ describe("remote peer entry contract", () => {
 	});
 
 	test("opens invitation actions from a platform-aware title bar control", () => {
+		const titleBarClass = rootSource.match(/<header\s+class="([^"]+)"/)?.[1];
+
 		expect(rootSource).toContain("~icons/lucide/circle-plus");
 		expect(rootSource).toContain('t("addInternetPeer")');
+		expect(titleBarClass).toContain("gap-1.5");
 		expect(rootSource).toContain("{isMac && addInternetPeerButton()}");
 		expect(rootSource).toContain("{!isMac && addInternetPeerButton()}");
 		expect(rootSource.indexOf("{isMac && addInternetPeerButton()}")).toBeLessThan(
@@ -109,6 +112,7 @@ describe("ephemeral invitation sharing contract", () => {
 
 	test("shows the invitation link, protects the pairing code, and clears both", () => {
 		expect(entrySource).toMatch(/remoteInvitationLabel[\s\S]*?<TextFieldInput\s+type="text"/);
+		expect(entrySource).toContain("readOnly={Boolean(session())}");
 		expect(entrySource).toMatch(/pairingCodeLabel[\s\S]*?<TextFieldInput\s+type="password"/);
 		expect(entrySource).toContain('autocomplete="off"');
 		expect(entrySource).toContain('setInvitation("")');
@@ -124,11 +128,11 @@ describe("ephemeral invitation sharing contract", () => {
 		expect(entrySource).not.toContain("sessionStorage");
 	});
 
-	test("copies a bearer link only after an explicit user action and does not render it", () => {
-		expect(entrySource).toContain("getInternetInvitationLink(current.session_id)");
-		expect(entrySource).toContain("navigator.clipboard.writeText(invitationLink)");
-		expect(entrySource).toContain('invitationLink = ""');
-		expect(entrySource).not.toContain("setInvitationLink");
+	test("renders the owner invitation link and copies that explicit field value", () => {
+		expect(entrySource).toContain(
+			"setInvitation(await getInternetInvitationLink(created.session_id))",
+		);
+		expect(entrySource).toContain("navigator.clipboard.writeText(invitation())");
 		expect(entrySource).toContain('t("invitationLinkCopied")');
 	});
 });

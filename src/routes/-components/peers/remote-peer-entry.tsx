@@ -133,6 +133,7 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 				setSession(null);
 				setShare(null);
 				setLinkCopied(false);
+				setInvitation("");
 				if (payload.status.state === "failed") setError("connection lost");
 				return;
 			}
@@ -224,6 +225,7 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 			const created = await createInternetInvite();
 			applySession(created);
 			setShare(created);
+			setInvitation(await getInternetInvitationLink(created.session_id));
 			setLinkCopied(false);
 		} catch (reason) {
 			setError(String(reason));
@@ -252,20 +254,16 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 	}
 
 	async function copyInvitationLink() {
-		const current = session();
-		if (pending() || !current || !share()) return;
+		if (pending() || !session() || !share() || !invitation()) return;
 		setPending(true);
 		setError(null);
 		setLinkCopied(false);
-		let invitationLink = "";
 		try {
-			invitationLink = await getInternetInvitationLink(current.session_id);
-			await navigator.clipboard.writeText(invitationLink);
+			await navigator.clipboard.writeText(invitation());
 			setLinkCopied(true);
 		} catch (reason) {
 			setError(String(reason));
 		} finally {
-			invitationLink = "";
 			setPending(false);
 		}
 	}
@@ -352,7 +350,7 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 										type="text"
 										autocomplete="off"
 										spellcheck={false}
-										disabled={Boolean(session())}
+										readOnly={Boolean(session())}
 										value={invitation()}
 										onInput={(event) => setInvitation(event.currentTarget.value)}
 										onKeyDown={(event) => {
