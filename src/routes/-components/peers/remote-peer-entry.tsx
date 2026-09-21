@@ -63,6 +63,7 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 	const [pairingCode, setPairingCode] = createSignal("");
 	const [linkCopied, setLinkCopied] = createSignal(false);
 	const [pending, setPending] = createSignal(false);
+	const [connecting, setConnecting] = createSignal(false);
 	const [selectedFiles, setSelectedFiles] = createSignal<FileMetadataInfo[]>([]);
 	const [error, setError] = createSignal<string | null>(null);
 	const isConnected = () =>
@@ -79,6 +80,16 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 			}
 		);
 	};
+	const visibleRemotePeer = (): PeerIdentity | null =>
+		remotePeer() ??
+		(connecting()
+			? {
+					device_id: "internet-connecting",
+					display_name: t("internetPeerConnecting"),
+					hostname: t("internetPeerHostname"),
+					platform: "internet",
+				}
+			: null);
 	const showInternetDialog = () => (search() as { internet?: boolean }).internet === true;
 	const localizedError = () => {
 		const message = error();
@@ -93,7 +104,7 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 		}
 	}
 
-	createEffect(() => props.onConnectedChange?.(isConnected()));
+	createEffect(() => props.onConnectedChange?.(isConnected() || connecting()));
 	createEffect(() => props.onPeerIdentityChange?.(remotePeer()));
 
 	async function consumeDeepLinks(urls: string[] | null) {
@@ -104,6 +115,7 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 				continue;
 			}
 			try {
+				setConnecting(true);
 				clearSelectedFiles();
 				await navigate({ to: "/", search: { internet: true, settings: undefined } });
 				applySession(await importInternetInvite(url));
@@ -114,6 +126,8 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 				setError(null);
 			} catch (reason) {
 				setError(String(reason));
+			} finally {
+				setConnecting(false);
 			}
 		}
 	}
@@ -123,6 +137,7 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 		const code = pairingCode().trim();
 		if (pending() || !current || !/^\d{8}$/.test(code)) return;
 		setPending(true);
+		setConnecting(true);
 		setError(null);
 		try {
 			applySession(await confirmInternetPairingCode(current.session_id, code));
@@ -130,6 +145,7 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 		} catch (reason) {
 			setError(String(reason));
 		} finally {
+			setConnecting(false);
 			setPending(false);
 		}
 	}
@@ -258,6 +274,7 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 		const value = invitation().trim();
 		if (pending() || session() || !value) return;
 		setPending(true);
+		setConnecting(true);
 		setError(null);
 		try {
 			clearSelectedFiles();
@@ -269,6 +286,7 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 		} catch (reason) {
 			setError(String(reason));
 		} finally {
+			setConnecting(false);
 			setPending(false);
 		}
 	}
@@ -467,8 +485,18 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 							<Show
 								when={session()}
 								fallback={
-									<Show when={error()}>
-										{(message) => <p role="alert">{t(nativeErrorKey(message()))}</p>}
+									<Show
+										when={connecting()}
+										fallback={
+											<Show when={error()}>
+												{(message) => <p role="alert">{t(nativeErrorKey(message()))}</p>}
+											</Show>
+										}
+									>
+										<RemoteSessionStatus
+											status={{ state: "connecting" }}
+											expiresAtUnix={Number.MAX_SAFE_INTEGER}
+										/>
 									</Show>
 								}
 							>
@@ -484,12 +512,12 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 					</Show>
 				</DialogContent>
 			</Dialog>
-			<Show when={remotePeer()}>
+			<Show when={visibleRemotePeer()}>
 				{(peer) => (
 					<PeerCard
 						peer={peer()}
-						transfers={props.getTransfers?.(peer().device_id)}
-						actionsDisabled={pending()}
+						transfers={isConnected() ? props.getTransfers?.(peer().device_id) : undefined}
+						actionsDisabled={pending() || connecting() || !isConnected()}
 						onAddFiles={session()?.can_send ? () => void pickItems(false) : undefined}
 						onAddFolders={
 							session()?.can_send && supportsFolderSelection(currentPlatform)
@@ -504,9 +532,17 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 						onAbortTransfer={props.onAbortTransfer}
 						onDismissTransfer={props.onDismissTransfer}
 						expandedContent={
-							<div class="space-y-3">
+							<div class="space-y-3" aria-busy={pending() || connecting()}>
 								<div class="flex items-center gap-3">
-									<Show when={session()}>
+									<Show
+										when={!connecting() && session()}
+										fallback={
+											<RemoteSessionStatus
+												status={{ state: "connecting" }}
+												expiresAtUnix={Number.MAX_SAFE_INTEGER}
+											/>
+										}
+									>
 										{(current) => (
 											<RemoteSessionStatus
 												status={current().status}
@@ -515,15 +551,17 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 											/>
 										)}
 									</Show>
-									<Button
-										type="button"
-										variant="ghost"
-										class="ml-auto"
-										disabled={pending()}
-										onClick={() => void disconnect()}
-									>
-										{t("disconnectInternetSession")}
-									</Button>
+									<Show when={isConnected()}>
+										<Button
+											type="button"
+											variant="ghost"
+											class="ml-auto"
+											disabled={pending()}
+											onClick={() => void disconnect()}
+										>
+											{t("disconnectInternetSession")}
+										</Button>
+									</Show>
 								</div>
 								<Show when={selectedFiles().length > 0}>
 									<SendPreview

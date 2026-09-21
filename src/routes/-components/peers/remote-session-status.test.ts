@@ -14,6 +14,9 @@ describe("remote session status descriptions", () => {
 	});
 
 	test("surfaces pairing, cancellation, expiry, and recoverable failure", () => {
+		expect(describeRemoteSession({ state: "connecting" }, NOW + 30, NOW).labelKey).toBe(
+			"remoteStatusConnecting",
+		);
 		expect(describeRemoteSession({ state: "pairing" }, NOW + 30, NOW).labelKey).toBe(
 			"remoteStatusPairing",
 		);

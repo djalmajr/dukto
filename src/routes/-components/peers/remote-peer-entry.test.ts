@@ -55,15 +55,16 @@ describe("remote peer entry contract", () => {
 		expect(entrySource).toContain("getTransfers");
 	});
 
-	test("keeps invitation controls in a modal and lists only connected peers", () => {
+	test("keeps invitation controls in a modal and renders remote peers with the shared card", () => {
 		expect(entrySource).toContain("<Dialog");
 		expect(entrySource).toContain("<DialogContent");
 		expect(entrySource).toContain("<DialogTitle");
-		expect(entrySource).toContain("<Show when={remotePeer()}");
+		expect(entrySource).toContain("<Show when={visibleRemotePeer()}");
+		expect(entrySource).toContain("<PeerCard");
 		expect(entrySource.indexOf("<DialogContent")).toBeLessThan(
 			entrySource.indexOf('t("createInternetInvitation")'),
 		);
-		expect(entrySource.indexOf("<Show when={remotePeer()}")).toBeLessThan(
+		expect(entrySource.indexOf("<Show when={visibleRemotePeer()}")).toBeLessThan(
 			entrySource.indexOf("<SendPreview"),
 		);
 	});
@@ -79,6 +80,13 @@ describe("remote peer entry contract", () => {
 	test("treats a connected internet peer as a populated peer list", () => {
 		expect(listSource).toContain("onConnectedChange={setRemotePeerConnected}");
 		expect(listSource).toContain("peerEntries().length > 0 || remotePeerConnected()");
+	});
+
+	test("shows an immediate peer-card connection state instead of the empty list", () => {
+		expect(entrySource).toContain("const [connecting, setConnecting]");
+		expect(entrySource).toContain("isConnected() || connecting()");
+		expect(entrySource).toContain('status={{ state: "connecting" }}');
+		expect(entrySource).toContain('t("internetPeerConnecting")');
 	});
 
 	test("exposes named, keyboard-native create and connect controls", () => {

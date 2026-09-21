@@ -26,6 +26,8 @@ export function describeRemoteSession(
 	}
 
 	switch (status.state) {
+		case "connecting":
+			return { labelKey: "remoteStatusConnecting", tone: "info" };
 		case "invited":
 			return { labelKey: "remoteStatusWaiting", tone: "info" };
 		case "pairing":
