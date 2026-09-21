@@ -24,7 +24,8 @@ describe("remote peer entry contract", () => {
 		expect(rootSource).toContain("~icons/lucide/circle-plus");
 		expect(rootSource).toContain('t("addInternetPeer")');
 		expect(titleBarClass).toContain("gap-1.5");
-		expect(rootSource.match(/bg-background\/70/g)?.length).toBe(2);
+		expect(rootSource).not.toContain("bg-background/70");
+		expect(rootSource.match(/variant="ghost"/g)?.length).toBeGreaterThanOrEqual(2);
 		expect(rootSource).toContain("{isMac && addInternetPeerButton()}");
 		expect(rootSource).toContain("{!isMac && addInternetPeerButton()}");
 		expect(rootSource.indexOf("{isMac && addInternetPeerButton()}")).toBeLessThan(
