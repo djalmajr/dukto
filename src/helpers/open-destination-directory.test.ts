@@ -1,17 +1,17 @@
 import { expect, mock, test } from "bun:test";
 
-test("opens the configured destination with the desktop shell", async () => {
-	const opened: string[] = [];
-	mock.module("@tauri-apps/plugin-shell", () => ({
-		open: async (path: string) => {
-			opened.push(path);
+test("asks the backend to open the configured destination", async () => {
+	const invokes: string[] = [];
+	mock.module("@tauri-apps/api/core", () => ({
+		invoke: async (command: string) => {
+			invokes.push(command);
 		},
 	}));
 
 	try {
 		const { openDestinationDirectory } = await import("./open-destination-directory");
-		await openDestinationDirectory("/Users/example/Shared");
-		expect(opened).toEqual(["/Users/example/Shared"]);
+		await openDestinationDirectory();
+		expect(invokes).toEqual(["open_destination_directory"]);
 	} finally {
 		mock.restore();
 	}

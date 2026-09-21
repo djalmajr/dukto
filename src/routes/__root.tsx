@@ -118,10 +118,8 @@ function RootLayout() {
 	}
 
 	async function handleOpenDestination() {
-		const path = settings()?.destination_dir;
-		if (!path) return;
 		try {
-			await openDestinationDirectory(path);
+			await openDestinationDirectory();
 		} catch {
 			setDestinationOpenFailed(true);
 			clearTimeout(destinationOpenTimer);

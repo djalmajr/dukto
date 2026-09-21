@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use tauri::{Emitter, State};
+use tauri_plugin_shell::ShellExt;
 
 use crate::crypto::noise::handshake_initiator;
 use crate::discovery::mdns::DiscoveryHandle;
@@ -47,6 +48,21 @@ pub fn set_destination_dir(state: State<'_, AppState>, path: String) -> Result<(
         .map_err(|e| e.to_string())?;
     tracing::debug!("Destination directory saved");
     Ok(())
+}
+
+#[tauri::command]
+pub fn open_destination_directory(
+    app_handle: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let destination_dir = state.get_settings().destination_dir;
+    if !std::path::Path::new(&destination_dir).is_dir() {
+        return Err("destination directory does not exist".to_owned());
+    }
+    app_handle
+        .shell()
+        .open(destination_dir, None)
+        .map_err(|error| error.to_string())
 }
 
 #[derive(Clone, Serialize)]

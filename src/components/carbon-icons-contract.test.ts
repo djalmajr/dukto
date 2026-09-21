@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync, readdirSync } from "node:fs";
 import { extname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const sourceRoot = new URL("../", import.meta.url);
+const sourceRoot = fileURLToPath(new URL("../", import.meta.url));
 
 function sourceFiles(directory: string): string[] {
 	return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -14,9 +15,11 @@ function sourceFiles(directory: string): string[] {
 }
 
 describe("Carbon icon contract", () => {
-	test("uses Carbon for every application icon and direct-link for internet peers", () => {
-		// Mutation captured: reintroducing a Lucide, MDI, CIB, or Material icon breaks the unified icon language.
-		const sources = sourceFiles(sourceRoot.pathname).map((path) => readFileSync(path, "utf8"));
+	test("uses Carbon for application controls while preserving platform brand icons", () => {
+		// Mutation captured: reintroducing a non-Carbon control icon breaks the unified action language.
+		const sources = sourceFiles(sourceRoot)
+			.filter((path) => !path.endsWith("platform-icon.tsx"))
+			.map((path) => readFileSync(path, "utf8"));
 		const iconImports = sources.flatMap((source) =>
 			[...source.matchAll(/from "(~icons\/[^"]+)"/g)].map((match) => match[1]),
 		);

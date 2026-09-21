@@ -242,7 +242,7 @@ function SettingsModal(props: SettingsModalProps) {
 								</Show>
 							</div>
 						</Show>
-						<footer class="space-y-1.5 border-t border-border pt-3" aria-label={t("about")}>
+						<footer class="space-y-1.5" aria-label={t("about")}>
 							<div class="flex items-center justify-between gap-3">
 								<span
 									class="shrink-0 whitespace-nowrap text-xs text-muted-foreground"
@@ -256,7 +256,7 @@ function SettingsModal(props: SettingsModalProps) {
 									onClick={handleOpenPrivacyPolicy}
 								>
 									{t("privacyPolicy")}
-									<CarbonLaunch class="size-4" />
+									<CarbonLaunch class="size-3.5" />
 								</Button>
 							</div>
 							<Show when={privacyError()}>

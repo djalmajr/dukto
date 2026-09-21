@@ -529,27 +529,19 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 							<Show
 								when={session()}
 								fallback={
-									<Show
-										when={connecting()}
-										fallback={
-											<Show when={error()}>
-												{(message) => <p role="alert">{t(nativeErrorKey(message()))}</p>}
-											</Show>
-										}
-									>
-										<RemoteSessionStatus
-											status={{ state: "connecting" }}
-											expiresAtUnix={Number.MAX_SAFE_INTEGER}
-										/>
+									<Show when={error()}>
+										{(message) => <p role="alert">{t(nativeErrorKey(message()))}</p>}
 									</Show>
 								}
 							>
 								{(current) => (
-									<RemoteSessionStatus
-										status={current().status}
-										expiresAtUnix={current().expires_at_unix}
-										error={localizedError()}
-									/>
+									<Show when={current().status.state !== "invited"}>
+										<RemoteSessionStatus
+											status={current().status}
+											expiresAtUnix={current().expires_at_unix}
+											error={localizedError()}
+										/>
+									</Show>
 								)}
 							</Show>
 						</div>
@@ -579,7 +571,7 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 						onAbortTransfer={props.onAbortTransfer}
 						onDismissTransfer={props.onDismissTransfer}
 						expandedContent={
-							<Show when={selectedFiles().length > 0}>
+							selectedFiles().length > 0 ? (
 								<div aria-busy={pending()}>
 									<SendPreview
 										embedded
@@ -590,7 +582,7 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 										onRemoveFile={removeSelectedFile}
 									/>
 								</div>
-							</Show>
+							) : undefined
 						}
 					/>
 				)}

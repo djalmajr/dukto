@@ -1,9 +1,9 @@
 import { Match, Switch } from "solid-js";
-import CarbonApplication from "~icons/carbon/application";
-import CarbonDevices from "~icons/carbon/devices";
-import CarbonDirectLink from "~icons/carbon/direct-link";
-import CarbonLinux from "~icons/carbon/linux";
-import CarbonMac from "~icons/carbon/mac";
+import CibLinux from "~icons/cib/linux";
+import IcBaselineApple from "~icons/ic/baseline-apple";
+import LucideGlobe2 from "~icons/lucide/globe-2";
+import MdiMicrosoftWindows from "~icons/mdi/microsoft-windows";
+import MdiMonitor from "~icons/mdi/monitor";
 
 interface PlatformIconProps {
 	platform: string;
@@ -12,18 +12,18 @@ interface PlatformIconProps {
 
 function PlatformIcon(props: PlatformIconProps) {
 	return (
-		<Switch fallback={<CarbonDevices class={props.class} />}>
-			<Match when={props.platform === "macos" || props.platform === "ios"}>
-				<CarbonMac class={props.class} />
+		<Switch fallback={<MdiMonitor class={props.class} />}>
+			<Match when={props.platform === "macos"}>
+				<IcBaselineApple class={props.class} />
 			</Match>
 			<Match when={props.platform === "windows"}>
-				<CarbonApplication class={props.class} />
+				<MdiMicrosoftWindows class={props.class} />
 			</Match>
 			<Match when={props.platform === "linux"}>
-				<CarbonLinux class={props.class} />
+				<CibLinux class={props.class} />
 			</Match>
 			<Match when={props.platform === "internet"}>
-				<CarbonDirectLink class={props.class} />
+				<LucideGlobe2 class={props.class} />
 			</Match>
 		</Switch>
 	);

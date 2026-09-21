@@ -1,5 +1,5 @@
-import { open } from "@tauri-apps/plugin-shell";
+import { invoke } from "@tauri-apps/api/core";
 
-export async function openDestinationDirectory(path: string): Promise<void> {
-	return open(path);
+export async function openDestinationDirectory(): Promise<void> {
+	return invoke("open_destination_directory");
 }

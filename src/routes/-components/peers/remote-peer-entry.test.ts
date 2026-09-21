@@ -88,8 +88,16 @@ describe("remote peer entry contract", () => {
 	test("shows an immediate peer-card connection state instead of the empty list", () => {
 		expect(entrySource).toContain("const connecting = () =>");
 		expect(entrySource).toContain("isConnected() || connecting()");
-		expect(entrySource).toContain('status={{ state: "connecting" }}');
 		expect(entrySource).toContain('t("internetPeerConnecting")');
+		expect(entrySource).not.toContain('status={{ state: "connecting" }}');
+		expect(entrySource).toContain('current().status.state !== "invited"');
+	});
+
+	test("does not reserve an empty expanded area without selected files", () => {
+		// Mutation captured: passing an always-present Show node makes PeerCard render an empty padded section.
+		expect(entrySource).toContain("selectedFiles().length > 0 ? (");
+		expect(entrySource).toContain(") : undefined");
+		expect(entrySource).not.toContain("expandedContent={<Show");
 	});
 
 	test("shows icons and inline loading feedback on invitation actions", () => {

@@ -29,15 +29,17 @@ describe("settings modal organization", () => {
 	});
 
 	test("keeps version left and Privacy right in a metadata-only footer", () => {
-		// Mutation captured: removing space-between or returning the update action to the footer breaks edge alignment.
+		// Mutation captured: returning the separator or the update action to the footer breaks its lightweight metadata layout.
 		const footer = source.slice(source.indexOf("<footer"), source.indexOf("</footer>") + 9);
 
 		expect(footer).toContain("justify-between");
+		expect(footer).not.toContain("border-t");
 		expect(footer.indexOf("props.currentVersion")).toBeLessThan(
 			footer.indexOf('t("privacyPolicy")'),
 		);
 		expect(footer).not.toContain('t("checkForUpdates")');
 		expect(footer).not.toContain('t("upToDate")');
+		expect(footer).toContain('<CarbonLaunch class="size-3.5" />');
 	});
 
 	test("shows the latest-version result as a transient toast only after a manual check", () => {
