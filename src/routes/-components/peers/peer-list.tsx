@@ -29,10 +29,16 @@ function PeerList(props: PeerListProps) {
 	const [saving, setSaving] = createSignal(false);
 	const [orderError, setOrderError] = createSignal(false);
 	const [remotePeerConnected, setRemotePeerConnected] = createSignal(false);
+	const [remotePeerId, setRemotePeerId] = createSignal<string | null>(null);
 	const peerEntries = (): PeerIdentity[] => {
-		const discovered = Object.values(peers);
+		const discovered = Object.values(peers).filter((peer) => peer.device_id !== remotePeerId());
 		const discoveredIds = discovered.map((peer) => peer.device_id);
-		return [...discovered, ...getUndiscoveredTransferPeers(discoveredIds)];
+		return [
+			...discovered,
+			...getUndiscoveredTransferPeers(discoveredIds).filter(
+				(peer) => peer.device_id !== remotePeerId(),
+			),
+		];
 	};
 
 	const ids = () =>
@@ -57,7 +63,13 @@ function PeerList(props: PeerListProps) {
 
 	return (
 		<div class="flex w-full flex-1 flex-col space-y-2">
-			<RemotePeerEntry onConnectedChange={setRemotePeerConnected} />
+			<RemotePeerEntry
+				onConnectedChange={setRemotePeerConnected}
+				onPeerIdentityChange={(peer) => setRemotePeerId(peer?.device_id ?? null)}
+				getTransfers={props.getTransfers}
+				onAbortTransfer={props.onAbortTransfer}
+				onDismissTransfer={props.onDismissTransfer}
+			/>
 			<Show
 				when={peerEntries().length > 0 || remotePeerConnected()}
 				fallback={

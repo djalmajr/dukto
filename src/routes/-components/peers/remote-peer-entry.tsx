@@ -34,11 +34,17 @@ import {
 } from "~/helpers/tauri";
 import SendPreview from "~/routes/-components/transfers/send-preview";
 import { startSendTransfer } from "~/routes/-stores/transfers";
+import type { PeerIdentity } from "~/stores/peers";
 import LucideGlobe2 from "~icons/lucide/globe-2";
+import PeerCard, { type TransferSlot } from "./peer-card";
 import RemoteSessionStatus from "./remote-session-status";
 
 interface RemotePeerEntryProps {
 	onConnectedChange?: (connected: boolean) => void;
+	onPeerIdentityChange?: (peer: PeerIdentity | null) => void;
+	getTransfers?: (peerId: string) => TransferSlot[] | undefined;
+	onAbortTransfer?: (transferId: string) => void;
+	onDismissTransfer?: (transferId: string) => void;
 }
 
 function RemotePeerEntry(props: RemotePeerEntryProps) {
@@ -61,6 +67,18 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 	const [error, setError] = createSignal<string | null>(null);
 	const isConnected = () =>
 		session()?.status.state === "ready" || session()?.status.state === "transferring";
+	const remotePeer = (): PeerIdentity | null => {
+		const current = session();
+		if (!current || !isConnected()) return null;
+		return (
+			current.peer ?? {
+				device_id: current.peer_id,
+				display_name: current.peer_id.slice(0, 8),
+				hostname: "internet",
+				platform: "unknown",
+			}
+		);
+	};
 	const showInternetDialog = () => (search() as { internet?: boolean }).internet === true;
 	const localizedError = () => {
 		const message = error();
@@ -76,6 +94,7 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 	}
 
 	createEffect(() => props.onConnectedChange?.(isConnected()));
+	createEffect(() => props.onPeerIdentityChange?.(remotePeer()));
 
 	async function consumeDeepLinks(urls: string[] | null) {
 		for (const url of urls ?? []) {
@@ -202,12 +221,13 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 				files.map((file) => file.path),
 			);
 			const totalSize = files.reduce((sum, file) => sum + file.size, 0);
-			startSendTransfer(transferId, totalSize, current.peer_id, {
-				device_id: current.peer_id,
-				display_name: current.peer_id.slice(0, 8),
-				hostname: "internet",
-				platform: "unknown",
-			});
+			const peer = current.peer ?? remotePeer();
+			startSendTransfer(
+				transferId,
+				totalSize,
+				peer?.device_id ?? current.peer_id,
+				peer ?? undefined,
+			);
 			setSelectedFiles([]);
 		} catch (reason) {
 			setError(String(reason));
@@ -464,89 +484,61 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 					</Show>
 				</DialogContent>
 			</Dialog>
-			<Show when={isConnected()}>
-				<section
-					aria-labelledby="internet-peer-title"
-					aria-busy={pending()}
-					class="shrink-0 space-y-3 rounded-xl border border-border bg-card p-3.5"
-				>
-					<div class="flex items-start gap-3">
-						<span class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-							<LucideGlobe2 aria-hidden="true" class="size-[22px]" />
-						</span>
-						<div class="min-w-0 flex-1">
-							<h2 id="internet-peer-title" class="truncate text-sm font-semibold">
-								{session()?.peer_id.slice(0, 8)}
-							</h2>
-							<p class="text-xs text-muted-foreground">{t("internetPeerHostname")}</p>
-						</div>
-						<Button
-							type="button"
-							variant="ghost"
-							disabled={pending()}
-							onClick={() => void disconnect()}
-						>
-							{t("disconnectInternetSession")}
-						</Button>
-					</div>
-					<Show when={session()}>
-						{(current) => (
-							<RemoteSessionStatus
-								status={current().status}
-								expiresAtUnix={current().expires_at_unix}
-								error={localizedError()}
-							/>
-						)}
-					</Show>
-					<Show when={session()?.status.state === "ready" && session()?.can_send && !share()}>
-						<div class="space-y-2 rounded-lg bg-muted/60 p-3">
-							<div class="flex flex-wrap gap-2">
-								<Button
-									type="button"
-									variant="outline"
-									disabled={pending()}
-									onClick={() => void pickItems(false)}
-								>
-									{t("addFiles")}
-								</Button>
-								<Show when={supportsFolderSelection(currentPlatform)}>
+			<Show when={remotePeer()}>
+				{(peer) => (
+					<PeerCard
+						peer={peer()}
+						transfers={props.getTransfers?.(peer().device_id)}
+						actionsDisabled={pending()}
+						onAddFiles={session()?.can_send ? () => void pickItems(false) : undefined}
+						onAddFolders={
+							session()?.can_send && supportsFolderSelection(currentPlatform)
+								? () => void pickItems(true)
+								: undefined
+						}
+						onAddMedia={
+							session()?.can_send && supportsMediaSelection(currentPlatform)
+								? () => void pickItems(false, true)
+								: undefined
+						}
+						onAbortTransfer={props.onAbortTransfer}
+						onDismissTransfer={props.onDismissTransfer}
+						expandedContent={
+							<div class="space-y-3">
+								<div class="flex items-center gap-3">
+									<Show when={session()}>
+										{(current) => (
+											<RemoteSessionStatus
+												status={current().status}
+												expiresAtUnix={current().expires_at_unix}
+												error={localizedError()}
+											/>
+										)}
+									</Show>
 									<Button
 										type="button"
-										variant="outline"
+										variant="ghost"
+										class="ml-auto"
 										disabled={pending()}
-										onClick={() => void pickItems(true)}
+										onClick={() => void disconnect()}
 									>
-										{t("addFolders")}
+										{t("disconnectInternetSession")}
 									</Button>
-								</Show>
-								<Show when={supportsMediaSelection(currentPlatform)}>
-									<Button
-										type="button"
-										variant="outline"
-										disabled={pending()}
-										onClick={() => void pickItems(false, true)}
-									>
-										{t("addPhotosAndVideos")}
-									</Button>
+								</div>
+								<Show when={selectedFiles().length > 0}>
+									<SendPreview
+										embedded
+										peer={peer()}
+										files={selectedFiles()}
+										onConfirm={() => void sendSelectedFiles()}
+										onCancel={clearSelectedFiles}
+										onRemoveFile={removeSelectedFile}
+									/>
 								</Show>
 							</div>
-							<Show when={selectedFiles().length > 0}>
-								<SendPreview
-									embedded
-									peer={{
-										display_name: session()?.peer_id.slice(0, 8) ?? "",
-										hostname: "internet",
-										platform: "unknown",
-									}}
-									files={selectedFiles()}
-									onConfirm={() => void sendSelectedFiles()}
-									onCancel={clearSelectedFiles}
-									onRemoveFile={removeSelectedFile}
-								/>
-							</Show>
-						</div>
-					</Show>
-				</section>
+						}
+					/>
+				)}
 			</Show>
 		</>
 	);

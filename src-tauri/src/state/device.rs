@@ -4,7 +4,7 @@ use std::path::Path;
 const DEVICE_ID_FILE: &str = "device_id.txt";
 
 /// Stable identity for this device instance.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DeviceIdentity {
     pub device_id: String,
     pub display_name: String,

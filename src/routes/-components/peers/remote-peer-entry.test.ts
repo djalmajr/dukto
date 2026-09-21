@@ -25,6 +25,9 @@ describe("remote peer entry contract", () => {
 		expect(rootSource).toContain('t("addInternetPeer")');
 		expect(titleBarClass).toContain("gap-1.5");
 		expect(rootSource).not.toContain("bg-background/70");
+		expect(rootSource.match(/hover:bg-muted-foreground\/10/g)?.length ?? 0).toBeGreaterThanOrEqual(
+			2,
+		);
 		expect(rootSource.match(/variant="ghost"/g)?.length).toBeGreaterThanOrEqual(2);
 		expect(rootSource).toContain("{isMac && addInternetPeerButton()}");
 		expect(rootSource).toContain("{!isMac && addInternetPeerButton()}");
@@ -36,15 +39,23 @@ describe("remote peer entry contract", () => {
 		);
 	});
 
+	test("merges an internet session with the authenticated application peer", () => {
+		expect(tauriSource).toContain("peer: PeerIdentity | null");
+		expect(entrySource).toContain("current.peer");
+		expect(listSource).toContain("remotePeerId");
+		expect(listSource).toContain("peer.device_id !== remotePeerId()");
+		expect(entrySource).toContain("getTransfers");
+	});
+
 	test("keeps invitation controls in a modal and lists only connected peers", () => {
 		expect(entrySource).toContain("<Dialog");
 		expect(entrySource).toContain("<DialogContent");
 		expect(entrySource).toContain("<DialogTitle");
-		expect(entrySource).toContain("<Show when={isConnected()}");
+		expect(entrySource).toContain("<Show when={remotePeer()}");
 		expect(entrySource.indexOf("<DialogContent")).toBeLessThan(
 			entrySource.indexOf('t("createInternetInvitation")'),
 		);
-		expect(entrySource.indexOf("<Show when={isConnected()}")).toBeLessThan(
+		expect(entrySource.indexOf("<Show when={remotePeer()}")).toBeLessThan(
 			entrySource.indexOf("<SendPreview"),
 		);
 	});

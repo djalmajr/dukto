@@ -115,7 +115,7 @@ function RootLayout() {
 		<Button
 			variant="ghost"
 			size="icon"
-			class="h-6 w-6 text-muted-foreground"
+			class="h-6 w-6 text-muted-foreground hover:bg-muted-foreground/10"
 			onClick={() =>
 				navigate({
 					to: "/",
@@ -155,7 +155,7 @@ function RootLayout() {
 				<Button
 					variant="ghost"
 					size="icon"
-					class="h-6 w-6 text-muted-foreground"
+					class="h-6 w-6 text-muted-foreground hover:bg-muted-foreground/10"
 					onClick={() =>
 						navigate({
 							to: "/",

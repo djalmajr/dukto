@@ -16,6 +16,7 @@ use crate::{
         pairing::ManualPairingCode,
         session::{EstablishedInternetSession, InternetSessionCredentials, InternetSessionRole},
     },
+    state::device::DeviceIdentity,
     transfer::channel::RouteKind,
 };
 
@@ -53,6 +54,7 @@ pub struct RemoteSessionView {
     pub can_send: bool,
     pub session_id: String,
     pub peer_id: String,
+    pub peer: Option<DeviceIdentity>,
     pub expires_at_unix: u64,
     pub status: RemoteSessionStatus,
 }
@@ -180,6 +182,7 @@ impl RemoteSessionRegistry {
                     can_send: role == InternetSessionRole::InvitationJoiner,
                     session_id,
                     peer_id,
+                    peer: None,
                     expires_at_unix,
                     status: RemoteSessionStatus::Invited,
                 },
@@ -260,6 +263,7 @@ impl RemoteSessionRegistry {
         now_unix: u64,
     ) -> Result<RemoteSessionView, RemoteSessionError> {
         let peer_id = established.peer_id().to_owned();
+        let peer = established.peer_device().cloned();
         let route = established.route_kind();
         let mut sessions = self.sessions.lock().unwrap();
         let session = sessions
@@ -273,6 +277,7 @@ impl RemoteSessionRegistry {
             return Err(RemoteSessionError::InvalidTransition);
         }
         session.view.peer_id = peer_id;
+        session.view.peer = peer;
         session.view.status = RemoteSessionStatus::Ready { route };
         session.secret = None;
         session.manual_code = None;

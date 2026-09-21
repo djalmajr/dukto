@@ -1,4 +1,8 @@
-use std::{fmt, sync::Arc, time::Duration};
+use std::{
+    fmt,
+    sync::{Arc, OnceLock},
+    time::Duration,
+};
 
 use iroh::endpoint::{RecvStream, SendStream};
 use ring::rand::SecureRandom;
@@ -19,6 +23,7 @@ use crate::{
             PairingTranscript, PAIRING_NONCE_BYTES,
         },
     },
+    state::device::DeviceIdentity,
     transfer::channel::{AuthenticatedChannel, ChannelCloseReason, RouteKind},
 };
 
@@ -65,6 +70,7 @@ struct EstablishedInternetSessionInner {
     binding: Zeroizing<[u8; 32]>,
     channel: IrohAuthenticatedChannel,
     initial_transfer: Mutex<Option<InternetTransferParts>>,
+    peer_device: OnceLock<DeviceIdentity>,
     role: InternetSessionRole,
 }
 
@@ -80,6 +86,54 @@ impl EstablishedInternetSession {
 
     pub fn route_kind(&self) -> RouteKind {
         self.inner.channel.route_kind()
+    }
+
+    pub fn peer_device(&self) -> Option<&DeviceIdentity> {
+        self.inner.peer_device.get()
+    }
+
+    pub async fn exchange_peer_identity(
+        &self,
+        local_device: &DeviceIdentity,
+    ) -> Result<(), InternetSessionError> {
+        let (mut send, mut receive) = match self.inner.role {
+            InternetSessionRole::InvitationJoiner => self.inner.channel.open_bi().await,
+            InternetSessionRole::InvitationOwner => self.inner.channel.accept_bi().await,
+        }
+        .map_err(|_| InternetSessionError::Transport)?;
+        let mut noise = match self.inner.role {
+            InternetSessionRole::InvitationJoiner => {
+                handshake_initiator_bound(&mut send, &mut receive, &self.inner.binding).await
+            }
+            InternetSessionRole::InvitationOwner => {
+                handshake_responder_bound(&mut send, &mut receive, &self.inner.binding).await
+            }
+        }
+        .map_err(|_| InternetSessionError::AuthenticationFailed)?;
+
+        let encoded = serde_json::to_vec(local_device)
+            .map_err(|_| InternetSessionError::InvalidControlMessage)?;
+        let mut ciphertext = vec![0_u8; 65_535];
+        let written = noise
+            .write_message(&encoded, &mut ciphertext)
+            .map_err(|_| InternetSessionError::AuthenticationFailed)?;
+        send_framed(&mut send, &ciphertext[..written])
+            .await
+            .map_err(|_| InternetSessionError::Transport)?;
+
+        let encrypted = recv_framed(&mut receive)
+            .await
+            .map_err(|_| InternetSessionError::Transport)?;
+        let read = noise
+            .read_message(&encrypted, &mut ciphertext)
+            .map_err(|_| InternetSessionError::AuthenticationFailed)?;
+        let peer: DeviceIdentity = serde_json::from_slice(&ciphertext[..read])
+            .map_err(|_| InternetSessionError::InvalidControlMessage)?;
+        validate_device_identity(&peer)?;
+        self.inner
+            .peer_device
+            .set(peer)
+            .map_err(|_| InternetSessionError::InvalidControlMessage)
     }
 
     pub async fn next_transfer_parts(
@@ -147,9 +201,25 @@ fn established_session(
             binding: Zeroizing::new(binding),
             channel,
             initial_transfer: Mutex::new(Some((send, receive, noise))),
+            peer_device: OnceLock::new(),
             role,
         }),
     }
+}
+
+fn validate_device_identity(device: &DeviceIdentity) -> Result<(), InternetSessionError> {
+    let fields = [
+        (&device.device_id, 128_usize),
+        (&device.display_name, 256_usize),
+        (&device.hostname, 256_usize),
+        (&device.platform, 64_usize),
+    ];
+    if fields.iter().any(|(value, max_len)| {
+        value.trim().is_empty() || value.len() > *max_len || value.chars().any(char::is_control)
+    }) {
+        return Err(InternetSessionError::InvalidControlMessage);
+    }
+    Ok(())
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]

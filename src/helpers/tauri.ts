@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { PeerInfo } from "~/stores/peers";
+import type { PeerIdentity, PeerInfo } from "~/stores/peers";
 
 export async function getPeers(): Promise<PeerInfo[]> {
 	return invoke<PeerInfo[]>("get_peers");
@@ -23,6 +23,7 @@ export interface InternetInviteView {
 	can_send: boolean;
 	session_id: string;
 	peer_id: string;
+	peer: PeerIdentity | null;
 	expires_at_unix: number;
 	status: { state: string; route?: "direct" | "relay" };
 }

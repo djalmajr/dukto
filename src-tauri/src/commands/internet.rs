@@ -37,6 +37,7 @@ pub struct InternetInviteView {
     pub can_send: bool,
     pub session_id: String,
     pub peer_id: String,
+    pub peer: Option<crate::state::device::DeviceIdentity>,
     pub expires_at_unix: u64,
     pub status: RemoteSessionStatus,
 }
@@ -77,6 +78,7 @@ fn with_status(view: &InternetInviteView, status: RemoteSessionStatus) -> Intern
         can_send: view.can_send,
         session_id: view.session_id.clone(),
         peer_id: view.peer_id.clone(),
+        peer: view.peer.clone(),
         expires_at_unix: view.expires_at_unix,
         status,
     }
@@ -87,6 +89,7 @@ fn view_for(invite: &InternetInvite, role: InternetSessionRole) -> InternetInvit
         can_send: role == InternetSessionRole::InvitationJoiner,
         session_id: invite.session_id().to_owned(),
         peer_id: invite.endpoint_id().to_owned(),
+        peer: None,
         expires_at_unix: invite.expires_at_unix(),
         status: RemoteSessionStatus::Invited,
     }
@@ -230,6 +233,7 @@ pub(crate) fn confirm_pairing_code_in_registry(
         can_send: view.can_send,
         session_id: view.session_id,
         peer_id: view.peer_id,
+        peer: view.peer,
         expires_at_unix: view.expires_at_unix,
         status: view.status,
     })
@@ -293,6 +297,7 @@ fn endpoint_address(
 async fn connect_internet_session_in_registry(
     registry: &RemoteSessionRegistry,
     endpoint: &InternetEndpoint,
+    local_device: &crate::state::device::DeviceIdentity,
     session_id: &str,
     now_unix: u64,
 ) -> Result<InternetInviteView, String> {
@@ -315,6 +320,10 @@ async fn connect_internet_session_in_registry(
     )
     .await
     .map_err(|_| "internet session authentication failed".to_owned())?;
+    established
+        .exchange_peer_identity(local_device)
+        .await
+        .map_err(|_| "internet peer identity exchange failed".to_owned())?;
     registry
         .mark_ready(session_id, established, now_unix)
         .map(InternetInviteView::from)
@@ -324,6 +333,7 @@ async fn connect_internet_session_in_registry(
 async fn authenticate_incoming_channel(
     registry: &RemoteSessionRegistry,
     endpoint_id: &str,
+    local_device: &crate::state::device::DeviceIdentity,
     channel: crate::internet::channel::IrohAuthenticatedChannel,
     now_unix: u64,
 ) -> Result<InternetInviteView, String> {
@@ -338,6 +348,10 @@ async fn authenticate_incoming_channel(
         })
         .await
         .map_err(|_| "internet session authentication failed".to_owned())?;
+    established
+        .exchange_peer_identity(local_device)
+        .await
+        .map_err(|_| "internet peer identity exchange failed".to_owned())?;
     registry
         .mark_ready(&session_id, established, now_unix)
         .map(InternetInviteView::from)
@@ -348,6 +362,7 @@ async fn authenticate_incoming_channel(
 async fn accept_one_internet_session(
     registry: &RemoteSessionRegistry,
     endpoint: &InternetEndpoint,
+    local_device: &crate::state::device::DeviceIdentity,
     now_unix: u64,
 ) -> Result<InternetInviteView, String> {
     let channel = endpoint
@@ -357,6 +372,7 @@ async fn accept_one_internet_session(
     authenticate_incoming_channel(
         registry,
         &endpoint.endpoint_id().to_string(),
+        local_device,
         channel,
         now_unix,
     )
@@ -490,8 +506,15 @@ fn ensure_accept_loop(
                 let result = unix_now().map_err(|_| "internet session clock is invalid".to_owned());
                 let result = match result {
                     Ok(now_unix) => {
-                        authenticate_incoming_channel(&registry, &endpoint_id, channel, now_unix)
-                            .await
+                        let local_device = handle.state::<AppState>().get_device();
+                        authenticate_incoming_channel(
+                            &registry,
+                            &endpoint_id,
+                            &local_device,
+                            channel,
+                            now_unix,
+                        )
+                        .await
                     }
                     Err(error) => Err(error),
                 };
@@ -525,6 +548,7 @@ impl From<crate::state::internet_session::RemoteSessionView> for InternetInviteV
             can_send: view.can_send,
             session_id: view.session_id,
             peer_id: view.peer_id,
+            peer: view.peer,
             expires_at_unix: view.expires_at_unix,
             status: view.status,
         }
@@ -637,9 +661,11 @@ pub async fn import_internet_invite<R: tauri::Runtime>(
             .await
             .map_err(|error| error.to_string())?;
     }
+    let local_device = state.get_device();
     let result = connect_internet_session_in_registry(
         &state.remote_sessions,
         endpoint,
+        &local_device,
         &view.session_id,
         now_unix,
     )
@@ -729,7 +755,11 @@ pub async fn send_to_internet_session<R: tauri::Runtime>(
         "transfer:send-started",
         &SendStarted {
             transfer_id: transfer_id.clone(),
-            peer_device_id: ready.peer_id.clone(),
+            peer_device_id: ready
+                .peer
+                .as_ref()
+                .map(|peer| peer.device_id.clone())
+                .unwrap_or_else(|| ready.peer_id.clone()),
         },
     );
 
@@ -848,9 +878,11 @@ pub async fn confirm_internet_pairing_code<R: tauri::Runtime>(
     let now_unix = unix_now()?;
     confirm_pairing_code_in_registry(&state.remote_sessions, &session_id, code, now_unix)?;
     let endpoint = endpoint_for(&state).await?;
+    let local_device = state.get_device();
     let result = connect_internet_session_in_registry(
         &state.remote_sessions,
         endpoint,
+        &local_device,
         &session_id,
         now_unix,
     )
@@ -1075,6 +1107,8 @@ mod tests {
         let joiner_endpoint = loopback_endpoint().await;
         let owner_registry = Arc::new(RemoteSessionRegistry::default());
         let joiner_registry = Arc::new(RemoteSessionRegistry::default());
+        let owner_device = test_device("owner");
+        let joiner_device = test_device("joiner");
         let addresses = owner_endpoint
             .address()
             .addrs
@@ -1097,12 +1131,20 @@ mod tests {
 
         let accepting_registry = Arc::clone(&owner_registry);
         let accepting_endpoint = owner_endpoint.clone();
+        let accepting_device = owner_device.clone();
         let accepting = tokio::spawn(async move {
-            accept_one_internet_session(&accepting_registry, &accepting_endpoint, NOW + 2).await
+            accept_one_internet_session(
+                &accepting_registry,
+                &accepting_endpoint,
+                &accepting_device,
+                NOW + 2,
+            )
+            .await
         });
         let joiner_view = connect_internet_session_in_registry(
             &joiner_registry,
             &joiner_endpoint,
+            &joiner_device,
             &imported.session_id,
             NOW + 2,
         )
@@ -1117,6 +1159,8 @@ mod tests {
             }
         );
         assert_eq!(owner_ready.status, joiner_view.status);
+        assert_eq!(joiner_view.peer, Some(owner_device));
+        assert_eq!(owner_ready.peer, Some(joiner_device));
         assert_eq!(
             joiner_view.peer_id,
             owner_endpoint.endpoint_id().to_string()
@@ -1173,6 +1217,8 @@ mod tests {
     ) {
         let owner_registry = Arc::new(RemoteSessionRegistry::default());
         let joiner_registry = Arc::new(RemoteSessionRegistry::default());
+        let owner_device = test_device("owner");
+        let joiner_device = test_device("joiner");
         let addresses = owner_endpoint
             .address()
             .addrs
@@ -1195,12 +1241,20 @@ mod tests {
 
         let accepting_registry = Arc::clone(&owner_registry);
         let accepting_endpoint = owner_endpoint.clone();
+        let accepting_device = owner_device.clone();
         let accepting = tokio::spawn(async move {
-            accept_one_internet_session(&accepting_registry, &accepting_endpoint, NOW + 2).await
+            accept_one_internet_session(
+                &accepting_registry,
+                &accepting_endpoint,
+                &accepting_device,
+                NOW + 2,
+            )
+            .await
         });
         let joiner_ready = connect_internet_session_in_registry(
             &joiner_registry,
             &joiner_endpoint,
+            &joiner_device,
             &imported.session_id,
             NOW + 2,
         )
@@ -1219,6 +1273,8 @@ mod tests {
                 route: expected_route
             }
         );
+        assert_eq!(joiner_ready.peer, Some(owner_device));
+        assert_eq!(owner_ready.peer, Some(joiner_device));
         let route = expected_route;
         let owner_session = owner_registry.established(&owner_ready.session_id).unwrap();
         let joiner_session = joiner_registry
@@ -1411,6 +1467,8 @@ mod tests {
         let joiner_endpoint = loopback_endpoint().await;
         let owner_registry = Arc::new(RemoteSessionRegistry::default());
         let joiner_registry = Arc::new(RemoteSessionRegistry::default());
+        let owner_device = test_device("owner");
+        let joiner_device = test_device("joiner");
         let addresses = owner_endpoint
             .address()
             .addrs
@@ -1445,12 +1503,20 @@ mod tests {
 
         let accepting_registry = Arc::clone(&owner_registry);
         let accepting_endpoint = owner_endpoint.clone();
+        let accepting_device = owner_device;
         let accepting = tokio::spawn(async move {
-            accept_one_internet_session(&accepting_registry, &accepting_endpoint, NOW + 2).await
+            accept_one_internet_session(
+                &accepting_registry,
+                &accepting_endpoint,
+                &accepting_device,
+                NOW + 2,
+            )
+            .await
         });
         let joining = connect_internet_session_in_registry(
             &joiner_registry,
             &joiner_endpoint,
+            &joiner_device,
             &imported.session_id,
             NOW + 2,
         )
@@ -1489,5 +1555,14 @@ mod tests {
 
     fn test_dir(label: &str) -> PathBuf {
         std::env::temp_dir().join(format!("dukto-{label}-{}", uuid::Uuid::new_v4()))
+    }
+
+    fn test_device(label: &str) -> crate::state::device::DeviceIdentity {
+        crate::state::device::DeviceIdentity {
+            device_id: format!("{label}-device-id"),
+            display_name: label.to_owned(),
+            hostname: format!("{label}.local"),
+            platform: "test".to_owned(),
+        }
     }
 }
