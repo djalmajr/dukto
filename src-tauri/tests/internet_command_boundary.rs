@@ -100,16 +100,23 @@ fn internet_commands_are_reachable_through_the_tauri_ipc_boundary() {
         300,
     )
     .unwrap();
+    let previous_disable_operated_services = std::env::var_os("DUKTO_DISABLE_OPERATED_SERVICES");
+    std::env::set_var("DUKTO_DISABLE_OPERATED_SERVICES", "1");
     let imported = test::get_ipc_response(
         &webview,
         request(
             "import_internet_invite",
             json!({ "invitation": invite.to_canonical_json().unwrap() }),
         ),
-    )
-    .unwrap()
-    .deserialize::<serde_json::Value>()
-    .unwrap();
+    );
+    restore_environment(
+        "DUKTO_DISABLE_OPERATED_SERVICES",
+        previous_disable_operated_services,
+    );
+    let imported = imported
+        .unwrap()
+        .deserialize::<serde_json::Value>()
+        .unwrap();
     assert_eq!(imported["session_id"], invite.session_id());
     assert_eq!(imported["status"]["state"], "invited");
 
@@ -350,5 +357,12 @@ fn request(command: &str, body: serde_json::Value) -> tauri::webview::InvokeRequ
         body: body.into(),
         headers: Default::default(),
         invoke_key: test::INVOKE_KEY.to_owned(),
+    }
+}
+
+fn restore_environment(name: &str, previous: Option<std::ffi::OsString>) {
+    match previous {
+        Some(value) => std::env::set_var(name, value),
+        None => std::env::remove_var(name),
     }
 }
