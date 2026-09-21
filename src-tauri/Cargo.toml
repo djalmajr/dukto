@@ -19,6 +19,11 @@ name = "dukto-cli"
 path = "src/cli/main.rs"
 required-features = ["cli"]
 
+[[bin]]
+name = "internet-cross-host-probe"
+path = "src/bin/internet_cross_host_probe.rs"
+required-features = ["internet-probe"]
+
 [dependencies]
 tauri = { version = "2", features = [], optional = true }
 tauri-plugin-dialog = { version = "2", optional = true }
@@ -71,6 +76,7 @@ tauri-build = { version = "2", features = [], optional = true }
 
 [features]
 cli = []
+internet-probe = []
 default = ["desktop", "custom-protocol"]
 app-common = [
 	"dep:tauri",
