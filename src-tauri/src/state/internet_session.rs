@@ -347,14 +347,25 @@ impl RemoteSessionRegistry {
             .is_some()
     }
 
-    pub fn expire(&self, now_unix: u64) -> usize {
+    pub fn expire(&self, now_unix: u64) -> Vec<RemoteSessionView> {
         let mut sessions = self.sessions.lock().unwrap();
-        let previous_len = sessions.len();
-        sessions.retain(|_, session| {
-            !session.view.status.expires_with_invitation()
-                || now_unix < session.view.expires_at_unix
-        });
-        previous_len - sessions.len()
+        let expired_ids = sessions
+            .iter()
+            .filter_map(|(session_id, session)| {
+                (session.view.status.expires_with_invitation()
+                    && now_unix >= session.view.expires_at_unix)
+                    .then(|| session_id.clone())
+            })
+            .collect::<Vec<_>>();
+
+        expired_ids
+            .into_iter()
+            .filter_map(|session_id| sessions.remove(&session_id))
+            .map(|mut session| {
+                session.view.status = RemoteSessionStatus::Expired;
+                session.view
+            })
+            .collect()
     }
 
     pub fn view(&self, session_id: &str) -> Option<RemoteSessionView> {
@@ -600,7 +611,10 @@ mod tests {
                 NOW,
             )
             .unwrap();
-        assert_eq!(registry.expire(NOW + 1), 1);
+        let expired = registry.expire(NOW + 1);
+        assert_eq!(expired.len(), 1);
+        assert_eq!(expired[0].session_id, "expired");
+        assert_eq!(expired[0].status, RemoteSessionStatus::Expired);
         assert!(registry.view("expired").is_none());
 
         registry
@@ -644,7 +658,7 @@ mod tests {
             )
             .unwrap();
 
-        assert_eq!(registry.expire(NOW + 3), 0);
+        assert!(registry.expire(NOW + 3).is_empty());
         assert!(registry.view("ready").is_some());
         registry
             .transition(

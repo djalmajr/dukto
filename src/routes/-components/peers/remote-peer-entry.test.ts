@@ -145,6 +145,8 @@ describe("remote peer entry contract", () => {
 		expect(entrySource).toContain("applySession(payload)");
 		expect(entrySource).toContain('payload.status.state === "failed"');
 		expect(entrySource).toContain('payload.status.state === "cancelled"');
+		expect(entrySource).toContain('payload.status.state === "expired"');
+		expect(internetRegistrySource).toContain("session.view.status = RemoteSessionStatus::Expired");
 		expect(entrySource).toContain('payload.status.state === "expired" && !isConnected()');
 		expect(peerCardSource).toContain('t("disconnectInternetSession")');
 		expect(entrySource).toContain("pending() || session()");

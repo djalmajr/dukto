@@ -142,6 +142,7 @@ mod app_runner {
                 );
                 app.manage(app_state);
 
+                let remote_session_handle = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
                     let mut interval = tokio::time::interval(REMOTE_SESSION_SWEEP_INTERVAL);
                     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -150,7 +151,9 @@ mod app_runner {
                         let Ok(elapsed) = SystemTime::now().duration_since(UNIX_EPOCH) else {
                             continue;
                         };
-                        remote_sessions.expire(elapsed.as_secs());
+                        for expired in remote_sessions.expire(elapsed.as_secs()) {
+                            let _ = remote_session_handle.emit("internet:session-updated", expired);
+                        }
                     }
                 });
 
