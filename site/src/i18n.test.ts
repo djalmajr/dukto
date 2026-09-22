@@ -82,8 +82,8 @@ describe("website localization", () => {
 
 	test("privacy guide discloses operated internet services in every language", () => {
 		const privacy = guides.find((guide) => guide.slug === "privacy");
-		expect(privacy).toBeDefined();
-		const english = [privacy!.summary, ...privacy!.sections.map((section) => section.text ?? "")];
+		if (!privacy) throw new Error("Privacy guide is missing");
+		const english = [privacy.summary, ...privacy.sections.map((section) => section.text ?? "")];
 		const portuguese = english.map((message) => translate("pt", message));
 		const spanish = english.map((message) => translate("es", message));
 
