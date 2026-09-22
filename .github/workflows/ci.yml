@@ -22,8 +22,8 @@ jobs:
         with:
           bun-version: 1.4.0
       - uses: dtolnay/rust-toolchain@stable
-      - name: Install updater signature verifier
-        run: sudo apt-get update && sudo apt-get install -y minisign
+      - name: Install updater verifier and Linux test dependencies
+        run: sudo apt-get update && sudo apt-get install -y minisign libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev
       - run: bun install --frozen-lockfile
       - name: Build frontend and generate route types
         run: bun run vite:build

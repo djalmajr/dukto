@@ -187,7 +187,7 @@ export const guides: Guide[] = [
 		group: "UNDERSTAND THE FLOW",
 		title: "Privacy and security",
 		summary:
-			"Dukto transfers files directly between devices without collecting your personal data.",
+			"Dukto transfers files with end-to-end encryption. Internet invitations may use temporary rendezvous and relay services.",
 		sections: [
 			{
 				title: "Who operates Dukto",
@@ -195,15 +195,15 @@ export const guides: Guide[] = [
 			},
 			{
 				title: "Data collection",
-				text: "Dukto does not require an account and does not collect, sell, or send personal data, analytics, advertising identifiers, crash reports, or file contents to the developer. The app has no advertising or tracking SDKs.",
+				text: "Dukto does not require an account and has no advertising or tracking SDKs. It does not send file contents, file names, advertising identifiers, analytics, or crash reports to the developer. For internet invitations, Dukto-operated services process temporary connection information, including source IP addresses, temporary endpoint IDs, invitation state, timing, connection duration, and traffic volume. This information is used to connect devices and limit abuse, not for advertising or tracking.",
 			},
 			{
-				title: "Direct, encrypted transfer",
-				text: "Content travels directly to the device selected by the sender over QUIC with a Noise session. A transfer can expose the selected files, file names, device name, device identifier, network address, and transfer metadata to the participating devices. Dukto does not route or retain this information through a developer-operated server or cloud storage service.",
+				title: "Encrypted transfer",
+				text: "On a local network, content travels directly to the selected device. Internet transfers prefer a direct connection but may relay encrypted bytes through a Dukto-operated service when a direct path is unavailable. A transfer can expose the selected files, file names, device name, device identifier, network address, and transfer metadata to the participating devices. The rendezvous and relay services cannot read file contents or file names.",
 			},
 			{
 				title: "Device access and permissions",
-				text: "Dukto uses network access and Wi-Fi multicast to discover and connect to nearby devices. It uses notifications to alert you about incoming transfers. Files are accessed only when you select them for sending or choose where received files are saved.",
+				text: "Dukto uses network access and Wi-Fi multicast to discover and connect to nearby devices. Internet invitations use a short-lived connection service. The app uses notifications to alert you about incoming transfers. Files are accessed only when you select them for sending or choose where received files are saved.",
 			},
 			{
 				title: "Approval and trust",
@@ -211,7 +211,7 @@ export const guides: Guide[] = [
 			},
 			{
 				title: "Storage, retention, and deletion",
-				text: "Settings and received files remain on your devices until you change or delete them. You can delete received files with your operating system, clear local app data, or uninstall Dukto. Because the developer does not receive or store your files or personal data, there is no developer-side account or cloud record to delete.",
+				text: "Settings and received files remain on your devices until you change or delete them. You can delete received files with your operating system, clear local app data, or uninstall Dukto. Internet invitations, their encrypted connection envelopes, and relay admission records are temporary and expire or are consumed; they are not a cloud copy of your files. Dukto has no developer-side account or transfer history to delete. For questions about service-side connection information, contact contato@djalmajr.dev.",
 			},
 			{
 				title: "Children",
@@ -223,7 +223,7 @@ export const guides: Guide[] = [
 			},
 			{
 				title: "Policy updates",
-				text: "This policy is effective September 17, 2026. Material changes will be published on this page with an updated effective date.",
+				text: "This policy is effective September 22, 2026. Material changes will be published on this page with an updated effective date.",
 			},
 		],
 	},
