@@ -4,6 +4,7 @@ version = "0.2.3"
 edition = "2021"
 default-run = "dukto"
 description = "Cross-platform file transfer"
+autobins = false
 
 [lib]
 name = "dukto_lib"
@@ -19,10 +20,11 @@ name = "dukto-cli"
 path = "src/cli/main.rs"
 required-features = ["cli"]
 
-[[bin]]
+[[test]]
 name = "internet-cross-host-probe"
-path = "src/bin/internet_cross_host_probe.rs"
+path = "tests/support/internet_cross_host_probe.rs"
 required-features = ["internet-probe"]
+harness = false
 
 [dependencies]
 tauri = { version = "2", features = [], optional = true }
