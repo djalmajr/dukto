@@ -1,7 +1,7 @@
 {
 	"$schema": "https://raw.githubusercontent.com/nicokosi/tauri-v2-schemas/main/tauri.conf.json",
 	"productName": "Dukto",
-	"version": "0.2.2",
+	"version": "0.2.3",
 	"identifier": "app.dukto",
 	"build": {
 		"features": ["desktop"],

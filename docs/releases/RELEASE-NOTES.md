@@ -1,4 +1,4 @@
-# Dukto 0.2.2
+# Dukto 0.2.3
 
 Dukto is a cross-platform app and command-line tool for direct, encrypted file transfers across macOS, Windows, Linux, Android, and iOS.
 
@@ -8,6 +8,11 @@ Dukto is a cross-platform app and command-line tool for direct, encrypted file t
 - Keep an authenticated internet peer available for multiple sequential transfers until either app closes, the connection fails, or the user explicitly disconnects it.
 - Reuse the existing encrypted transfer protocol, approval flow, progress reporting, cancellation, directory handling, and partial-file cleanup for internet peers.
 - Add a platform-aware title-bar action and a focused invitation dialog for creating or joining an internet connection.
+- Use the operated Dukto rendezvous and admission-gated encrypted relay by default, without requiring an account or embedding a static relay credential.
+- Add native QR-code image sharing alongside link copying, with visible loading feedback and toast notifications.
+- Keep invitation, connection, and transfer errors in transient toasts instead of reserving modal space.
+- Remove expired invitations automatically and keep authenticated peers available after the invitation lifetime ends.
+- Open the configured destination folder reliably from packaged desktop applications.
 - Improve Settings organization, update feedback, responsive dialog sizing, and language controls.
 - Improve Android file selection, destination handling, launcher artwork, and Google Play preparation.
 - Remove stale LAN peers promptly while preserving peers that reappear during short network-interface changes.
@@ -21,8 +26,9 @@ Update the sender and receiver together. Internet transfer support is experiment
 
 ## Current limitations
 
-- The published desktop binaries do not include a Dukto-operated relay or rendezvous service. Internet transfer evaluation requires explicit runtime configuration: without relay URLs the transport is direct-only, and without rendezvous the invitation's embedded routes are used.
+- The operated relay and rendezvous services are enabled by default. They do not receive file contents, but their operator can observe network metadata such as source IP addresses, timing, duration, and traffic volume.
 - Direct connectivity depends on both networks. Dukto falls back to the configured encrypted relay when a direct path cannot be established.
+- Real Direct routes have not yet been demonstrated on every supported platform and network topology; the encrypted relay fallback is expected on restrictive NAT, CGNAT, firewall, or UDP-blocked networks.
 - Internet invitations are temporary and intentionally do not create an account or persist trusted devices.
 - Interrupted transfers are not resumable. Fully received files in a multi-file transfer remain available if a later item fails.
 - Windows installers are not Authenticode-signed. The updater payload remains cryptographically signed by Dukto's updater key.
