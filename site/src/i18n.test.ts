@@ -80,6 +80,24 @@ describe("website localization", () => {
 		}
 	});
 
+	test("privacy guide discloses operated internet services in every language", () => {
+		const privacy = guides.find((guide) => guide.slug === "privacy");
+		expect(privacy).toBeDefined();
+		const english = [privacy!.summary, ...privacy!.sections.map((section) => section.text ?? "")];
+		const portuguese = english.map((message) => translate("pt", message));
+		const spanish = english.map((message) => translate("es", message));
+
+		expect(english.join(" ")).toContain("relay services");
+		expect(english.join(" ")).toContain("source IP addresses");
+		expect(portuguese.join(" ")).toContain("endereços IP de origem");
+		expect(spanish.join(" ")).toContain("direcciones IP de origen");
+		for (const content of [english, portuguese, spanish]) {
+			expect(content.join(" ")).not.toContain(
+				"Dukto does not route or retain this information through a developer-operated server",
+			);
+		}
+	});
+
 	test("guide metadata follows the selected language", () => {
 		expect(pageMetadata("/docs/getting-started/")).toEqual(
 			expect.objectContaining({
