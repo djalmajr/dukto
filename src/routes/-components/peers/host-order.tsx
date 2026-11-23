@@ -151,6 +151,8 @@ export default function HostOrder(props: HostOrderProps) {
 			},
 			onPointerDown: (event) => {
 				if (!enabled() || event.button !== 0 || pointer) return;
+				// A portaled host menu can overlap another card. Its items own the gesture.
+				if (document.querySelector(".peer-actions-menu[data-expanded]")) return;
 				if (event.target.closest("button, a, input, [role=button]")) return;
 				const card = event.currentTarget.parentElement;
 				if (!card) return;

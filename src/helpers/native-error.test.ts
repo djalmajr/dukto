@@ -11,6 +11,7 @@ test("native failures map to actionable translation keys", () => {
 		["Permission denied (os error 13)", "permissionDenied"],
 		["Peer abc not found", "peerUnavailable"],
 		["Peer has no IPv4 address", "peerUnavailable"],
+		["Peer has no usable IPv4 address", "peerUnavailable"],
 		["Received path traverses a symlink or escapes the selected destination", "invalidTransfer"],
 		["Could not fetch a valid release JSON from the remote", "updateFeedUnavailable"],
 	])

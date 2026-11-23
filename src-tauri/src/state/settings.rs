@@ -55,10 +55,27 @@ impl Settings {
     /// Load settings from data_dir, or return defaults if file doesn't exist.
     pub fn load(data_dir: &Path) -> Self {
         let path = data_dir.join(SETTINGS_FILE);
-        match std::fs::read_to_string(&path) {
+        #[allow(unused_mut)]
+        let mut settings = match std::fs::read_to_string(&path) {
             Ok(content) => serde_json::from_str(&content).unwrap_or_default(),
             Err(_) => Self::default(),
+        };
+
+        // iOS changes the app-container UUID when it recreates the sandbox.
+        // A persisted Documents URL must follow the current container, or the
+        // receiver cannot prepare its destination before showing approval.
+        #[cfg(target_os = "ios")]
+        if let Some(documents) = dirs::document_dir() {
+            if let Some(rebased) = rebase_ios_documents_path(&settings.destination_dir, &documents)
+            {
+                settings.destination_dir = rebased.to_string_lossy().into_owned();
+                if let Err(error) = settings.save(data_dir) {
+                    tracing::warn!(%error, "Could not persist the current iOS Documents path");
+                }
+            }
         }
+
+        settings
     }
 
     /// Save settings to data_dir.
@@ -69,6 +86,36 @@ impl Settings {
         std::fs::write(path, json)?;
         Ok(())
     }
+}
+
+#[cfg(any(target_os = "ios", test))]
+fn rebase_ios_documents_path(configured: &str, current_documents: &Path) -> Option<PathBuf> {
+    let remainder = [
+        "/private/var/mobile/Containers/Data/Application/",
+        "/var/mobile/Containers/Data/Application/",
+    ]
+    .iter()
+    .find_map(|prefix| configured.strip_prefix(prefix))?;
+    let (container_id, suffix) = remainder.split_once("/Documents")?;
+    if container_id.is_empty() || container_id.contains('/') {
+        return None;
+    }
+    if !suffix.is_empty() && !suffix.starts_with('/') {
+        return None;
+    }
+    let rebased = if let Some(relative) = suffix.strip_prefix('/') {
+        let relative = Path::new(relative);
+        if !relative
+            .components()
+            .all(|component| matches!(component, std::path::Component::Normal(_)))
+        {
+            return None;
+        }
+        current_documents.join(relative)
+    } else {
+        current_documents.to_path_buf()
+    };
+    (rebased != Path::new(configured)).then_some(rebased)
 }
 
 #[cfg(test)]
@@ -86,6 +133,47 @@ mod tests {
     fn default_settings_has_destination_dir() {
         let s = Settings::default();
         assert!(!s.destination_dir.is_empty());
+    }
+
+    #[test]
+    fn ios_documents_path_follows_new_app_container() {
+        let current = Path::new("/private/var/mobile/Containers/Data/Application/NEW/Documents");
+        let old = "/private/var/mobile/Containers/Data/Application/OLD/Documents/Received";
+        assert_eq!(
+            rebase_ios_documents_path(old, current),
+            Some(current.join("Received"))
+        );
+        assert_eq!(
+            rebase_ios_documents_path(current.to_str().unwrap(), current),
+            None
+        );
+    }
+
+    #[test]
+    fn ios_documents_path_does_not_rewrite_other_destinations() {
+        let current = Path::new("/private/var/mobile/Containers/Data/Application/NEW/Documents");
+        assert_eq!(rebase_ios_documents_path("/tmp/Shared", current), None);
+        assert_eq!(
+            rebase_ios_documents_path(
+                "/private/var/mobile/Containers/Data/Application/OLD/Library",
+                current
+            ),
+            None
+        );
+        assert_eq!(
+            rebase_ios_documents_path(
+                "/private/var/mobile/Containers/Data/Application/OLD/DocumentsBackup",
+                current
+            ),
+            None
+        );
+        assert_eq!(
+            rebase_ios_documents_path(
+                "/private/var/mobile/Containers/Data/Application/OLD/Documents/../Library",
+                current
+            ),
+            None
+        );
     }
 
     #[test]

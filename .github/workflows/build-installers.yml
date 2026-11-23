@@ -133,7 +133,7 @@ jobs:
           RUST_TARGET: ${{ matrix.target }}
         run: |
           set -euo pipefail
-          app="src-tauri/target/$RUST_TARGET/release/bundle/macos/Dukto.app"
+          app="src-tauri/target/$RUST_TARGET/release/bundle/macos/Dukto Share.app"
           codesign --verify --deep --strict --verbose=2 "$app"
           xcrun stapler validate "$app"
           spctl --assess --type execute --verbose=2 "$app"
@@ -217,9 +217,9 @@ jobs:
           python3 - <<'PYBUNDLE'
           import os, pathlib, tarfile
           root = pathlib.Path("src-tauri/target") / os.environ["RUST_TARGET"] / "release/bundle/macos"
-          binaries = sorted(path.name for path in (root / "Dukto.app/Contents/MacOS").iterdir())
+          binaries = sorted(path.name for path in (root / "Dukto Share.app/Contents/MacOS").iterdir())
           assert binaries == ["dukto"], f"Unexpected app binaries: {binaries}"
-          with tarfile.open(root / "Dukto.app.tar.gz") as archive:
+          with tarfile.open(root / "Dukto Share.app.tar.gz") as archive:
               assert not any(member.name.endswith("/dukto-cli") for member in archive.getmembers())
           PYBUNDLE
       - name: Build CLI

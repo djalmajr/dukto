@@ -355,7 +355,7 @@ fn request(command: &str, body: serde_json::Value) -> tauri::webview::InvokeRequ
         cmd: command.to_owned(),
         callback: tauri::ipc::CallbackFn(0),
         error: tauri::ipc::CallbackFn(1),
-        url: "http://tauri.localhost".parse().unwrap(),
+        url: "tauri://localhost".parse().unwrap(),
         body: body.into(),
         headers: Default::default(),
         invoke_key: test::INVOKE_KEY.to_owned(),

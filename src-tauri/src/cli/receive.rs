@@ -251,6 +251,7 @@ mod tests {
                         sender: None,
                         item_count: 1,
                         total_size: 512,
+                        selected_items: Vec::new(),
                     },
                     response,
                 })

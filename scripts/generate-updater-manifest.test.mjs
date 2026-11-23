@@ -173,17 +173,17 @@ describe.skipIf(!minisignAvailable)("generateUpdaterManifest", () => {
 			{
 				target: "aarch64-apple-darwin",
 				names: [
-					["macos/Dukto_0.1.0_arm64.dmg", "macOS installer"],
-					["macos/Dukto.app.tar.gz", "macOS update bundle"],
-					["macos/Dukto.app.tar.gz.sig", copiedSignatureFixture],
+					["macos/Dukto Share_0.1.0_arm64.dmg", "macOS installer"],
+					["macos/Dukto Share.app.tar.gz", "macOS update bundle"],
+					["macos/Dukto Share.app.tar.gz.sig", copiedSignatureFixture],
 				],
 			},
 			{
 				target: "x86_64-apple-darwin",
 				names: [
-					["macos/Dukto_0.1.0_x64.dmg", "macOS installer"],
-					["macos/Dukto.app.tar.gz", "macOS update bundle"],
-					["macos/Dukto.app.tar.gz.sig", copiedSignatureFixture],
+					["macos/Dukto Share_0.1.0_x64.dmg", "macOS installer"],
+					["macos/Dukto Share.app.tar.gz", "macOS update bundle"],
+					["macos/Dukto Share.app.tar.gz.sig", copiedSignatureFixture],
 				],
 			},
 			{

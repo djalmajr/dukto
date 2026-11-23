@@ -3,6 +3,7 @@ pub mod cancellation;
 pub mod channel;
 pub mod fs;
 pub mod partial_file;
+mod progress;
 pub mod quic;
 pub mod receiver;
 pub mod safe_destination;

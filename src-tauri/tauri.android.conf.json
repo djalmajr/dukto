@@ -1,6 +1,11 @@
 {
 	"$schema": "https://raw.githubusercontent.com/nicokosi/tauri-v2-schemas/main/config.schema.json",
 	"productName": "Dukto Share",
+	"bundle": {
+		"android": {
+			"versionCode": 2006
+		}
+	},
 	"build": {
 		"features": ["mobile"]
 	}

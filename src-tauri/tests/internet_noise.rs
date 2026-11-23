@@ -72,6 +72,7 @@ async fn pairing_transcript_binds_noise_before_the_first_transfer_header() {
         sender: None,
         item_count: 1,
         total_size: 4,
+        selected_items: Vec::new(),
     };
     let mut packet = vec![PacketType::TransferHeader as u8];
     packet.extend_from_slice(&serde_json::to_vec(&header).unwrap());

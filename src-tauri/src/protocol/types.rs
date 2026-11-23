@@ -45,6 +45,9 @@ pub struct TransferHeader {
     pub sender: Option<DeviceIdentity>,
     pub item_count: u32,
     pub total_size: u64,
+    /// Selected roots in transmission order; older peers omit this manifest.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub selected_items: Vec<TransferItemDescriptor>,
 }
 
 #[cfg(test)]
@@ -60,6 +63,11 @@ mod tests {
 
         assert_eq!(header.sender_device_id, "peer");
         assert!(header.sender.is_none());
+        assert!(header.selected_items.is_empty());
+        assert!(serde_json::to_value(&header)
+            .unwrap()
+            .get("selected_items")
+            .is_none());
     }
 }
 
@@ -89,6 +97,24 @@ pub enum ItemKind {
     Directory,
 }
 
+/// A user-selected file or folder, including all flattened entries of a folder.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TransferItemDescriptor {
+    pub item_id: String,
+    pub name: String,
+    pub kind: ItemKind,
+    pub size_bytes: u64,
+    pub item_count: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TransferItemProgress {
+    pub item_id: String,
+    pub bytes_sent: u64,
+    pub bytes_total: u64,
+    pub completed: bool,
+}
+
 /// Accept or reject response from the receiver.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AcceptRejectResponse {
@@ -104,4 +130,10 @@ pub struct TransferProgress {
     pub bytes_total: u64,
     pub speed_bps: u64,
     pub percent: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub item_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub items: Option<Vec<TransferItemDescriptor>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub item_progress: Option<TransferItemProgress>,
 }

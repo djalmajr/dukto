@@ -2,10 +2,11 @@ pub mod internet;
 #[cfg(feature = "desktop")]
 pub mod updater;
 
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use tauri::{Emitter, State};
 use tauri_plugin_shell::ShellExt;
@@ -279,6 +280,125 @@ pub fn set_peer_order(state: State<'_, AppState>, order: Vec<String>) -> Result<
         .map_err(|e| e.to_string())
 }
 
+type LanSetup = (
+    quinn::Connection,
+    quinn::SendStream,
+    quinn::RecvStream,
+    snow::TransportState,
+);
+
+async fn connect_lan_candidate(
+    endpoint: quinn::Endpoint,
+    address: SocketAddr,
+) -> Result<LanSetup, String> {
+    let conn = endpoint
+        .connect(address, "localhost")
+        .map_err(|error| format!("Connect call failed: {error}"))?
+        .await
+        .map_err(|error| format!("Connection failed: {error}"))?;
+    let (mut send, mut recv) = conn
+        .open_bi()
+        .await
+        .map_err(|error| format!("Open bi failed: {error}"))?;
+    let noise = handshake_initiator(&mut send, &mut recv)
+        .await
+        .map_err(|error| format!("Noise handshake failed: {error}"))?;
+    Ok((conn, send, recv, noise))
+}
+
+async fn race_lan_candidates(
+    endpoint: &quinn::Endpoint,
+    candidates: &[SocketAddr],
+) -> Result<(SocketAddr, LanSetup), String> {
+    let mut attempts = futures_util::stream::FuturesUnordered::new();
+    for &address in candidates {
+        let endpoint = endpoint.clone();
+        attempts.push(async move {
+            let started = std::time::Instant::now();
+            let result = tokio::time::timeout(
+                std::time::Duration::from_secs(15),
+                connect_lan_candidate(endpoint, address),
+            )
+            .await
+            .map_err(|_| "Connection setup timed out".to_string())
+            .and_then(|result| result);
+            (address, started.elapsed(), result)
+        });
+    }
+
+    let mut last_error = None;
+    let mut best: Option<(
+        SocketAddr,
+        LanSetup,
+        std::time::Duration,
+        std::time::Duration,
+    )> = None;
+    let mut selection_deadline = None;
+    loop {
+        let next = match selection_deadline {
+            Some(deadline) => tokio::time::timeout_at(deadline, attempts.next())
+                .await
+                .ok()
+                .flatten(),
+            None => attempts.next().await,
+        };
+        let Some((address, elapsed, result)) = next else {
+            break;
+        };
+        match result {
+            Ok(setup) => {
+                let rtt = setup.0.stats().path.rtt;
+                tracing::info!(%address, ?rtt, ?elapsed, "Authenticated peer route available");
+                if best.is_none() {
+                    // Let another active interface finish its handshake so we can
+                    // choose the lower-latency route, without waiting for stale IPs.
+                    selection_deadline =
+                        Some(tokio::time::Instant::now() + std::time::Duration::from_millis(350));
+                }
+                let replace = best
+                    .as_ref()
+                    .map(|(_, _, best_rtt, best_elapsed)| {
+                        (rtt, elapsed) < (*best_rtt, *best_elapsed)
+                    })
+                    .unwrap_or(true);
+                if replace {
+                    if let Some((_, old, _, _)) = best.replace((address, setup, rtt, elapsed)) {
+                        old.0.close(0u32.into(), b"better peer route");
+                    }
+                } else {
+                    setup.0.close(0u32.into(), b"better peer route");
+                }
+            }
+            Err(error) => {
+                tracing::warn!(%address, %error, "Peer route failed; trying other interfaces");
+                last_error = Some(error);
+            }
+        }
+    }
+    if let Some((address, setup, _, _)) = best {
+        return Ok((address, setup));
+    }
+    Err(last_error.unwrap_or_else(|| "Peer has no usable IPv4 route".into()))
+}
+
+async fn connect_to_peer_candidates(
+    endpoint: &quinn::Endpoint,
+    candidates: &[SocketAddr],
+) -> Result<(SocketAddr, LanSetup), String> {
+    let (lan, usb): (Vec<_>, Vec<_>) = candidates
+        .iter()
+        .copied()
+        .partition(|address| !matches!(address.ip(), IpAddr::V4(ip) if ip.is_link_local()));
+    if !lan.is_empty() {
+        match race_lan_candidates(endpoint, &lan).await {
+            Ok(connected) => return Ok(connected),
+            Err(error) if usb.is_empty() => return Err(error),
+            Err(error) => tracing::warn!(%error, "LAN routes failed; trying USB link-local route"),
+        }
+    }
+    race_lan_candidates(endpoint, &usb).await
+}
+
 /// Send files/folders to a peer by device_id.
 /// The frontend passes peer_address and peer_port as fallback in case the peer
 /// has already been removed from the backend's discovery map (mDNS TTL expired).
@@ -293,18 +413,23 @@ pub async fn send_to_peer(
     peer_port: Option<u16>,
 ) -> Result<String, String> {
     // Try backend state first, fall back to frontend-provided address
-    let socket_addr = if let Some(peer) = state.peers.get(&device_id) {
+    let socket_addrs = if let Some(peer) = state.peers.get(&device_id) {
         if peer.protocol_version != crate::discovery::types::PROTOCOL_VERSION {
             return Err("Peer uses an incompatible protocol. Update both Dukto apps.".into());
         }
-        let addr = crate::discovery::types::preferred_ipv4_address(&peer.addresses)
-            .ok_or("Peer has no usable IPv4 address")?;
-        SocketAddr::new(addr, peer.port)
+        let addresses = crate::discovery::types::ipv4_candidate_addresses(&peer.addresses);
+        if addresses.is_empty() {
+            return Err("Peer has no usable IPv4 address".into());
+        }
+        addresses
+            .into_iter()
+            .map(|address| SocketAddr::new(address, peer.port))
+            .collect::<Vec<_>>()
     } else if let (Some(addr_str), Some(port)) = (&peer_address, peer_port) {
         let addr: std::net::IpAddr = addr_str
             .parse()
             .map_err(|e| format!("Invalid address: {}", e))?;
-        SocketAddr::new(addr, port)
+        vec![SocketAddr::new(addr, port)]
     } else {
         return Err(format!("Peer {} not found", device_id));
     };
@@ -339,7 +464,7 @@ pub async fn send_to_peer(
     tracing::info!(
         transfer_id = %transfer_id,
         peer = %device_id,
-        addr = %socket_addr,
+        candidate_count = socket_addrs.len(),
         items = paths.len(),
         "Initiating transfer to peer"
     );
@@ -353,25 +478,12 @@ pub async fn send_to_peer(
                 biased;
                 _ = control.cancelled() => Err("Transfer cancelled".to_string()),
                 result = async {
-                    let conn = endpoint
-                        .connect(socket_addr, "localhost")
-                        .map_err(|e| format!("Connect call failed: {}", e))?
-                        .await
-                        .map_err(|e| format!("Connection failed: {}", e))?;
+                    let (selected_addr, (conn, send, recv, noise)) =
+                        connect_to_peer_candidates(&endpoint, &socket_addrs).await?;
                     if !control.attach_connection(conn.clone()).await {
                         return Err("Transfer cancelled".to_string());
                     }
-
-                    let (mut send, mut recv) = conn
-                        .open_bi()
-                        .await
-                        .map_err(|e| format!("Open bi failed: {}", e))?;
-
-                    let noise = handshake_initiator(&mut send, &mut recv)
-                        .await
-                        .map_err(|e| format!("Noise handshake failed: {}", e))?;
-
-                    tracing::info!(transfer_id = %tid, "Noise handshake done, sending files");
+                    tracing::info!(transfer_id = %tid, addr = %selected_addr, "Noise handshake done, sending files");
                     Ok::<_, String>((send, recv, noise))
                 } => result,
             };
@@ -408,7 +520,10 @@ pub async fn send_to_peer(
                         },
                     )
                     .await
-                    .map_err(|e| format!("Transfer failed: {}", e))
+                    .map_err(|e| {
+                        tracing::error!(transfer_id = %tid, error = ?e, "Transfer protocol failed");
+                        format!("Transfer failed: {}", e)
+                    })
                 }
                 Err(error) => Err(error),
             };
@@ -623,12 +738,39 @@ async fn dir_size(path: &std::path::Path) -> Result<u64, std::io::Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::crypto::noise::handshake_responder;
 
     fn temp_dir(suffix: &str) -> std::path::PathBuf {
         let dir =
             std::env::temp_dir().join(format!("duto-cmd-test-{}-{}", suffix, uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
         dir
+    }
+
+    #[tokio::test]
+    async fn multihomed_peer_uses_working_address_without_waiting_for_stale_route() {
+        let server = create_endpoint("127.0.0.1:0".parse().unwrap()).unwrap();
+        let healthy = server.local_addr().unwrap();
+        let stale = SocketAddr::new("127.0.0.2".parse().unwrap(), healthy.port());
+        let client = create_endpoint("127.0.0.1:0".parse().unwrap()).unwrap();
+
+        let server_task = tokio::spawn(async move {
+            let connection = server.accept().await.unwrap().await.unwrap();
+            let (mut send, mut recv) = connection.accept_bi().await.unwrap();
+            handshake_responder(&mut send, &mut recv).await.unwrap();
+            connection.closed().await;
+        });
+
+        let (selected, (connection, _, _, _)) = tokio::time::timeout(
+            std::time::Duration::from_secs(3),
+            connect_to_peer_candidates(&client, &[stale, healthy]),
+        )
+        .await
+        .expect("the live route should win before the stale route times out")
+        .unwrap();
+        assert_eq!(selected, healthy);
+        connection.close(0u32.into(), b"test complete");
+        server_task.await.unwrap();
     }
 
     #[tokio::test]

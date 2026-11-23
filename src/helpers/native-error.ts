@@ -15,7 +15,7 @@ export function nativeErrorKey(
 	if (/permission denied|access is denied|access denied/.test(message)) return "permissionDenied";
 	if (/no such file|cannot find the file|cannot find the path/.test(message)) return "fileNotFound";
 	if (
-		/peer .*not found|peer has no ipv4 address|no route to host|connection refused|network is unreachable/.test(
+		/peer .*not found|peer has no (?:usable )?ipv4 address|no route to host|connection refused|network is unreachable/.test(
 			message,
 		)
 	)

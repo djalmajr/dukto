@@ -98,6 +98,11 @@ async fn handle_incoming(
     incoming: quinn::Incoming,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let conn = incoming.await?;
+    tracing::info!(
+        remote = %conn.remote_address(),
+        local = ?conn.local_ip(),
+        "Incoming LAN connection established"
+    );
     let (mut send, mut recv) = conn.accept_bi().await?;
     let noise = handshake_responder(&mut send, &mut recv).await?;
     handle_authenticated_incoming(
@@ -216,7 +221,10 @@ where
                 item_count: header.item_count,
                 total_size: header.total_size,
             };
-            let _ = approval_handle.emit("transfer:incoming", &request);
+            match approval_handle.emit("transfer:incoming", &request) {
+                Ok(()) => tracing::info!(transfer_id = %transfer_id, "Incoming request emitted to UI"),
+                Err(error) => tracing::error!(transfer_id = %transfer_id, %error, "Could not emit incoming request to UI"),
+            }
             let mut peer_cancelled = peer_cancelled;
             let peer_cancel_wait = async {
                 loop {
@@ -256,6 +264,7 @@ where
                 }
             }
             let accepted = decision.unwrap_or(false);
+            tracing::info!(transfer_id = %transfer_id, accepted, "Incoming request resolved");
             if !accepted
                 && !control.is_cancelled()
                 && !was_remote_cancelled_for_approval.load(Ordering::Acquire)

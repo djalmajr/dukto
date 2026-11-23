@@ -10,7 +10,7 @@ This document defines the community-facing interaction and layout contract for t
 - Keep the title bar 45 pixels high with a muted surface and bottom border.
 - Center the local device name and hostname.
 - Place the settings gear on the right on macOS, iOS, Android, and Linux, and on the left on Windows.
-- Place the circular add-peer action immediately to the left of settings on macOS and immediately to the right of settings on every other platform.
+- Place the circular add-peer action immediately to the left of settings on macOS, iOS, and Android, and immediately to the right of settings on Windows and Linux.
 - Use Carbon icons throughout the application UI. The internet-peer action and internet platform marker use `carbon:direct-link`.
 - On desktop, place an open-folder action beside the internet-peer action. It opens the configured receive destination in the native file manager and is omitted on mobile.
 - Title-bar icon buttons stay transparent at rest and use the same subtle neutral hover surface as dialog close controls.
@@ -51,11 +51,19 @@ Show a preview of the host card under the pointer and reorder the list as the pr
 - File removal appears on hover or keyboard focus.
 - Show separate progress, rate, and cancellation controls for each transfer.
 - Keep send and receive states distinguishable by color and text.
+- Keep completed outgoing transfers visible until the user dismisses them. Show the names of sent files and folders beneath the transfer status, without exposing their full paths; long lists scroll within the card.
+- Show one progress row for every selected top-level file or folder in both directions, with its platform icon, name, transferred and total bytes, percentage, and progress bar. Keep same-named items independent by their stable transfer item IDs.
+- While receiving, show the current file or folder name beneath the transfer status. Update it when the next item starts, including empty files, and do not expose its full path.
+- Keep the per-item list visible after completion until the transfer is manually dismissed. Waiting items start at 0%, and empty items reach 100% only after an explicit completion event.
 - Do not remove visible keyboard focus from interactive controls.
 
 ## Dialog behavior
 
 Settings and the internet-peer invitation dialog each occupy 80% of the available window width, with no component-specific maximum-width cap.
+
+All app dialogs use the same neutral black, 40%-opacity overlay with a subtle blur in both light and dark themes. Do not override the overlay per dialog.
+
+All dialog surfaces use the same 8-pixel corner radius and 20-pixel content padding at every window size. Keep these values in the shared dialog component, not in individual dialogs.
 
 Settings has an overlay and closes through its close control or a click on the overlay. Incoming transfer requests require an explicit accept or reject action and do not dismiss through the overlay.
 

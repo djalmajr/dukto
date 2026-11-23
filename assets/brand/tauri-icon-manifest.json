@@ -3,5 +3,5 @@
 	"bg_color": "#2557D6",
 	"android_bg": "android-icon-background.png",
 	"android_fg": "android-icon-foreground.png",
-	"android_fg_scale": 100
+	"android_fg_scale": 80
 }

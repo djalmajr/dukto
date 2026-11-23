@@ -1,4 +1,4 @@
-import { For, type JSX, Show, createEffect, createSignal, onCleanup } from "solid-js";
+import { For, type JSX, Show } from "solid-js";
 import PlatformIcon from "~/components/platform-icon";
 import { Button } from "~/components/ui/button";
 import {
@@ -13,12 +13,13 @@ import { nativeErrorKey } from "~/helpers/native-error";
 import { formatDeviceHostname } from "~/utils/device-hostname";
 import { formatBytes } from "~/utils/format";
 import CarbonClose from "~icons/carbon/close";
+import CarbonDocument from "~icons/carbon/document";
 import CarbonDocumentAdd from "~icons/carbon/document-add";
+import CarbonFolder from "~icons/carbon/folder";
 import CarbonFolderAdd from "~icons/carbon/folder-add";
 import CarbonImage from "~icons/carbon/image";
 import CarbonLogout from "~icons/carbon/logout";
 import CarbonOverflowMenuVertical from "~icons/carbon/overflow-menu-vertical";
-import CarbonStopOutline from "~icons/carbon/stop-outline";
 
 export interface TransferSlot {
 	id: string;
@@ -29,7 +30,20 @@ export interface TransferSlot {
 	bytesTotal: number;
 	speed?: string;
 	errorMsg?: string;
-	completedAt?: number;
+	currentItemName?: string;
+	itemNames?: string[];
+	items?: TransferItemSlot[];
+}
+
+export interface TransferItemSlot {
+	item_id: string;
+	name: string;
+	kind: "File" | "Directory";
+	size_bytes: number;
+	item_count: number;
+	bytes_sent: number;
+	bytes_total: number;
+	completed: boolean;
 }
 
 export interface PeerCardProps {
@@ -55,8 +69,6 @@ export interface PeerCardProps {
 	onAbortTransfer?: (transferId: string) => void;
 	onDismissTransfer?: (transferId: string) => void;
 }
-
-const AUTO_DISMISS_SECS = 3;
 
 function PeerIdentity(props: {
 	badge?: string;
@@ -100,6 +112,11 @@ function TransferRow(props: {
 	const isAborting = () => isWaiting() || isActive();
 	const isError = () => props.slot.status === "error";
 	const isDone = () => props.slot.status === "complete";
+	const itemPercent = (item: TransferItemSlot) => {
+		if (item.completed) return 100;
+		if (item.bytes_total <= 0) return 0;
+		return Math.min((item.bytes_sent / item.bytes_total) * 100, 100);
+	};
 
 	const label = () => {
 		const dir = props.slot.direction;
@@ -109,29 +126,6 @@ function TransferRow(props: {
 		if (isDone()) return `${arrow} ${dir === "send" ? t("sent") : t("received")}`;
 		return `${arrow} ${t("failed")}`;
 	};
-
-	let countdownTimer: number | undefined;
-
-	createEffect(() => {
-		clearInterval(countdownTimer);
-		const completedAt = props.slot.completedAt;
-		if (isDone() && completedAt) {
-			const elapsed = Math.floor((Date.now() - completedAt) / 1000);
-			const left = Math.max(AUTO_DISMISS_SECS - elapsed, 0);
-			if (left <= 0) {
-				props.onDismiss?.();
-				return;
-			}
-			countdownTimer = window.setInterval(() => {
-				const next = Math.max(AUTO_DISMISS_SECS - Math.floor((Date.now() - completedAt) / 1000), 0);
-				if (next <= 0) {
-					clearInterval(countdownTimer);
-					props.onDismiss?.();
-				}
-			}, 1000);
-		}
-	});
-	onCleanup(() => clearInterval(countdownTimer));
 
 	return (
 		<div class="space-y-1">
@@ -179,7 +173,7 @@ function TransferRow(props: {
 								props.onAbort?.();
 							}}
 						>
-							<CarbonStopOutline width={16} height={16} />
+							<span aria-hidden="true" class="size-2.5 rounded-[1px] bg-current" />
 						</Button>
 					</Show>
 				</span>
@@ -189,7 +183,68 @@ function TransferRow(props: {
 					{t(nativeErrorKey(props.slot.errorMsg, "transferFailed"))}
 				</p>
 			</Show>
-			<Show when={isAborting()}>
+			<Show
+				when={props.slot.items?.length}
+				fallback={
+					<Show when={props.slot.direction === "send" && props.slot.itemNames?.length}>
+						<ul class="max-h-52 space-y-0.5 overflow-y-auto pl-4 text-xs text-muted-foreground">
+							<For each={props.slot.itemNames}>
+								{(name) => <li class="list-disc break-all">{name}</li>}
+							</For>
+						</ul>
+					</Show>
+				}
+			>
+				<ul class="max-h-52 space-y-2 overflow-y-auto text-xs text-muted-foreground">
+					<For each={props.slot.items}>
+						{(item) => (
+							<li class="space-y-1" data-transfer-item-id={item.item_id}>
+								<div class="flex items-center gap-2">
+									<Show
+										when={item.kind === "Directory"}
+										fallback={<CarbonDocument class="size-4 shrink-0" />}
+									>
+										<CarbonFolder class="size-4 shrink-0" />
+									</Show>
+									<div class="min-w-0 flex-1">
+										<div class="truncate" title={item.name}>
+											{item.name}
+										</div>
+										<div class="tabular-nums text-muted-foreground">
+											{formatBytes(item.bytes_sent)} / {formatBytes(item.bytes_total)} ·{" "}
+											{Math.round(itemPercent(item))}%
+										</div>
+									</div>
+								</div>
+								<div
+									class="h-1 overflow-hidden rounded-full bg-muted"
+									role="progressbar"
+									tabIndex={-1}
+									aria-label={item.name}
+									aria-valuemin="0"
+									aria-valuemax="100"
+									aria-valuenow={itemPercent(item)}
+								>
+									<div
+										class="h-full rounded-full transition-all duration-300"
+										classList={{
+											"bg-[#2b7fff]": props.slot.direction === "send",
+											"bg-[#00c950]": props.slot.direction === "receive",
+										}}
+										style={{ width: `${itemPercent(item)}%` }}
+									/>
+								</div>
+							</li>
+						)}
+					</For>
+				</ul>
+			</Show>
+			<Show when={!props.slot.items?.length && props.slot.direction === "receive" && isActive()}>
+				<p aria-live="polite" class="min-h-4 break-all text-xs text-muted-foreground">
+					{props.slot.currentItemName ?? ""}
+				</p>
+			</Show>
+			<Show when={isAborting() && !props.slot.items?.length}>
 				<div class="h-1 overflow-hidden rounded-full bg-muted">
 					<Show
 						when={isActive()}
@@ -207,6 +262,35 @@ function TransferRow(props: {
 				</div>
 			</Show>
 		</div>
+	);
+}
+
+function PeerActionMenuItem(props: {
+	children: JSX.Element;
+	disabled: boolean;
+	onActivate: () => void;
+}) {
+	let activated = false;
+	const activate = () => {
+		if (activated || props.disabled) return;
+		activated = true;
+		props.onActivate();
+	};
+
+	return (
+		<DropdownMenuItem
+			class="peer-actions-menu-item"
+			disabled={props.disabled}
+			onSelect={activate}
+			onPointerDown={(event) => event.stopPropagation()}
+			onPointerUp={(event) => event.stopPropagation()}
+			onClick={(event) => {
+				event.stopPropagation();
+				activate();
+			}}
+		>
+			{props.children}
+		</DropdownMenuItem>
 	);
 }
 
@@ -270,50 +354,48 @@ function PeerCard(props: PeerCardProps) {
 								name: props.peer.display_name,
 								host: formatDeviceHostname(props.peer.hostname),
 							})}
+							onPointerDown={(event) => event.stopPropagation()}
+							onClick={(event) => event.stopPropagation()}
 						>
 							<CarbonOverflowMenuVertical class="size-4" />
 						</DropdownMenuTrigger>
 						<DropdownMenuPortal>
 							<DropdownMenuContent class="peer-actions-menu">
 								<Show when={props.onAddFiles}>
-									<DropdownMenuItem
-										class="peer-actions-menu-item"
+									<PeerActionMenuItem
 										disabled={actionsUnavailable()}
-										onSelect={() => props.onAddFiles?.()}
+										onActivate={() => props.onAddFiles?.()}
 									>
 										<CarbonDocumentAdd class="size-4" />
 										{t("addFiles")}
-									</DropdownMenuItem>
+									</PeerActionMenuItem>
 								</Show>
 								<Show when={props.onAddFolders}>
-									<DropdownMenuItem
-										class="peer-actions-menu-item"
+									<PeerActionMenuItem
 										disabled={actionsUnavailable()}
-										onSelect={() => props.onAddFolders?.()}
+										onActivate={() => props.onAddFolders?.()}
 									>
 										<CarbonFolderAdd class="size-4" />
 										{t("addFolders")}
-									</DropdownMenuItem>
+									</PeerActionMenuItem>
 								</Show>
 								<Show when={props.onAddMedia}>
-									<DropdownMenuItem
-										class="peer-actions-menu-item"
+									<PeerActionMenuItem
 										disabled={actionsUnavailable()}
-										onSelect={() => props.onAddMedia?.()}
+										onActivate={() => props.onAddMedia?.()}
 									>
 										<CarbonImage class="size-4" />
 										{t("addPhotosAndVideos")}
-									</DropdownMenuItem>
+									</PeerActionMenuItem>
 								</Show>
 								<Show when={props.onDisconnect}>
-									<DropdownMenuItem
-										class="peer-actions-menu-item"
+									<PeerActionMenuItem
 										disabled={actionsUnavailable()}
-										onSelect={() => props.onDisconnect?.()}
+										onActivate={() => props.onDisconnect?.()}
 									>
 										<CarbonLogout class="size-4" />
 										{t("disconnectInternetSession")}
-									</DropdownMenuItem>
+									</PeerActionMenuItem>
 								</Show>
 							</DropdownMenuContent>
 						</DropdownMenuPortal>

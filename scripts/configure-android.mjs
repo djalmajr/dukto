@@ -243,10 +243,17 @@ $1`,
 	}
 }
 
-async function verifySdk() {
+async function configureSdk() {
 	const gradle = await readFile(gradlePath, "utf8");
-	requireMatch(gradle, /compileSdk\s*=\s*36\b/, "Android compileSdk must be 36");
-	requireMatch(gradle, /targetSdk\s*=\s*36\b/, "Android targetSdk must be 36");
+	requireMatch(gradle, /compileSdk\s*=\s*37\b/, "Android compileSdk must be 37");
+	const targetSdk = /^(\s*targetSdk\s*=\s*)(?:36|37)(?=\s*$)/m;
+	requireMatch(gradle, targetSdk, "Android targetSdk must be 36 or 37 before configuration");
+	// Keep LAN discovery available on Android 17 until the app handles local network permission.
+	await writeFile(
+		gradlePath,
+		gradle.replace(targetSdk, (_, assignment) => `${assignment}36`),
+		"utf8",
+	);
 }
 
 await configureManifest();
@@ -254,6 +261,6 @@ await configureMainActivity();
 await configureIcons();
 await configureResources();
 await configureSigning();
-await verifySdk();
+await configureSdk();
 
 console.log("Android project configured for Dukto.");

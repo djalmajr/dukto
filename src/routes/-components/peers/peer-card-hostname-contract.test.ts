@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 
 const peerCardSource = readFileSync(new URL("./peer-card.tsx", import.meta.url), "utf8");
 const peerListSource = readFileSync(new URL("./peer-list.tsx", import.meta.url), "utf8");
+const hostOrderSource = readFileSync(new URL("./host-order.tsx", import.meta.url), "utf8");
 const homePageSource = readFileSync(new URL("../../index.tsx", import.meta.url), "utf8");
 
 describe("PeerCard hostname presentation contract", () => {
@@ -18,6 +19,20 @@ describe("PeerCard hostname presentation contract", () => {
 });
 
 describe("PeerCard unavailable action contract", () => {
+	test("activates file actions by pointer or keyboard without forwarding the gesture to the host", () => {
+		expect(peerCardSource).toContain("onSelect={activate}");
+		expect(peerCardSource).toContain("onPointerDown={(event) => event.stopPropagation()}");
+		expect(peerCardSource).toContain("onPointerUp={(event) => event.stopPropagation()}");
+		expect(peerCardSource).toMatch(
+			/onClick=\{\(event\) => \{\s*event\.stopPropagation\(\);\s*activate\(\);/,
+		);
+		expect(peerCardSource).toContain("onActivate={() => props.onAddFiles?.()}");
+		expect(peerCardSource).toContain("onActivate={() => props.onAddFolders?.()}");
+		expect(hostOrderSource).toContain(
+			'document.querySelector(".peer-actions-menu[data-expanded]")',
+		);
+	});
+
 	test("keeps the actions trigger mounted when actions are disabled", () => {
 		expect(peerCardSource).toContain("when={hasActions() || props.actionsDisabled}");
 		expect(peerCardSource).toContain("disabled={actionsUnavailable()}");
@@ -52,6 +67,24 @@ describe("PeerCard unavailable action contract", () => {
 });
 
 describe("PeerCard expanded presentation contract", () => {
+	test("renders every selected item with independent progress for both directions", () => {
+		expect(peerCardSource).toContain("items?: TransferItemSlot[]");
+		expect(peerCardSource).toContain("when={props.slot.items?.length}");
+		expect(peerCardSource).toContain("item.item_id");
+		expect(peerCardSource).toContain("item.name");
+		expect(peerCardSource).toContain("item.bytes_sent");
+		expect(peerCardSource).toContain("item.bytes_total");
+		expect(peerCardSource).toContain("itemPercent(item)");
+		expect(peerCardSource).toContain('role="progressbar"');
+		expect(peerCardSource).toContain("max-h-52 space-y-2 overflow-y-auto");
+		expect(peerCardSource).toContain("when={isAborting() && !props.slot.items?.length}");
+		expect(peerCardSource).toContain(
+			'when={!props.slot.items?.length && props.slot.direction === "receive" && isActive()}',
+		);
+		// Mutation captured: dropping the item list leaves only aggregate progress and hides selected entries.
+		expect(peerCardSource).toContain("<For each={props.slot.items}>");
+	});
+
 	test("keeps the gray header square against expanded content", () => {
 		expect(peerCardSource).toContain("const isExpanded = () =>");
 		expect(peerCardSource).toContain('"rounded-b-xl": !isExpanded()');

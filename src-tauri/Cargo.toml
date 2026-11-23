@@ -1,6 +1,6 @@
 [package]
 name = "dukto"
-version = "0.2.3"
+version = "0.2.4"
 edition = "2021"
 default-run = "dukto"
 description = "Cross-platform file transfer"
@@ -27,7 +27,7 @@ required-features = ["internet-probe"]
 harness = false
 
 [dependencies]
-tauri = { version = "2", features = [], optional = true }
+tauri = { version = "2.12", features = [], optional = true }
 tauri-plugin-dialog = { version = "2", optional = true }
 tauri-plugin-notification = { version = "2", optional = true }
 tauri-plugin-os = { version = "2", optional = true }
@@ -63,7 +63,7 @@ dukto-admission = { path = "../crates/dukto-admission" }
 
 [dev-dependencies]
 iroh = { version = "1.2", default-features = false, features = ["test-utils", "tls-ring"] }
-tauri = { version = "2", features = ["test"] }
+tauri = { version = "2.12", features = ["test"] }
 
 [target.'cfg(target_os = "android")'.dependencies]
 libc = "0.2"
@@ -93,3 +93,9 @@ app-common = [
 desktop = ["app-common", "dep:tauri-plugin-updater"]
 mobile = ["app-common"]
 custom-protocol = ["desktop", "tauri/custom-protocol"]
+
+[patch.crates-io]
+# swift-rs 1.0.8 supports Xcode 27, but llvm-objcopy leaves the Mach-O
+# archive index stale after globalizing @_cdecl symbols. Keep the upstream
+# source vendored with a small libtool reindex fix until it lands upstream.
+swift-rs = { path = "vendor/swift-rs" }
