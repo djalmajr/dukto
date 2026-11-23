@@ -251,7 +251,7 @@ async function configureSdk() {
 	// Keep LAN discovery available on Android 17 until the app handles local network permission.
 	await writeFile(
 		gradlePath,
-		gradle.replace(targetSdk, (_, assignment) => assignment + "36"),
+		gradle.replace(targetSdk, (_, assignment) => `${assignment}36`),
 		"utf8",
 	);
 }
