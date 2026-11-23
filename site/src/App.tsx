@@ -24,7 +24,7 @@ import { type Guide, guides } from "./guides";
 import { LocaleContext, localeValue, routeLocale, stripLocale, useLocale } from "./i18n";
 
 const github = "https://github.com/djalmajr/dukto";
-const releaseVersion = "0.2.3";
+const releaseVersion = "0.2.4";
 const releaseDownloads = `${github}/releases/download/v${releaseVersion}`;
 const releaseNotes = `${github}/releases/tag/v${releaseVersion}`;
 const releaseAsset = (filename: string) => `${releaseDownloads}/${filename}`;
