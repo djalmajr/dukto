@@ -24,7 +24,7 @@
 	"Baixar instalador EXE": "Descargar instalador EXE",
 	"Baixar TAR.GZ": "Descargar TAR.GZ",
 	"Baixar ZIP": "Descargar ZIP",
-	"Baixe a CLI 0.2.0 para automatizar envios e recebimentos no terminal.": "Descarga la CLI de Dukto 0.2.0 para automatizar envíos y recepciones desde la terminal.",
+	"Baixe a CLI {version} para automatizar envios e recebimentos no terminal.": "Descarga la CLI de Dukto {version} para automatizar envíos y recepciones desde la terminal.",
 	"Baixe o aplicativo ou a CLI para seu sistema e arquitetura.": "Descarga la aplicación o la CLI para tu sistema y arquitectura.",
 	"Comandos e exemplos": "Comandos y ejemplos",
 	"COMECE AQUI": "EMPIEZA AQUÍ",
@@ -51,7 +51,7 @@
 	"Downloads": "Descargas",
 	"Dukto": "Dukto",
 	"Dukto — Seus arquivos, logo ali.": "Dukto — Tus archivos, ahí mismo.",
-	"Dukto 0.2.0 já está disponível.": "Dukto 0.2.0 ya está disponible.",
+	"Dukto {version} já está disponível.": "Dukto {version} ya está disponible.",
 	"Dukto, início": "Dukto, inicio",
 	"e a": "y la",
 	"Em preparação": "En preparación",
@@ -135,7 +135,7 @@
 	"Use a mesma versão nos dispositivos. Consulte as": "Usa la misma versión en tus dispositivos. Consulta las",
 	"VAMOS ENCURTAR ESSE CAMINHO?": "¿ACORTAMOS EL CAMINO?",
 	"Vamos melhorar juntos?": "¿Lo mejoramos juntos?",
-	"Ver release 0.2.0": "Ver versión 0.2.0",
+	"Ver release {version}": "Ver versión {version}",
 	"Windows · x64": "Windows · x64",
 	"Windows 10/11 · x64": "Windows 10/11 · x64"
 }

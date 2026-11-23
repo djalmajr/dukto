@@ -24,7 +24,7 @@ import { type Guide, guides } from "./guides";
 import { LocaleContext, localeValue, routeLocale, stripLocale, useLocale } from "./i18n";
 
 const github = "https://github.com/djalmajr/dukto";
-const releaseVersion = "0.2.0";
+const releaseVersion = "0.2.3";
 const releaseDownloads = `${github}/releases/download/v${releaseVersion}`;
 const releaseNotes = `${github}/releases/tag/v${releaseVersion}`;
 const releaseAsset = (filename: string) => `${releaseDownloads}/${filename}`;
@@ -663,11 +663,13 @@ function Downloads() {
 			architectures: [
 				{
 					label: t("Apple Silicon · ARM64"),
-					packages: [{ label: t("Baixar DMG"), filename: "dukto_0.2.0_macos_arm64.dmg" }],
+					packages: [
+						{ label: t("Baixar DMG"), filename: `dukto_${releaseVersion}_macos_arm64.dmg` },
+					],
 				},
 				{
 					label: t("Intel · x64"),
-					packages: [{ label: t("Baixar DMG"), filename: "dukto_0.2.0_macos_x64.dmg" }],
+					packages: [{ label: t("Baixar DMG"), filename: `dukto_${releaseVersion}_macos_x64.dmg` }],
 				},
 			],
 		},
@@ -682,7 +684,7 @@ function Downloads() {
 					packages: [
 						{
 							label: t("Baixar instalador EXE"),
-							filename: "dukto_0.2.0_windows_x64-setup.exe",
+							filename: `dukto_${releaseVersion}_windows_x64-setup.exe`,
 						},
 					],
 				},
@@ -697,15 +699,18 @@ function Downloads() {
 				{
 					label: t("Linux · x64"),
 					packages: [
-						{ label: t("Baixar DEB"), filename: "dukto_0.2.0_linux_x64.deb" },
-						{ label: t("Baixar AppImage"), filename: "dukto_0.2.0_linux_x64.AppImage" },
+						{ label: t("Baixar DEB"), filename: `dukto_${releaseVersion}_linux_x64.deb` },
+						{ label: t("Baixar AppImage"), filename: `dukto_${releaseVersion}_linux_x64.AppImage` },
 					],
 				},
 				{
 					label: t("Linux · ARM64"),
 					packages: [
-						{ label: t("Baixar DEB"), filename: "dukto_0.2.0_linux_arm64.deb" },
-						{ label: t("Baixar AppImage"), filename: "dukto_0.2.0_linux_arm64.AppImage" },
+						{ label: t("Baixar DEB"), filename: `dukto_${releaseVersion}_linux_arm64.deb` },
+						{
+							label: t("Baixar AppImage"),
+							filename: `dukto_${releaseVersion}_linux_arm64.AppImage`,
+						},
 					],
 				},
 			],
@@ -717,22 +722,24 @@ function Downloads() {
 			architectures: [
 				{
 					label: t("Apple Silicon · ARM64"),
-					filename: "dukto-cli_0.2.0_macos_arm64.tar.gz",
+					filename: `dukto-cli_${releaseVersion}_macos_arm64.tar.gz`,
 				},
-				{ label: t("Intel · x64"), filename: "dukto-cli_0.2.0_macos_x64.tar.gz" },
+				{ label: t("Intel · x64"), filename: `dukto-cli_${releaseVersion}_macos_x64.tar.gz` },
 			],
 			format: t("Baixar TAR.GZ"),
 		},
 		{
 			name: "Windows",
-			architectures: [{ label: t("Windows · x64"), filename: "dukto-cli_0.2.0_windows_x64.zip" }],
+			architectures: [
+				{ label: t("Windows · x64"), filename: `dukto-cli_${releaseVersion}_windows_x64.zip` },
+			],
 			format: t("Baixar ZIP"),
 		},
 		{
 			name: "Linux",
 			architectures: [
-				{ label: t("Linux · x64"), filename: "dukto-cli_0.2.0_linux_x64.tar.gz" },
-				{ label: t("Linux · ARM64"), filename: "dukto-cli_0.2.0_linux_arm64.tar.gz" },
+				{ label: t("Linux · x64"), filename: `dukto-cli_${releaseVersion}_linux_x64.tar.gz` },
+				{ label: t("Linux · ARM64"), filename: `dukto-cli_${releaseVersion}_linux_arm64.tar.gz` },
 			],
 			format: t("Baixar TAR.GZ"),
 		},
@@ -758,11 +765,13 @@ function Downloads() {
 						<Arrow />
 					</span>
 					<div>
-						<strong>{t("Dukto 0.2.0 já está disponível.")}</strong>
+						<strong>
+							{t("Dukto {version} já está disponível.").replace("{version}", releaseVersion)}
+						</strong>
 						<p>{t("Baixe o aplicativo ou a CLI para seu sistema e arquitetura.")}</p>
 					</div>
 					<a href={releaseNotes} target="_blank" rel="noopener noreferrer">
-						{t("Ver release 0.2.0")}
+						{t("Ver release {version}").replace("{version}", releaseVersion)}
 						<IconExternalLink class="arrow-icon" aria-hidden="true" />
 					</a>
 				</div>
@@ -777,7 +786,7 @@ function Downloads() {
 								<p>{p.text}</p>
 								<div class="format-row">
 									<span>{p.format}</span>
-									<small>v0.2.0</small>
+									<small>v{releaseVersion}</small>
 								</div>
 								<div class="download-architectures">
 									<For each={p.architectures}>
@@ -812,7 +821,11 @@ function Downloads() {
 					<div>
 						<span class="eyebrow">{t("PREFERE O TERMINAL?")}</span>
 						<h2>{t("Uma CLI. Os mesmos caminhos.")}</h2>
-						<p>{t("Baixe a CLI 0.2.0 para automatizar envios e recebimentos no terminal.")}</p>
+						<p>
+							{t(
+								"Baixe a CLI {version} para automatizar envios e recebimentos no terminal.",
+							).replace("{version}", releaseVersion)}
+						</p>
 						<a class="text-link" href={localPath("/docs/cli/")}>
 							{t("Comandos e exemplos")} <ArrowRight class="arrow-icon" aria-hidden="true" />
 						</a>
