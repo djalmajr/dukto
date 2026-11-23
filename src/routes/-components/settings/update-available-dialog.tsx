@@ -38,8 +38,7 @@ function UpdateAvailableDialog() {
 	return (
 		<Dialog open={state.dialogOpen} onOpenChange={(open) => !open && appUpdates.dismissUpdate()}>
 			<DialogContent
-				class="flex max-h-[calc(100%-2rem)] w-[calc(100%-2rem)] flex-col gap-3 overflow-hidden rounded-lg p-5"
-				overlayClass="bg-black/40"
+				class="flex max-h-[calc(100%-2rem)] w-[calc(100%-2rem)] flex-col gap-3 overflow-hidden"
 				showCloseButton={closeAllowed()}
 				onEscapeKeyDown={(event: Event) => event.preventDefault()}
 				onInteractOutside={(event: Event) => event.preventDefault()}

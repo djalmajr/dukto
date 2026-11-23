@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::net::IpAddr;
+use std::net::{IpAddr, ToSocketAddrs};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc, Mutex,
@@ -267,13 +267,7 @@ fn handle_browser_event(
                 .as_ref()
                 .map(|txt| txt.to_map())
                 .unwrap_or_default();
-            let addresses = service
-                .address()
-                .parse::<IpAddr>()
-                .map(|address| vec![address])
-                .unwrap_or_default();
-
-            let Some(peer) = PeerInfo::from_txt_records(&properties, addresses, *service.port())
+            let Some(peer) = PeerInfo::from_txt_records(&properties, Vec::new(), *service.port())
             else {
                 tracing::warn!(name = %service.name(), "Ignoring incomplete Bonjour service");
                 return;
@@ -284,20 +278,54 @@ fn handle_browser_event(
             }
 
             let fullname = service_fullname(service.name(), service.domain());
-            let mut state = state.lock().unwrap();
-            state
+            let hostname = service.host_name().to_string();
+            let mut discovery_state = state.lock().unwrap();
+            discovery_state
                 .active_services
                 .insert(fullname.clone(), peer.device_id.clone());
-            state.pending_removals.remove(&peer.device_id);
-            drop(state);
+            discovery_state.pending_removals.remove(&peer.device_id);
+            drop(discovery_state);
 
-            tracing::info!(
-                device_id = %peer.device_id,
-                display_name = %peer.display_name,
-                %fullname,
-                "Peer found through native Bonjour"
-            );
-            let _ = event_tx.send(DiscoveryEvent::PeerFound(peer));
+            let state = Arc::clone(state);
+            let event_tx = event_tx.clone();
+            tauri::async_runtime::spawn_blocking(move || {
+                // zeroconf 0.18 requests A and AAAA records but decodes every
+                // answer as sockaddr_in. Resolve the advertised host ourselves
+                // and keep only IPv4 addresses usable by the QUIC endpoint.
+                let addresses = (hostname.as_str(), peer.port)
+                    .to_socket_addrs()
+                    .map(|addresses| {
+                        addresses
+                            .map(|address| address.ip())
+                            .filter(IpAddr::is_ipv4)
+                            .collect::<Vec<_>>()
+                    });
+                let Ok(addresses) = addresses else {
+                    tracing::warn!(%hostname, "Could not resolve Bonjour peer IPv4 address");
+                    return;
+                };
+                if preferred_ipv4_address(&addresses).is_none() {
+                    tracing::warn!(%hostname, "Bonjour peer has no usable IPv4 address");
+                    return;
+                }
+
+                let mut peer = peer;
+                peer.addresses = addresses;
+                let state = state.lock().unwrap();
+                if state.active_services.get(&fullname) != Some(&peer.device_id) {
+                    return;
+                }
+                drop(state);
+
+                tracing::info!(
+                    device_id = %peer.device_id,
+                    display_name = %peer.display_name,
+                    %fullname,
+                    ipv4 = ?preferred_ipv4_address(&peer.addresses),
+                    "Peer found through native Bonjour"
+                );
+                let _ = event_tx.send(DiscoveryEvent::PeerFound(peer));
+            });
         }
         BrowserEvent::Remove(service) => {
             let fullname = service_fullname(service.name(), service.domain());

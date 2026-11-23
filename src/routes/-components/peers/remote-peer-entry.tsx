@@ -283,6 +283,7 @@ function RemotePeerEntry(props: RemotePeerEntryProps) {
 				totalSize,
 				peer?.device_id ?? current.peer_id,
 				peer ?? undefined,
+				files.map((file) => file.name),
 			);
 			setSelectedFiles([]);
 		} catch (reason) {

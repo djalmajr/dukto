@@ -91,7 +91,13 @@ function HomePage() {
 				peer.port,
 			);
 			selection.cancel(hostId);
-			startSendTransfer(transferId, totalSize, hostId, peer);
+			startSendTransfer(
+				transferId,
+				totalSize,
+				hostId,
+				peer,
+				files.map((file) => file.name),
+			);
 		} catch (e) {
 			setError(String(e));
 		}

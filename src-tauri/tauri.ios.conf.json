@@ -1,10 +1,12 @@
 {
 	"$schema": "https://raw.githubusercontent.com/nicokosi/tauri-v2-schemas/main/tauri.conf.json",
+	"productName": "Dukto Share",
 	"build": {
 		"features": ["mobile"]
 	},
 	"bundle": {
 		"iOS": {
+			"bundleVersion": "2023",
 			"frameworks": ["SystemConfiguration"],
 			"infoPlist": "Info.ios.plist"
 		}

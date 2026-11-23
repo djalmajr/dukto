@@ -2,6 +2,8 @@ import { Match, Switch } from "solid-js";
 import CibLinux from "~icons/cib/linux";
 import IcBaselineApple from "~icons/ic/baseline-apple";
 import LucideGlobe2 from "~icons/lucide/globe-2";
+import MdiAndroid from "~icons/mdi/android";
+import MdiCellphoneIphone from "~icons/mdi/cellphone-iphone";
 import MdiMicrosoftWindows from "~icons/mdi/microsoft-windows";
 import MdiMonitor from "~icons/mdi/monitor";
 
@@ -21,6 +23,12 @@ function PlatformIcon(props: PlatformIconProps) {
 			</Match>
 			<Match when={props.platform === "linux"}>
 				<CibLinux class={props.class} />
+			</Match>
+			<Match when={props.platform === "android"}>
+				<MdiAndroid class={props.class} />
+			</Match>
+			<Match when={props.platform === "ios"}>
+				<MdiCellphoneIphone class={props.class} />
 			</Match>
 			<Match when={props.platform === "internet"}>
 				<LucideGlobe2 class={props.class} />

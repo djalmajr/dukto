@@ -14,6 +14,7 @@ use crate::protocol::types::*;
 use crate::state::device::DeviceIdentity;
 use crate::transfer::channel::{TransferReceiveStream, TransferSendStream};
 use crate::transfer::fs::{walk_directory, WalkItem};
+use crate::transfer::progress::ProgressTracker;
 use crate::transfer::receiver::TransferRejected;
 
 // Noise max message is 65535. Keep chunks under the limit with overhead.
@@ -77,7 +78,7 @@ where
     A: FnOnce(),
 {
     // 1. Build flat item list from all inputs
-    let items = collect_items(inputs)?;
+    let (items, selected_items) = collect_selected_items(inputs)?;
     if items.is_empty() {
         return Err("No transferable items selected".into());
     }
@@ -91,8 +92,14 @@ where
         sender: Some(sender.clone()),
         item_count,
         total_size,
+        selected_items,
     };
-    send_encrypted_json(send, noise, PacketType::TransferHeader, &header).await?;
+    let mut wire_header = header.clone();
+    // Leave room for Noise framing. Very large manifests use legacy per-entry discovery.
+    if serde_json::to_vec(&wire_header)?.len() > 60_000 {
+        wire_header.selected_items.clear();
+    }
+    send_encrypted_json(send, noise, PacketType::TransferHeader, &wire_header).await?;
 
     // 3. Wait for AcceptReject
     let response_data = recv_encrypted(recv, noise).await?;
@@ -101,15 +108,21 @@ where
         return Err(format!("Expected AcceptReject, got {:?}", ptype).into());
     }
     let response: AcceptRejectResponse = serde_json::from_slice(payload)?;
+    tracing::info!(
+        transfer_id,
+        accepted = response.accepted,
+        "Transfer decision received from peer"
+    );
     if !response.accepted {
         return Err(Box::new(TransferRejected));
     }
 
     on_accepted();
+    let mut progress = ProgressTracker::new(&header)?;
+    on_progress(&progress.initial());
 
     // 4. Send items sequentially
     let mut total_sent: u64 = 0;
-    let start = std::time::Instant::now();
 
     for item in &items {
         let item_meta = ItemMetadata {
@@ -130,6 +143,7 @@ where
                 .map(|d| d.as_secs()),
         };
         send_encrypted_json(send, noise, PacketType::ItemMetadata, &item_meta).await?;
+        on_progress(&progress.begin_entry(&item_meta, total_sent)?);
 
         // Only send binary data for files
         if item.kind == ItemKind::File {
@@ -144,27 +158,10 @@ where
                 send_encrypted_raw(send, noise, PacketType::Binary, &buf[..n]).await?;
                 total_sent += n as u64;
 
-                let elapsed = start.elapsed().as_secs_f64();
-                let speed_bps = if elapsed > 0.0 {
-                    (total_sent as f64 / elapsed) as u64
-                } else {
-                    0
-                };
-                let percent = if total_size > 0 {
-                    (total_sent as f64 / total_size as f64) * 100.0
-                } else {
-                    100.0
-                };
-
-                on_progress(&TransferProgress {
-                    transfer_id: transfer_id.to_string(),
-                    bytes_sent: total_sent,
-                    bytes_total: total_size,
-                    speed_bps,
-                    percent,
-                });
+                on_progress(&progress.snapshot(total_sent, false));
             }
         }
+        on_progress(&progress.finish_entry(total_sent)?);
     }
 
     // 5. Send Success
@@ -315,6 +312,37 @@ where
 }
 
 /// Collect all items from inputs (files and directories).
+fn collect_selected_items(
+    inputs: &[PathBuf],
+) -> Result<(Vec<WalkItem>, Vec<TransferItemDescriptor>), Box<dyn std::error::Error + Send + Sync>>
+{
+    let mut entries = Vec::new();
+    let mut selected = Vec::new();
+    for input in inputs {
+        let items = collect_items(std::slice::from_ref(input))?;
+        if items.is_empty() {
+            continue;
+        }
+        selected.push(TransferItemDescriptor {
+            item_id: uuid::Uuid::new_v4().to_string(),
+            name: input
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .into_owned(),
+            kind: if input.is_dir() {
+                ItemKind::Directory
+            } else {
+                ItemKind::File
+            },
+            size_bytes: items.iter().map(|item| item.size).sum(),
+            item_count: u32::try_from(items.len())?,
+        });
+        entries.extend(items);
+    }
+    Ok((entries, selected))
+}
+
 fn collect_items(
     inputs: &[PathBuf],
 ) -> Result<Vec<WalkItem>, Box<dyn std::error::Error + Send + Sync>> {

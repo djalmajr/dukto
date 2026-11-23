@@ -125,8 +125,7 @@ function SettingsModal(props: SettingsModalProps) {
 		<>
 			<Dialog open={props.open} onOpenChange={(open) => !open && props.onClose()}>
 				<DialogContent
-					class="max-h-[calc(100dvh-2rem)] w-4/5 max-w-none gap-4 rounded-lg p-5"
-					overlayClass="bg-black/40"
+					class="max-h-[calc(100dvh-2rem)] w-4/5 max-w-none"
 					onEscapeKeyDown={(event: Event) => event.preventDefault()}
 				>
 					<DialogTitle class="text-sm font-semibold">{t("settings")}</DialogTitle>

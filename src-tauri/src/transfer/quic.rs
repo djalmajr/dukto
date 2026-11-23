@@ -10,6 +10,9 @@ pub fn create_endpoint(
     let (server_tls, client_tls) = generate_self_signed_config()?;
 
     let mut transport = quinn::TransportConfig::default();
+    // Wi-Fi links can briefly stall while another transfer is active. Keep an
+    // approved transfer alive long enough for QUIC to recover its path.
+    transport.max_idle_timeout(Some(std::time::Duration::from_secs(90).try_into()?));
     transport.keep_alive_interval(Some(std::time::Duration::from_secs(5)));
     let transport = Arc::new(transport);
     let mut server_config = quinn::ServerConfig::with_crypto(Arc::new(

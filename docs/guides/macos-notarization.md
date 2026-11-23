@@ -20,9 +20,9 @@ Run the repository's manual installer workflow with notarization enabled. The wo
 After building, verify the app signature and notarization ticket before collecting checksums:
 
 ~~~sh
-codesign --verify --deep --strict --verbose=2 Dukto.app
-xcrun stapler validate Dukto.app
-spctl --assess --type execute --verbose Dukto.app
+codesign --verify --deep --strict --verbose=2 "Dukto Share.app"
+xcrun stapler validate "Dukto Share.app"
+spctl --assess --type execute --verbose "Dukto Share.app"
 ~~~
 
 Also inspect the packaged app and updater archive to ensure they contain only the intended executables. The command-line client is distributed separately from the desktop bundle.

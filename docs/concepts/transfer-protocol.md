@@ -70,3 +70,9 @@ The receiver waits up to 60 seconds for the user to accept or reject an incoming
 Protocol 0.2 uses a receipt containing the transfer ID, item count, and bytes received. The sender validates that receipt before reporting success. Progress reaching 100% means the sender has streamed the expected bytes; only a valid receiver receipt confirms completion.
 
 Both directions report the cumulative transfer rate for the active session. Receive timing begins after the request is accepted.
+
+Updated senders add an optional `selected_items` manifest to the transfer header. Each entry has a stable `item_id`, a display `name`, a `kind`, `size_bytes`, and an `item_count` describing how many consecutive wire entries belong to that selection. A selected folder is one progress row whose bytes include its descendants. Receivers validate the manifest totals and track each selection independently, including empty files and folders. Names are display labels; filesystem destinations still come from validated item metadata.
+
+Local progress events carry the selected list once and an `item_progress` update for the current selection. Receiving an item's last byte is followed by publishing the staged file before marking that item complete. A folder completes after every entry has been handled. Completed rows remain visible until dismissed, while overall sender success still requires the receiver's final receipt.
+
+The manifest is additive JSON metadata, so older receivers ignore it. When an older sender omits it, the receiver adds individual wire entries to its progress list as their metadata arrives. The same fallback applies if a manifest would make the serialized header exceed 60,000 bytes, keeping the header within the encrypted message limit.

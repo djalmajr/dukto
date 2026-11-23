@@ -12,6 +12,7 @@ use crate::protocol::types::*;
 use crate::transfer::channel::{TransferReceiveStream, TransferSendStream};
 use crate::transfer::fs::resolve_conflict;
 use crate::transfer::partial_file::create_partial_file;
+use crate::transfer::progress::ProgressTracker;
 use crate::transfer::safe_destination::resolve_safe_destination_path;
 
 #[derive(Debug, thiserror::Error)]
@@ -109,6 +110,7 @@ where
         return Err(format!("Expected TransferHeader, got {:?}", ptype).into());
     }
     let header: TransferHeader = serde_json::from_slice(payload)?;
+    let mut progress = ProgressTracker::new(&header)?;
     if header
         .sender
         .as_ref()
@@ -152,6 +154,7 @@ where
         destination_dir: Some(destination_dir.to_string_lossy().to_string()),
     };
     send_encrypted_json(send, noise, PacketType::AcceptReject, &response).await?;
+    tracing::info!(transfer_id = %header.transfer_id, accepted, "Transfer decision queued on QUIC stream");
 
     if !accepted {
         send.finish_transfer()?;
@@ -165,8 +168,7 @@ where
     // 3. Receive items
     let mut items_received: u32 = 0;
     let mut bytes_received: u64 = 0;
-    // Measure transfer time only after approval, across all files in this session.
-    let started = std::time::Instant::now();
+    on_progress(&progress.initial());
 
     loop {
         let data = recv_encrypted(recv, noise).await?;
@@ -182,6 +184,7 @@ where
                 // Validate, sanitize and resolve each parent beneath the selected root.
                 let rel_path = item.relative_path.as_deref().unwrap_or(&item.name);
                 let dest_path = resolve_safe_destination_path(destination_dir, rel_path).await?;
+                on_progress(&progress.begin_entry(&item, bytes_received)?);
 
                 match item.kind {
                     ItemKind::Directory => {
@@ -200,22 +203,7 @@ where
                             &mut bytes_received,
                             &header,
                             &mut |bytes_received| {
-                                let elapsed = started.elapsed().as_secs_f64();
-                                on_progress(&TransferProgress {
-                                    transfer_id: header.transfer_id.clone(),
-                                    bytes_sent: bytes_received,
-                                    bytes_total: header.total_size,
-                                    speed_bps: if elapsed > 0.0 {
-                                        (bytes_received as f64 / elapsed) as u64
-                                    } else {
-                                        0
-                                    },
-                                    percent: if header.total_size == 0 {
-                                        100.0
-                                    } else {
-                                        bytes_received as f64 / header.total_size as f64 * 100.0
-                                    },
-                                });
+                                on_progress(&progress.snapshot(bytes_received, false));
                             },
                         )
                         .await?;
@@ -224,6 +212,7 @@ where
                         items_received += 1;
                     }
                 }
+                on_progress(&progress.finish_entry(bytes_received)?);
             }
             PacketType::Success => {
                 break;
@@ -408,7 +397,10 @@ mod tests {
     use crate::crypto::noise::{
         close_for_transfer_cancellation, handshake_initiator, handshake_responder,
     };
+    use crate::state::device::DeviceIdentity;
     use crate::transfer::quic::create_endpoint;
+    use crate::transfer::sender::send_transfer_full;
+    use std::io::Read;
     use std::net::SocketAddr;
     use tokio::sync::oneshot;
 
@@ -417,6 +409,101 @@ mod tests {
             std::env::temp_dir().join(format!("dukto-receive-cancel-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&directory).unwrap();
         directory
+    }
+
+    #[tokio::test]
+    async fn large_file_roundtrip_confirms_every_byte_after_acceptance() {
+        const FILE_SIZE: usize = 64 * 1024 * 1024;
+        const BLOCK_SIZE: usize = 64 * 1024;
+
+        let directory = temp_dir();
+        let source = directory.join("large-source.bin");
+        let destination = directory.join("received");
+        let mut source_file = tokio::fs::File::create(&source).await.unwrap();
+        let mut block = vec![0u8; BLOCK_SIZE];
+        for index in 0..(FILE_SIZE / BLOCK_SIZE) {
+            for (offset, byte) in block.iter_mut().enumerate() {
+                *byte = (index.wrapping_mul(37).wrapping_add(offset * 13) % 251) as u8;
+            }
+            source_file.write_all(&block).await.unwrap();
+        }
+        source_file.flush().await.unwrap();
+        drop(source_file);
+
+        let server = create_endpoint("127.0.0.1:0".parse::<SocketAddr>().unwrap()).unwrap();
+        let address = server.local_addr().unwrap();
+        let receiver_destination = destination.clone();
+        let receiver = tokio::spawn(async move {
+            let connection = server.accept().await.unwrap().await.unwrap();
+            let (mut send, mut recv) = connection.accept_bi().await.unwrap();
+            let mut noise = handshake_responder(&mut send, &mut recv).await.unwrap();
+            let mut receiver_progress = 0;
+            let result = receive_transfer_with_accept(
+                &mut send,
+                &mut recv,
+                &mut noise,
+                &receiver_destination,
+                |_| async { true },
+                |progress| receiver_progress = progress.bytes_sent,
+            )
+            .await;
+            (result, receiver_progress)
+        });
+
+        let client = create_endpoint("127.0.0.1:0".parse::<SocketAddr>().unwrap()).unwrap();
+        let connection = client.connect(address, "localhost").unwrap().await.unwrap();
+        let (mut send, mut recv) = connection.open_bi().await.unwrap();
+        let mut noise = handshake_initiator(&mut send, &mut recv).await.unwrap();
+        let identity = DeviceIdentity {
+            device_id: "large-file-test-sender".into(),
+            display_name: "Large file test".into(),
+            hostname: "localhost".into(),
+            platform: "test".into(),
+        };
+        let mut accepted = false;
+        let mut sender_progress = 0;
+        let bytes_sent = tokio::time::timeout(
+            std::time::Duration::from_secs(90),
+            send_transfer_full(
+                &mut send,
+                &mut recv,
+                &mut noise,
+                &[source.clone()],
+                "large-file-roundtrip",
+                &identity,
+                |progress| sender_progress = progress.bytes_sent,
+                || accepted = true,
+            ),
+        )
+        .await
+        .expect("large transfer timed out")
+        .expect("sender should receive the final receipt");
+        let (received, receiver_progress) = receiver.await.unwrap();
+        let received = received.unwrap();
+
+        assert!(accepted);
+        assert_eq!(bytes_sent, FILE_SIZE as u64);
+        assert_eq!(sender_progress, FILE_SIZE as u64);
+        assert_eq!(receiver_progress, FILE_SIZE as u64);
+        assert_eq!(received.bytes_received, FILE_SIZE as u64);
+        assert_eq!(received.items_received, 1);
+
+        let mut expected = std::fs::File::open(&source).unwrap();
+        let mut actual = std::fs::File::open(destination.join("large-source.bin")).unwrap();
+        let mut expected_block = vec![0u8; BLOCK_SIZE];
+        let mut actual_block = vec![0u8; BLOCK_SIZE];
+        loop {
+            let expected_len = expected.read(&mut expected_block).unwrap();
+            let actual_len = actual.read(&mut actual_block).unwrap();
+            assert_eq!(actual_len, expected_len);
+            if expected_len == 0 {
+                break;
+            }
+            assert_eq!(&actual_block[..actual_len], &expected_block[..expected_len]);
+        }
+
+        client.close(0u32.into(), b"test complete");
+        tokio::fs::remove_dir_all(directory).await.unwrap();
     }
 
     async fn interrupt_after_first_chunk(cancel: bool) -> (String, std::path::PathBuf) {
@@ -464,6 +551,7 @@ mod tests {
             sender: None,
             item_count: 1,
             total_size: 1024 * 1024,
+            selected_items: Vec::new(),
         };
         send_encrypted_json(&mut send, &mut noise, PacketType::TransferHeader, &header)
             .await
@@ -562,6 +650,7 @@ mod tests {
             sender: None,
             item_count: 1,
             total_size: 1,
+            selected_items: Vec::new(),
         };
         send_encrypted_json(&mut send, &mut noise, PacketType::TransferHeader, &header)
             .await

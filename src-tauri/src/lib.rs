@@ -28,12 +28,15 @@ mod app_runner {
         tauri::mobile_entry_point
     )]
     pub fn run() {
+        let log_filter = tracing_subscriber::EnvFilter::try_from_default_env()
+            .unwrap_or_else(|_| "dukto_lib=debug,mdns_sd=info".into());
+        #[cfg(all(target_os = "ios", debug_assertions))]
         tracing_subscriber::fmt()
-            .with_env_filter(
-                tracing_subscriber::EnvFilter::try_from_default_env()
-                    .unwrap_or_else(|_| "dukto_lib=debug,mdns_sd=info".into()),
-            )
+            .with_env_filter(log_filter)
+            .with_writer(std::io::stdout)
             .init();
+        #[cfg(not(all(target_os = "ios", debug_assertions)))]
+        tracing_subscriber::fmt().with_env_filter(log_filter).init();
 
         let _ = rustls::crypto::ring::default_provider().install_default();
 

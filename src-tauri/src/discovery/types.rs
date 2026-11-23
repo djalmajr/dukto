@@ -57,15 +57,12 @@ impl PeerInfo {
     }
 }
 
-/// Choose the most reliable IPv4 address advertised by a peer.
-///
-/// Bonjour may resolve the same iOS device on Wi-Fi and on the USB link. The
-/// USB address is IPv4 link-local (169.254/16) and can complete a handshake but
-/// disappear during a longer transfer, so a regular LAN address must win even
-/// when it was discovered later.
-pub fn preferred_ipv4_address(addresses: &[IpAddr]) -> Option<IpAddr> {
-    let mut link_local = None;
-
+/// Return every usable IPv4 route, trying LAN before the iOS USB link-local route.
+/// A multihomed peer can advertise several LAN addresses; their discovery order
+/// is not a reliable indication of which route is currently reachable.
+pub fn ipv4_candidate_addresses(addresses: &[IpAddr]) -> Vec<IpAddr> {
+    let mut lan = Vec::new();
+    let mut link_local = Vec::new();
     for address in addresses {
         let IpAddr::V4(address) = address else {
             continue;
@@ -74,13 +71,22 @@ pub fn preferred_ipv4_address(addresses: &[IpAddr]) -> Option<IpAddr> {
             continue;
         }
         if address.is_link_local() {
-            link_local.get_or_insert(IpAddr::V4(*address));
+            if !link_local.contains(&IpAddr::V4(*address)) {
+                link_local.push(IpAddr::V4(*address));
+            }
         } else {
-            return Some(IpAddr::V4(*address));
+            if !lan.contains(&IpAddr::V4(*address)) {
+                lan.push(IpAddr::V4(*address));
+            }
         }
     }
+    lan.extend(link_local);
+    lan
+}
 
-    link_local
+/// A stable display/fallback address; transfers probe all candidates instead.
+pub fn preferred_ipv4_address(addresses: &[IpAddr]) -> Option<IpAddr> {
+    ipv4_candidate_addresses(addresses).into_iter().next()
 }
 
 #[cfg(test)]
@@ -178,5 +184,25 @@ mod tests {
         ];
 
         assert_eq!(preferred_ipv4_address(&addresses), None);
+    }
+
+    #[test]
+    fn candidates_keep_both_lan_interfaces_before_usb_and_deduplicate() {
+        let addresses = vec![
+            "169.254.2.3".parse().unwrap(),
+            "192.168.0.4".parse().unwrap(),
+            "192.168.0.9".parse().unwrap(),
+            "192.168.0.4".parse().unwrap(),
+            "127.0.0.1".parse().unwrap(),
+            "fe80::1".parse().unwrap(),
+        ];
+        assert_eq!(
+            ipv4_candidate_addresses(&addresses),
+            vec![
+                "192.168.0.4".parse::<IpAddr>().unwrap(),
+                "192.168.0.9".parse::<IpAddr>().unwrap(),
+                "169.254.2.3".parse::<IpAddr>().unwrap(),
+            ]
+        );
     }
 }

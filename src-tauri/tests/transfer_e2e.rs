@@ -10,7 +10,7 @@ use dukto_lib::transfer::channel::{
 };
 use dukto_lib::transfer::quic::create_endpoint;
 use dukto_lib::transfer::receiver::{receive_transfer, receive_transfer_with_accept};
-use dukto_lib::transfer::sender::{send_file, send_transfer};
+use dukto_lib::transfer::sender::send_transfer;
 
 #[tokio::test]
 async fn sender_requires_receiver_receipt() {
@@ -285,9 +285,34 @@ async fn large_file_transfer_multiple_chunks() {
 async fn progress_callback_reports_correct_values() {
     let src_dir = temp_dir("progress-src");
     let test_file = src_dir.join("progress.bin");
-    let file_size: usize = 128 * 1024;
+    let file_size: usize = 64 * 1024 * 1024;
     let test_data: Vec<u8> = (0..file_size).map(|i| (i % 199) as u8).collect();
     tokio::fs::write(&test_file, &test_data).await.unwrap();
+    let empty_file = src_dir.join("empty.txt");
+    tokio::fs::write(&empty_file, b"").await.unwrap();
+    let folder = src_dir.join("folder");
+    tokio::fs::create_dir_all(folder.join("nested/empty"))
+        .await
+        .unwrap();
+    tokio::fs::write(folder.join("first.bin"), vec![17; 32768])
+        .await
+        .unwrap();
+    tokio::fs::write(folder.join("nested/second.bin"), vec![23; 65536])
+        .await
+        .unwrap();
+    let empty_folder = src_dir.join("empty-folder");
+    tokio::fs::create_dir_all(&empty_folder).await.unwrap();
+    tokio::fs::create_dir_all(src_dir.join("left"))
+        .await
+        .unwrap();
+    tokio::fs::create_dir_all(src_dir.join("right"))
+        .await
+        .unwrap();
+    let same_name_a = src_dir.join("left/shared.txt");
+    let same_name_b = src_dir.join("right/shared.txt");
+    tokio::fs::write(&same_name_a, b"first").await.unwrap();
+    tokio::fs::write(&same_name_b, b"another").await.unwrap();
+    let total_size = file_size as u64 + 32768 + 65536 + 5 + 7;
 
     let dest_dir = temp_dir("progress-dest");
 
@@ -313,21 +338,9 @@ async fn progress_callback_reports_correct_values() {
         )
         .await
         .unwrap();
-        assert!(!received_progress.is_empty());
-        for progress in &received_progress {
-            assert_eq!(progress.transfer_id, "t-progress");
-            assert!(
-                progress.speed_bps > 0,
-                "received bytes must report measured throughput"
-            );
-        }
-        assert_eq!(
-            received_progress.last().unwrap().bytes_sent,
-            file_size as u64
-        );
-        assert_eq!(received_progress.last().unwrap().percent, 100.0);
         conn.close(0u32.into(), b"done");
         server_ep.close(0u32.into(), b"shutdown");
+        received_progress
     });
 
     let conn = client_ep
@@ -341,11 +354,18 @@ async fn progress_callback_reports_correct_values() {
     let snapshots: Arc<Mutex<Vec<TransferProgress>>> = Arc::new(Mutex::new(Vec::new()));
     let snaps = snapshots.clone();
 
-    send_file(
+    send_transfer(
         &mut send,
         &mut recv,
         &mut noise,
-        &test_file,
+        &[
+            test_file,
+            folder,
+            empty_file,
+            empty_folder,
+            same_name_a,
+            same_name_b,
+        ],
         "t-progress",
         &test_identity("device-sender"),
         move |p| {
@@ -355,23 +375,97 @@ async fn progress_callback_reports_correct_values() {
     .await
     .unwrap();
 
-    server_handle.await.unwrap();
+    let received_progress = server_handle.await.unwrap();
     conn.close(0u32.into(), b"done");
     client_ep.close(0u32.into(), b"shutdown");
 
     {
         let snaps = snapshots.lock().unwrap();
-        assert_eq!(
-            snaps.len(),
-            4,
-            "Should have 4 progress callbacks for 128KB file"
-        );
-        for (i, snap) in snaps.iter().enumerate() {
-            assert_eq!(snap.bytes_total, file_size as u64);
-            assert_eq!(snap.bytes_sent, ((i + 1) as u64) * 32 * 1024);
+        let expected = [
+            ("progress.bin", file_size as u64, 1),
+            ("folder", 98304, 3),
+            ("empty.txt", 0, 1),
+            ("empty-folder", 0, 1),
+            ("shared.txt", 5, 1),
+            ("shared.txt", 7, 1),
+        ];
+        for progress in [&*snaps, &received_progress] {
+            let manifest = progress.first().unwrap().items.as_ref().unwrap();
+            assert_eq!(manifest.len(), expected.len());
+            for (item, (name, size, count)) in manifest.iter().zip(expected) {
+                assert_eq!(
+                    (item.name.as_str(), item.size_bytes, item.item_count),
+                    (name, size, count)
+                );
+                let events: Vec<_> = progress
+                    .iter()
+                    .filter_map(|event| event.item_progress.as_ref())
+                    .filter(|event| event.item_id == item.item_id)
+                    .collect();
+                assert_eq!(events.first().unwrap().bytes_sent, 0);
+                assert!(!events.first().unwrap().completed);
+                assert_eq!(events.last().unwrap().bytes_sent, size);
+                assert!(events.last().unwrap().completed);
+                assert_eq!(events.iter().filter(|event| event.completed).count(), 1);
+                assert!(events
+                    .iter()
+                    .all(|event| event.bytes_total == size && event.bytes_sent <= size));
+                assert!(events
+                    .windows(2)
+                    .all(|pair| pair[0].bytes_sent <= pair[1].bytes_sent));
+            }
+            assert_ne!(manifest[4].item_id, manifest[5].item_id);
+            assert!(progress.iter().all(|event| event.bytes_total == total_size));
+            assert_eq!(progress.last().unwrap().bytes_sent, total_size);
+            assert_eq!(progress.last().unwrap().percent, 100.0);
         }
-        assert!((snaps.last().unwrap().percent - 100.0).abs() < 0.01);
+        let sent_ids: Vec<_> = snaps[0]
+            .items
+            .as_ref()
+            .unwrap()
+            .iter()
+            .map(|item| &item.item_id)
+            .collect();
+        let received_ids: Vec<_> = received_progress[0]
+            .items
+            .as_ref()
+            .unwrap()
+            .iter()
+            .map(|item| &item.item_id)
+            .collect();
+        assert_eq!(sent_ids, received_ids);
     }
+
+    assert_eq!(
+        tokio::fs::read(dest_dir.join("progress.bin"))
+            .await
+            .unwrap(),
+        test_data
+    );
+    assert_eq!(
+        tokio::fs::read(dest_dir.join("folder/first.bin"))
+            .await
+            .unwrap(),
+        vec![17; 32768]
+    );
+    assert_eq!(
+        tokio::fs::read(dest_dir.join("folder/nested/second.bin"))
+            .await
+            .unwrap(),
+        vec![23; 65536]
+    );
+    assert!(dest_dir.join("folder/nested/empty").is_dir());
+    assert!(dest_dir.join("empty-folder").is_dir());
+    assert_eq!(
+        tokio::fs::read(dest_dir.join("shared.txt")).await.unwrap(),
+        b"first"
+    );
+    assert_eq!(
+        tokio::fs::read(dest_dir.join("shared (1).txt"))
+            .await
+            .unwrap(),
+        b"another"
+    );
 
     tokio::fs::remove_dir_all(&src_dir).await.ok();
     tokio::fs::remove_dir_all(&dest_dir).await.ok();

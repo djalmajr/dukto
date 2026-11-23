@@ -180,7 +180,7 @@ function RootLayout() {
 						: "Dukto"}
 				</p>
 				{isMac && !isMobile && openDestinationButton()}
-				{isMac && addInternetPeerButton()}
+				{(isMac || isMobile) && addInternetPeerButton()}
 				<Button
 					variant="ghost"
 					size="icon"
@@ -196,7 +196,7 @@ function RootLayout() {
 				>
 					<CarbonSettings width={16} height={16} />
 				</Button>
-				{!isMac && addInternetPeerButton()}
+				{!isMac && !isMobile && addInternetPeerButton()}
 				{!isMac && !isMobile && openDestinationButton()}
 				<Show when={isWindows}>
 					<WindowControls />

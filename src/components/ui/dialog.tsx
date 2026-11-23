@@ -20,30 +20,11 @@ const DialogPortal: Component<DialogPrimitive.DialogPortalProps> = (props) => {
 	);
 };
 
-type DialogOverlayProps<T extends ValidComponent = "div"> =
-	DialogPrimitive.DialogOverlayProps<T> & { class?: string | undefined };
-
-const DialogOverlay = <T extends ValidComponent = "div">(
-	props: PolymorphicProps<T, DialogOverlayProps<T>>,
-) => {
-	const [, rest] = splitProps(props as DialogOverlayProps, ["class"]);
-	return (
-		<DialogPrimitive.Overlay
-			class={cn(
-				"fixed inset-0 z-50 bg-background/80 data-expanded:animate-in data-closed:animate-out data-[closed]:fade-out-0 data-[expanded]:fade-in-0",
-				props.class,
-			)}
-			{...rest}
-		/>
-	);
-};
-
 type DialogContentProps<T extends ValidComponent = "div"> =
 	DialogPrimitive.DialogContentProps<T> & {
 		class?: string | undefined;
 		children?: JSX.Element;
 		mountId?: string;
-		overlayClass?: string;
 		showCloseButton?: boolean;
 	};
 
@@ -54,7 +35,6 @@ const DialogContent = <T extends ValidComponent = "div">(
 		"class",
 		"children",
 		"mountId",
-		"overlayClass",
 		"showCloseButton",
 	]);
 	const mountEl = () =>
@@ -71,14 +51,13 @@ const DialogContent = <T extends ValidComponent = "div">(
 			>
 				<DialogPrimitive.Overlay
 					class={cn(
-						"inset-0 z-50 bg-background/60 backdrop-blur-[1px] data-expanded:animate-in data-closed:animate-out data-[closed]:fade-out-0 data-[expanded]:fade-in-0",
+						"inset-0 z-50 bg-black/40 backdrop-blur-[1px] data-expanded:animate-in data-closed:animate-out data-[closed]:fade-out-0 data-[expanded]:fade-in-0",
 						isContained() ? "absolute" : "fixed",
-						local.overlayClass,
 					)}
 				/>
 				<DialogPrimitive.Content
 					class={cn(
-						"z-50 grid w-full max-w-lg gap-4 overflow-y-auto border bg-background text-foreground p-6 shadow-lg duration-200 data-expanded:animate-in data-closed:animate-out data-[closed]:fade-out-0 data-[expanded]:fade-in-0 data-[closed]:zoom-out-95 data-[expanded]:zoom-in-95 sm:rounded-lg",
+						"z-50 grid w-full max-w-lg gap-4 overflow-y-auto rounded-lg border bg-background p-5 text-foreground shadow-lg duration-200 data-expanded:animate-in data-closed:animate-out data-[closed]:fade-out-0 data-[expanded]:fade-in-0 data-[closed]:zoom-out-95 data-[expanded]:zoom-in-95",
 						isContained()
 							? "absolute left-1/2 top-1/2 max-h-full -translate-x-1/2 -translate-y-1/2"
 							: "fixed left-1/2 top-1/2 max-h-screen -translate-x-1/2 -translate-y-1/2 data-[closed]:slide-out-to-left-1/2 data-[closed]:slide-out-to-top-[48%] data-[expanded]:slide-in-from-left-1/2 data-[expanded]:slide-in-from-top-[48%]",

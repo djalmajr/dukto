@@ -11,6 +11,30 @@ export interface TransferProgress {
 	bytes_total: number;
 	speed_bps: number;
 	percent: number;
+	item_name?: string;
+	items?: TransferItemDescriptor[];
+	item_progress?: TransferItemProgress;
+}
+
+export interface TransferItemDescriptor {
+	item_id: string;
+	name: string;
+	kind: "File" | "Directory";
+	size_bytes: number;
+	item_count: number;
+}
+
+export interface TransferItemProgress {
+	item_id: string;
+	bytes_sent: number;
+	bytes_total: number;
+	completed: boolean;
+}
+
+export interface TransferItemState extends TransferItemDescriptor {
+	bytes_sent: number;
+	bytes_total: number;
+	completed: boolean;
 }
 
 export interface IncomingRequest {
@@ -41,6 +65,9 @@ export interface ActiveTransfer {
 	speed_bps?: number;
 	error?: string;
 	completed_at?: number;
+	current_item_name?: string;
+	item_names?: string[];
+	items?: TransferItemState[];
 }
 
 const [transfers, setTransfers] = createStore<Record<string, ActiveTransfer>>({});
@@ -82,7 +109,9 @@ function toTransferSlot(transfer: ActiveTransfer): TransferSlot {
 		bytesTotal: transfer.bytes_total,
 		speed: formatTransferSpeed(transfer.speed_bps),
 		errorMsg: transfer.error,
-		completedAt: transfer.completed_at,
+		currentItemName: transfer.current_item_name,
+		itemNames: transfer.item_names,
+		items: transfer.items,
 	};
 }
 
@@ -125,11 +154,66 @@ function isTerminal(status?: TransferStatus) {
 	return status === "complete" || status === "error" || status === "rejected";
 }
 
+function toItemState(
+	descriptor: TransferItemDescriptor,
+	previous?: TransferItemState,
+): TransferItemState {
+	return {
+		...descriptor,
+		bytes_sent: previous?.bytes_sent ?? 0,
+		bytes_total: previous?.bytes_total ?? descriptor.size_bytes,
+		completed: previous?.completed ?? false,
+	};
+}
+
+function mergeItemDescriptors(
+	previous: TransferItemState[] | undefined,
+	descriptors: TransferItemDescriptor[] | undefined,
+): TransferItemState[] | undefined {
+	if (!descriptors?.length) return previous;
+	const previousById = new Map((previous ?? []).map((item) => [item.item_id, item]));
+	const merged = [...(previous ?? [])];
+	for (const descriptor of descriptors) {
+		const existing = previousById.get(descriptor.item_id);
+		const next = toItemState(descriptor, existing);
+		const index = merged.findIndex((item) => item.item_id === descriptor.item_id);
+		if (index === -1) merged.push(next);
+		else merged[index] = next;
+	}
+	return merged;
+}
+
+function mergeItemProgress(
+	items: TransferItemState[] | undefined,
+	progress: TransferItemProgress | undefined,
+): TransferItemState[] | undefined {
+	if (!progress) return items;
+	const index = items?.findIndex((item) => item.item_id === progress.item_id) ?? -1;
+	if (index === -1) return items;
+	const next = [...(items ?? [])];
+	next[index] = {
+		...next[index],
+		bytes_sent: progress.bytes_sent,
+		bytes_total: progress.bytes_total,
+		completed: progress.completed,
+	};
+	return next;
+}
+
+function completeItems(items: TransferItemState[] | undefined): TransferItemState[] | undefined {
+	return items?.map((item) => ({
+		...item,
+		bytes_sent: item.bytes_total,
+		completed: true,
+	}));
+}
+
 function startOrMergeSendTransfer(
 	transferId: string,
 	peerDeviceId: string,
 	bytesTotal?: number,
 	peer?: PeerIdentity,
+	itemNames?: string[],
 ) {
 	if (retiredTransferIds.has(transferId)) return;
 	setTransfers(transferId, (prev) => {
@@ -150,6 +234,8 @@ function startOrMergeSendTransfer(
 			speed_bps: prev?.speed_bps,
 			error: prev?.error,
 			completed_at: prev?.completed_at,
+			item_names: itemNames ?? prev?.item_names,
+			items: prev?.items,
 		};
 	});
 }
@@ -168,6 +254,8 @@ function startOrMergeReceiveTransfer(request: IncomingRequest) {
 		speed_bps: prev?.speed_bps,
 		error: prev?.error,
 		completed_at: prev?.completed_at,
+		current_item_name: prev?.current_item_name,
+		items: prev?.items,
 	}));
 }
 
@@ -229,7 +317,18 @@ listen<TransferProgress>("transfer:progress", (event) => {
 	if (retiredTransferIds.has(progress.transfer_id)) return;
 	const request = findIncomingRequest(progress.transfer_id);
 	setTransfers(progress.transfer_id, (prev) => {
-		if (isTerminal(prev?.status)) return prev;
+		if (isTerminal(prev?.status)) {
+			if (!prev) return prev;
+			const items = mergeItemProgress(
+				mergeItemDescriptors(prev.items, progress.items),
+				progress.item_progress,
+			);
+			return prev.status === "complete" && items
+				? { ...prev, items: completeItems(items) }
+				: items
+					? { ...prev, items }
+					: prev;
+		}
 		return {
 			...(prev ?? {
 				transfer_id: progress.transfer_id,
@@ -246,6 +345,14 @@ listen<TransferProgress>("transfer:progress", (event) => {
 			bytes_sent: progress.bytes_sent,
 			bytes_total: progress.bytes_total,
 			speed_bps: progress.speed_bps,
+			items: mergeItemProgress(
+				mergeItemDescriptors(prev?.items, progress.items),
+				progress.item_progress,
+			),
+			current_item_name:
+				prev?.direction === "send"
+					? prev.current_item_name
+					: (progress.item_name ?? prev?.current_item_name),
 		};
 	});
 });
@@ -266,6 +373,7 @@ listen<{ transfer_id: string; bytes_sent: number }>("transfer:send-complete", (e
 					status: "complete",
 					percent: 100,
 					bytes_sent: event.payload.bytes_sent,
+					items: completeItems(prev.items),
 					completed_at: Date.now(),
 				}
 			: prev,
@@ -330,6 +438,7 @@ listen<{ transfer_id: string; items_received: number; bytes_received: number }>(
 					percent: 100,
 					bytes_sent: event.payload.bytes_received,
 					completed_at: Date.now(),
+					items: completeItems(prev.items),
 				};
 			}
 			if (!request) return prev;
@@ -342,6 +451,7 @@ listen<{ transfer_id: string; items_received: number; bytes_received: number }>(
 				percent: 100,
 				bytes_sent: event.payload.bytes_received,
 				bytes_total: request.total_size,
+				items: completeItems(undefined),
 				completed_at: Date.now(),
 			};
 		});
@@ -374,8 +484,9 @@ function startSendTransfer(
 	bytesTotal: number,
 	peerDeviceId: string,
 	peer?: PeerIdentity,
+	itemNames?: string[],
 ) {
-	startOrMergeSendTransfer(transferId, peerDeviceId, bytesTotal, peer);
+	startOrMergeSendTransfer(transferId, peerDeviceId, bytesTotal, peer, itemNames);
 }
 
 async function respondToIncoming(accepted: boolean) {

@@ -40,12 +40,14 @@ describe("remote peer entry contract", () => {
 			2,
 		);
 		expect(rootSource.match(/variant="ghost"/g)?.length).toBeGreaterThanOrEqual(2);
-		expect(rootSource).toContain("{isMac && addInternetPeerButton()}");
-		expect(rootSource).toContain("{!isMac && addInternetPeerButton()}");
-		expect(rootSource.indexOf("{isMac && addInternetPeerButton()}")).toBeLessThan(
+		// Mutation captured: moving the mobile action after Settings reverses the requested control order.
+		expect(rootSource).toContain('currentPlatform === "android" || currentPlatform === "ios"');
+		expect(rootSource).toContain("{(isMac || isMobile) && addInternetPeerButton()}");
+		expect(rootSource).toContain("{!isMac && !isMobile && addInternetPeerButton()}");
+		expect(rootSource.indexOf("{(isMac || isMobile) && addInternetPeerButton()}")).toBeLessThan(
 			rootSource.indexOf("<CarbonSettings width={16} height={16} />"),
 		);
-		expect(rootSource.indexOf("{!isMac && addInternetPeerButton()}")).toBeGreaterThan(
+		expect(rootSource.indexOf("{!isMac && !isMobile && addInternetPeerButton()}")).toBeGreaterThan(
 			rootSource.indexOf("<CarbonSettings width={16} height={16} />"),
 		);
 	});
